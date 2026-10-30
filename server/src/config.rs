@@ -22,7 +22,7 @@ pub struct Config {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProbeConfig {
-    /// Shared secret that must be passed as `?t=` to submit or read results.
+    /// Shared secret that must be passed as `?t=` to read results (submitting is open).
     pub token: String,
     /// Base URL of the test media source the probe streams are relayed from.
     pub upstream: String,

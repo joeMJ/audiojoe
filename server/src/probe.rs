@@ -26,14 +26,17 @@ fn token_ok(state: &AppState, t: &Option<String>) -> bool {
     Sha256::digest(cfg.token.as_bytes()) == Sha256::digest(t.as_bytes())
 }
 
+/// Keeps the table small: submitting needs no token (so nothing has to be typed in the
+/// car), therefore only the newest rows are kept. Reading the results needs the token.
+const MAX_ROWS: i64 = 500;
+
 pub async fn submit(
     State(state): State<AppState>,
-    Query(q): Query<TokenQuery>,
     headers: HeaderMap,
     Json(report): Json<serde_json::Value>,
 ) -> StatusCode {
-    if !token_ok(&state, &q.t) {
-        return StatusCode::FORBIDDEN;
+    if state.config.probe.is_none() {
+        return StatusCode::NOT_FOUND;
     }
     let ua = headers
         .get(header::USER_AGENT)
@@ -44,9 +47,14 @@ pub async fn submit(
         .collect::<String>();
     let db = state.db.clone();
     let res = tokio::task::spawn_blocking(move || {
-        db.lock().unwrap().execute(
+        let conn = db.lock().unwrap();
+        conn.execute(
             "INSERT INTO probe_result (user_agent, report) VALUES (?1, ?2)",
             (ua, report.to_string()),
+        )?;
+        conn.execute(
+            "DELETE FROM probe_result WHERE id <= (SELECT MAX(id) FROM probe_result) - ?1",
+            [MAX_ROWS],
         )
     })
     .await;

@@ -8,7 +8,6 @@ import { download, type DownloadReport } from "./downloader";
 import { offlineUrl, removeOffline, storeOffline } from "./offline";
 
 const params = new URLSearchParams(location.search);
-const TOKEN = params.get("t") ?? "";
 const AUTO = params.get("auto") === "1";
 const STREAM = "/api/v1/probe/stream/";
 const FORMATS = ["mp3.mp3", "aac.m4a", "flac16_44.flac", "flac24_96.flac"] as const;
@@ -61,7 +60,6 @@ const T = {
   no: ["No", "Nein"],
   sent: ["Sent to server", "An den Server gesendet"],
   sendFail: ["Sending failed – will retry with the next step", "Senden fehlgeschlagen – wird mit dem nächsten Schritt wiederholt"],
-  noToken: ["No token in the URL – results cannot be sent.", "Kein Token in der Adresse – Ergebnisse können nicht gesendet werden."],
   running: ["Running…", "Läuft…"],
 };
 const t = (k: keyof typeof T) => T[k][de ? 1 : 0];
@@ -77,9 +75,8 @@ async function send(step: string, data: Json) {
   steps[step] = data;
   pending.push({ step, context: report.context, at: new Date().toISOString(), data });
   if (AUTO) return;
-  if (!TOKEN) return setStatus(t("noToken"), "bad");
   try {
-    const res = await fetch(`/api/v1/probe/results?t=${encodeURIComponent(TOKEN)}`, {
+    const res = await fetch("/api/v1/probe/results", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ items: pending }),
