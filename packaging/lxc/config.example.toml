@@ -1,0 +1,12 @@
+# audiojoe server configuration (/etc/audiojoe/config.toml, mode 640 root:audiojoe)
+
+# LAN address of the server. TLS is terminated by the reverse proxy in front of it
+# (e.g. https://audio.example.org -> http://<this address>).
+listen = "10.0.0.20:8080"
+database = "/var/lib/audiojoe/audiojoe.db"
+web_root = "/usr/share/audiojoe/web"
+
+# Stage 0 only: browser capability probe. Remove the section to disable it.
+[probe]
+token = "change-me-to-a-long-random-string"
+upstream = "http://127.0.0.1:8090"

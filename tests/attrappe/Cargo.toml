@@ -1,0 +1,17 @@
+[package]
+name = "attrappe"
+description = "Fake media source for audiojoe tests: generated test tones with injectable stream faults"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+axum.workspace = true
+bytes.workspace = true
+futures-util.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio.workspace = true

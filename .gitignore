@@ -1,0 +1,21 @@
+/target
+node_modules/
+clients/web/dist/
+*.swp
+.idea/
+.vscode/
+*~
+*.log
+.DS_Store
+
+# Credentials and local configuration (never commit)
+.env
+*.env
+secrets.*
+.claude/settings.local.json
+
+# Signing keys
+*.pfx
+*.snk
+*.jks
+*.keystore

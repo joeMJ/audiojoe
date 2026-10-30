@@ -1,0 +1,19 @@
+# Development only: fake media source for tests (tests/attrappe). Listens on localhost.
+[Unit]
+Description=audiojoe test media source (attrappe)
+After=network.target
+
+[Service]
+DynamicUser=yes
+ExecStart=/usr/local/bin/attrappe --listen 127.0.0.1:8090 --dir /var/lib/attrappe
+Restart=on-failure
+StateDirectory=attrappe
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

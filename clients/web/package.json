@@ -1,0 +1,16 @@
+{
+  "name": "audiojoe-web",
+  "private": true,
+  "version": "0.0.1",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && vite build",
+    "test:attrappe": "node tests/attrappe.test.mjs"
+  },
+  "devDependencies": {
+    "puppeteer-core": "24.10.0",
+    "typescript": "5.8.3",
+    "vite": "6.3.5"
+  }
+}
