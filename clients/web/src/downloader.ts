@@ -23,6 +23,8 @@ export interface DownloadReport {
   /** true/false when the server announced a checksum, null otherwise. */
   verified: boolean | null;
   contentType?: string;
+  /** Value of the server's x-audiojoe-quality header, if sent. */
+  quality?: string;
   ms: number;
   error?: string;
 }
@@ -56,6 +58,7 @@ export async function download(
       const res = await fetch(url, { headers, signal: ctrl.signal, cache: "no-store" });
       expectedSha = res.headers.get("x-content-sha256") ?? expectedSha;
       r.contentType = res.headers.get("content-type") ?? r.contentType;
+      r.quality = res.headers.get("x-audiojoe-quality") ?? r.quality;
 
       if (res.status === 416) {
         // We already have everything; happens after a too large Content-Length.

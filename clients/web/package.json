@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc --noEmit && vite build",
-    "test:attrappe": "node tests/attrappe.test.mjs"
+    "test:attrappe": "node tests/attrappe.test.mjs",
+    "test:app": "node tests/app.test.mjs"
   },
   "devDependencies": {
     "puppeteer-core": "24.10.0",

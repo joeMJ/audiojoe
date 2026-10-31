@@ -213,6 +213,8 @@ else:
 
 # ------------------------------------------------------------------ cleanup, logout
 call("DELETE", f"/api/v1/podcasts/{pid}", token=A)
+s, b, _ = call("GET", "/api/v1/playback", token=A)
+check("unsubscribe removes its positions", s == 200 and not any(x["key"] in {e["key"] for e in eps} for x in b), str(len(b)))
 s, _, _ = call("POST", "/api/v1/auth/logout", token=A)
 s2, _, _ = call("GET", "/api/v1/me", token=A)
 check("logout ends the session", s == 200 and s2 == 401, f"{s}/{s2}")

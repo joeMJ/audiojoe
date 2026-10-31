@@ -1,0 +1,8 @@
+{
+  "name": "audiojoe",
+  "short_name": "audiojoe",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f1114",
+  "theme_color": "#1f5fd6"
+}

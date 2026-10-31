@@ -263,6 +263,11 @@ pub async fn unsubscribe(State(state): State<AppState>, user: CurrentUser, Path(
         if n == 0 {
             return Err(ApiError::NotFound);
         }
+        // Its episodes can no longer be played by this user: drop them from "continue".
+        c.execute(
+            "DELETE FROM playback WHERE user_id = ?1 AND item_key IN (SELECT 'episode:' || id FROM episode WHERE podcast_id = ?2)",
+            (user.id, id),
+        )?;
         // Drop podcasts nobody subscribes to any more (episodes cascade).
         c.execute("DELETE FROM podcast WHERE id = ?1 AND NOT EXISTS (SELECT 1 FROM subscription WHERE podcast_id = ?1)", [id])?;
         Ok(Json(json!({ "ok": true })))

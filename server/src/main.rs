@@ -127,9 +127,21 @@ async fn main() -> Result<()> {
 
     let listener = tokio::net::TcpListener::bind(state.config.listen).await?;
     tracing::info!("audiojoe-server {VERSION} listening on {}", state.config.listen);
-    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
-        .with_graceful_shutdown(shutdown())
-        .await?;
+    // Graceful shutdown waits for open connections, but live event streams never end on
+    // their own: after the signal, running requests get 3 s, then the server exits.
+    let (stop_tx, mut stop_rx) = tokio::sync::watch::channel(false);
+    let server = axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
+        .with_graceful_shutdown(async move {
+            shutdown().await;
+            let _ = stop_tx.send(true);
+        });
+    tokio::select! {
+        r = server => r?,
+        _ = async {
+            let _ = stop_rx.wait_for(|stopped| *stopped).await;
+            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        } => tracing::info!("open connections closed after shutdown grace period"),
+    }
     Ok(())
 }
 
