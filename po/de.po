@@ -50,12 +50,6 @@ msgstr "Fehler"
 msgid "failed"
 msgstr "fehlgeschlagen"
 
-msgid "from cache"
-msgstr "aus dem Cache"
-
-msgid "Here"
-msgstr "Hier"
-
 msgid "in cache"
 msgstr "im Cache"
 
@@ -173,9 +167,6 @@ msgstr "Dieses Gerät abmelden"
 msgid "Sign-in failed. Check name, password and code."
 msgstr "Anmeldung fehlgeschlagen. Name, Kennwort und Code prüfen."
 
-msgid "Source"
-msgstr "Quelle"
-
 msgid "Sources"
 msgstr "Quellen"
 
@@ -196,9 +187,6 @@ msgstr "dieses Gerät"
 
 msgid "Too many attempts. Please wait 15 minutes."
 msgstr "Zu viele Versuche. Bitte 15 Minuten warten."
-
-msgid "unchanged"
-msgstr "unverändert"
 
 msgid "Unsubscribe"
 msgstr "Abbestellen"
@@ -462,3 +450,12 @@ msgstr "Noch leer. Alben mit „Next“ hinzufügen."
 
 msgid "Move"
 msgstr "Verschieben"
+
+msgid "Cache"
+msgstr "Cache"
+
+msgid "(Source: {q})"
+msgstr "(Quelle: {q})"
+
+msgid "(Target: {q})"
+msgstr "(Ziel: {q})"

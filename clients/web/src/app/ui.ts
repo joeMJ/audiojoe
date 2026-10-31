@@ -1,6 +1,6 @@
 // Screens of the web app. Plain DOM; each view renders itself into <main>.
 
-import { api, online, qualityBadge, qualityChips, qualityText, type Item, type Playback } from "./api";
+import { api, online, qualityBadge, qualityChips, qualityText, type Item, type Playback, type Quality } from "./api";
 import { addOffline, dropPlayedOn, offlineEntry, offlineList, removeFromOffline, retryFailed, setDropPlayed, type OfflineEntry } from "./downloads";
 import { ago, bytes, clock, t } from "./i18n";
 import { idbAll } from "./idb";
@@ -261,9 +261,15 @@ const skipIcon = (n: number, back: boolean) => icon(
   (back ? '<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M5 3.5v4h4"/>' : '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19 3.5v4h-4"/>') +
   `<text x="12" y="15.2" font-size="8" font-weight="800" text-anchor="middle" fill="currentColor" stroke="none">${n}</text>`);
 
-function chipRow(label: string, chips: string[], note = "") {
-  return h("div", { className: "row" }, h("span", { className: "lbl" }, label),
-    h("span", { className: "fchips" }, ...chips.map((c) => h("span", { className: "fchip" }, c)), note ? h("span", { className: "fnote" }, note) : null));
+/// One line: what is played, "Cache" first when it comes from there; the source in brackets
+/// only when it differs.
+function qualityRow(played: Quality | null | undefined, cached: boolean, source?: Quality | null) {
+  const chips = qualityChips(played);
+  if (!chips.length) return h("div");
+  return h("div", { className: "row" }, h("span", { className: "fchips" },
+    cached ? h("span", { className: "fchip cache" }, t("Cache")) : null,
+    ...chips.map((c) => h("span", { className: "fchip" }, c)),
+    source ? h("span", { className: "fnote" }, t("(Source: {q})", { q: qualityChips(source).join(" ") })) : null));
 }
 
 function renderNowPlaying() {
@@ -310,7 +316,7 @@ function renderNowPlaying() {
       h("div", { className: "kind" }, kind),
       h("div", { className: "title" }, it.title),
       sub,
-      h("div", { className: "fmt" }, chipRow(t("Source"), qualityChips(it.quality)), here),
+      h("div", { className: "fmt" }, here),
       bar, h("div", { className: "times" }, pos, rest),
       h("div", { className: "ctrl" },
         s.queue.length > 1 ? h("button", { onclick: () => void player.skip(-1), ariaLabel: t("Previous") }, icon('<path d="M6 5v14M18 6l-9 6 9 6z" fill="currentColor"/>')) : null,
@@ -447,11 +453,10 @@ function updateNowPlaying() {
   npRefs.play.textContent = s.playing ? "❚❚" : "▶";
   npRefs.rate.textContent = `${t("Speed")} ${s.rate.toLocaleString()}×`;
   npRefs.next.disabled = s.index + 1 >= s.queue.length;
-  const suffix = s.transcoded ? t("converted") : s.fromCache ? t("from cache") : t("unchanged");
-  const here = JSON.stringify([s.delivered, suffix]);
+  const here = JSON.stringify([s.delivered, s.fromCache, s.transcoded]);
   if (npRefs.here.dataset.v !== here) {
     npRefs.here.dataset.v = here;
-    npRefs.here.replaceChildren(chipRow(t("Here"), qualityChips(s.delivered), suffix));
+    npRefs.here.replaceChildren(qualityRow(s.delivered ?? s.item?.quality, s.fromCache, s.transcoded ? s.item?.quality : null));
   }
   if (s.item?.chapters?.length) {
     const c = player.chapter();

@@ -191,6 +191,7 @@ class _ContinueViewState extends State<ContinueView> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       duration: const Duration(seconds: 6),
+      persist: false,
       content: Text(l == 'music' ? t('Removed from the list') : t('Marked as heard')),
       action: SnackBarAction(
         label: t('Undo'),

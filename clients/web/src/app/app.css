@@ -58,10 +58,10 @@ h2 { margin: 0 0 10px; font-size: 21px; }
 /* Format chips (source / here) right above the controls */
 .fmt { margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
 .fmt .row { font-size: 14px; display: flex; gap: 8px; align-items: center; }
-.fmt .lbl { color: var(--muted); width: 52px; flex: none; font-weight: 650; }
 .fchips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .fchip { padding: 2px 8px; border: 2px solid var(--line); border-radius: 7px; font-weight: 750; font-size: 14px; }
 .fnote { color: var(--muted); font-size: 13px; }
+.fchip.cache { border-color: var(--accent); color: var(--accent); }
 .bar { margin-top: 18px; height: 14px; border-radius: 7px; background: var(--panel2); position: relative; touch-action: none; }
 .bar::before { content: ""; position: absolute; inset: -18px 0; }  /* larger touch area */
 .bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); border-radius: 7px; }

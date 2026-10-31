@@ -22,12 +22,12 @@ class Quality {
 
   String get _rate => '${(sampleRate! / 1000).toStringAsFixed(sampleRate! % 1000 == 0 ? 0 : 1)} kHz';
 
-  /// Separate facts for chips: ["FLAC", "24 bit", "96 kHz", "Stereo"].
+  /// Separate facts for chips: ["24 Bit", "FLAC", "96 kHz", "Stereo"].
   List<String> get chips {
     if (codec.isEmpty) return const [];
     return [
+      if (bitDepth != null) '$bitDepth Bit',
       _codec,
-      if (bitDepth != null) '$bitDepth bit',
       if (sampleRate != null) _rate,
       if (bitrate != null && !_lossless) '${(bitrate! / 1000).round()} kbit/s',
       if (channels == 1) 'Mono' else if (channels == 2) 'Stereo' else if (channels != null) '$channels ch',

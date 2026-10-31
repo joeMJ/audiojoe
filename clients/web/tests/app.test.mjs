@@ -251,7 +251,7 @@ try {
   await sleep(1000);
   await shot("04-jetzt-laeuft");
   const here = await page.evaluate(() => document.querySelector(".fmt .row:last-child")?.innerText.replace(/\s+/g, " "));
-  check("plays from cache, format chips shown", /MP3/.test(here ?? "") && /aus dem Cache/.test(here ?? ""), here);
+  check("plays from cache: one quality line, Cache pill, no Quelle/Hier", /^Cache MP3 \d+ kbit\/s/.test(here ?? "") && !/Quelle|Hier/.test(here ?? ""), here);
   const sizes = await page.evaluate(() => [...document.querySelectorAll(".ctrl button, .tools button, .tools .badge")].map((b) => Math.min(b.offsetWidth, b.offsetHeight)));
   check("controls large enough for driving (≥ 64 px)", sizes.length >= 4 && Math.min(...sizes) >= 64, sizes.join(", "));
   const fits = await page.evaluate(() => document.querySelector("main").scrollHeight <= document.querySelector("main").clientHeight + 2);

@@ -95,7 +95,8 @@ class _PlaybackTab extends StatelessWidget {
       });
 }
 
-/// Source and what this device (or the speaker) gets, as outlined chips (like tvjoe).
+/// One line with what is played (the source; "Cache" first when it comes from there); when a
+/// Sonos speaker gets something else, that in brackets as the target.
 class _FormatChips extends StatelessWidget {
   final Item it;
   const _FormatChips(this.it);
@@ -106,37 +107,19 @@ class _FormatChips extends StatelessWidget {
     final src = it.quality;
     if (src == null || src.codec.isEmpty) return const SizedBox.shrink();
     final out = sonos.output;
-    final here = out == null ? src : src.forSonos(out.s2);
-    final note = out != null
-        ? (here.sameAs(src) ? t('unchanged') : t('converted'))
-        : (player.fromCache ? t('from cache') : t('unchanged'));
-    Widget chip(String s, {bool strong = false}) => Container(
+    final target = out == null ? null : src.forSonos(out.s2);
+    Widget chip(String s, {Color? color}) => Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
-              border: Border.all(color: strong ? Theme.of(context).colorScheme.onSurface : k.line, width: 1.5),
-              borderRadius: BorderRadius.circular(6)),
-          child: Text(s, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+              border: Border.all(color: color ?? k.line, width: 1.5), borderRadius: BorderRadius.circular(6)),
+          child: Text(s, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color)),
         );
-    TableRow row(String label, List<String> chips, String? extra) => TableRow(children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 4, right: 10),
-            child: Text(label, style: TextStyle(color: k.muted, fontWeight: FontWeight.w600)),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Wrap(spacing: 6, runSpacing: 4, children: [
-              for (final c in chips) chip(c),
-              if (extra != null) Padding(padding: const EdgeInsets.only(top: 3), child: Text(extra, style: TextStyle(color: k.muted, fontSize: 13))),
-            ]),
-          ),
-        ]);
-    return Table(
-      columnWidths: const {0: IntrinsicColumnWidth(), 1: FlexColumnWidth()},
-      children: [
-        row(t('Source'), src.chips, null),
-        row(out == null ? t('Here') : 'Sonos ${out.name}', here.chips, note),
-      ],
-    );
+    return Wrap(alignment: WrapAlignment.center, crossAxisAlignment: WrapCrossAlignment.center, spacing: 6, runSpacing: 4, children: [
+      if (out == null && player.fromCache) chip(t('Cache'), color: Theme.of(context).colorScheme.primary),
+      for (final c in src.chips) chip(c),
+      if (target != null && !target.sameAs(src))
+        Text(t('(Target: {q})', {'q': target.chips.join(' ')}), style: TextStyle(color: k.muted, fontSize: 13)),
+    ]);
   }
 }
 

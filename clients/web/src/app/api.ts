@@ -101,12 +101,12 @@ export function qualityText(q?: Quality | null): string {
   return parts.join(" · ");
 }
 
-/// Separate facts for chips: ["FLAC", "24 bit", "96 kHz", "Stereo"].
+/// Separate facts for chips: ["24 Bit", "FLAC", "96 kHz", "Stereo"].
 export function qualityChips(q?: Quality | null): string[] {
   if (!q || !q.codec) return [];
   const lossless = /^(flac|alac|pcm_)/.test(q.codec);
-  const out = [q.codec.replace(/^pcm_.*/, "PCM").toUpperCase()];
-  if (q.bit_depth) out.push(`${q.bit_depth} bit`);
+  const out = q.bit_depth ? [`${q.bit_depth} Bit`] : [];
+  out.push(q.codec.replace(/^pcm_.*/, "PCM").toUpperCase());
   if (q.sample_rate) out.push(`${(q.sample_rate / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })} kHz`);
   if (q.bitrate && !lossless) out.push(`${Math.round(q.bitrate / 1000)} kbit/s`);
   if (q.channels === 1) out.push("Mono");
