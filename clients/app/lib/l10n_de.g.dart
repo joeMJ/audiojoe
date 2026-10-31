@@ -91,6 +91,7 @@ const deStrings = <String, String>{
   "Play here": "Hier abspielen",
   "Playback": "Wiedergabe",
   "Podcasts": "Podcasts",
+  "Position": "Position",
   "Positions synced": "Stände aktuell",
   "Previous": "Zurück zum vorigen",
   "Previous chapter": "Vorheriges Kapitel",

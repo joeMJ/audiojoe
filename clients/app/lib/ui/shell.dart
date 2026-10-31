@@ -72,7 +72,7 @@ class _ShellState extends State<Shell> {
               ? const Text('audiojoe', style: TextStyle(fontWeight: FontWeight.w800))
               : Semantics(label: 'audiojoe', child: Image.asset('assets/icon.png', height: 36)),
           actions: [
-            Flexible(child: SingleChildScrollView(scrollDirection: Axis.horizontal, reverse: true, child: StatusPills(compact: !wide))),
+            Flexible(child: SingleChildScrollView(scrollDirection: Axis.horizontal, reverse: true, child: const StatusPills())),
             IconButton(
               tooltip: t('Offline'),
               isSelected: index == 7,

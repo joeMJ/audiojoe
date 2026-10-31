@@ -537,3 +537,9 @@ msgstr "{n} Alben eingelesen."
 
 msgid "1 album"
 msgstr "1 Album"
+
+msgid "Server"
+msgstr "Server"
+
+msgid "Position"
+msgstr "Position"

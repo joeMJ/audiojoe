@@ -36,7 +36,20 @@ class Player extends ChangeNotifier {
   List<Item> queue = [];
   int index = 0;
   bool fromCache = false;
-  ({String device, String at})? takenOver;
+  /// "Taken over from …": shown for a few seconds after the position came from another device.
+  ({String device, String at})? get takenOver => _takenOver;
+  ({String device, String at})? _takenOver;
+  Timer? _takenOverTimer;
+  set takenOver(({String device, String at})? v) {
+    _takenOver = v;
+    _takenOverTimer?.cancel();
+    if (v != null) {
+      _takenOverTimer = Timer(const Duration(seconds: 8), () {
+        _takenOver = null;
+        notifyListeners();
+      });
+    }
+  }
   double rate = 1;
   Timer? _saveTimer;
   Entry? entry;
