@@ -365,7 +365,8 @@ pub async fn play(
 /// Signed stream URL and DIDL metadata for the file a claim describes.
 fn track(state: &AppState, lan: SocketAddr, meta: &Value, claim: &Claim) -> (String, String) {
     let token = sign(&state.sonos_secret, claim);
-    let (ext, mime) = file_type(meta["quality"]["codec"].as_str().unwrap_or(""));
+    let converted = matches!(media::conversion(&meta["quality"], &claim.profile), Ok(Some(_)));
+    let (ext, mime) = file_type(&meta["quality"], converted);
     let url = if meta["kind"] == "radio" { format!("x-rincon-mp3radio://{lan}/sonos/{token}") } else { format!("http://{lan}/sonos/{token}.{ext}") };
     let didl = didl(meta, &url, mime);
     (url, didl)
@@ -394,14 +395,24 @@ fn stream_user(c: &Claim) -> CurrentUser {
     CurrentUser { id: c.user, name: String::new(), session_id: 0, device: format!("Sonos {}", c.room) }
 }
 
-/// File extension and MIME type for a codec; Sonos rejects untyped URLs (UPnP error 714).
-fn file_type(codec: &str) -> (&'static str, &'static str) {
+/// File extension and MIME type of what the speaker receives; Sonos rejects untyped URLs
+/// (UPnP error 714) and does not play PCM announced as MP3.
+fn file_type(quality: &Value, converted: bool) -> (&'static str, &'static str) {
+    let codec = quality["codec"].as_str().unwrap_or("");
+    if converted {
+        return ("flac", "audio/flac");
+    }
+    if codec.starts_with("pcm_") || codec == "pcm" || codec == "wav" {
+        return match quality["container"].as_str().unwrap_or("") {
+            "aiff" | "aif" => ("aif", "audio/aiff"),
+            _ => ("wav", "audio/wav"),
+        };
+    }
     match codec {
         "flac" => ("flac", "audio/flac"),
         "aac" | "mp4a" | "alac" => ("m4a", "audio/mp4"),
         "ogg" | "vorbis" => ("ogg", "application/ogg"),
         "opus" => ("opus", "audio/ogg"),
-        "wav" | "pcm" => ("wav", "audio/wav"),
         _ => ("mp3", "audio/mpeg"),
     }
 }
@@ -536,6 +547,16 @@ mod tests {
         assert!(verify(secret, &tampered).is_none());
         let old = Claim { exp: Utc::now().timestamp() - 1, ..c };
         assert!(verify(secret, &sign(secret, &old)).is_none());
+    }
+
+    #[test]
+    fn file_types() {
+        let wav = json!({ "codec": "pcm_s16le", "container": "wav", "sample_rate": 44100, "bit_depth": 16 });
+        assert_eq!(file_type(&wav, false), ("wav", "audio/wav"));
+        assert_eq!(file_type(&json!({ "codec": "pcm_s16be", "container": "aiff" }), false), ("aif", "audio/aiff"));
+        assert_eq!(file_type(&json!({ "codec": "pcm_s24le", "container": "wav" }), true), ("flac", "audio/flac"));
+        assert_eq!(file_type(&json!({ "codec": "mp3" }), false), ("mp3", "audio/mpeg"));
+        assert_eq!(file_type(&json!({ "codec": "flac" }), false), ("flac", "audio/flac"));
     }
 
     #[test]
