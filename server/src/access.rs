@@ -1,6 +1,6 @@
 //! Access log: one line per request (client IP, method, path, status, duration) at target
 //! `access`, so it can be filtered in the journal. Query strings are never logged because
-//! they may carry tokens. The client IP is taken from `X-Forwarded-For` only when the
+//! they may carry tokens; neither are signed Sonos stream URLs (`/sonos/<token>`). The client IP is taken from `X-Forwarded-For` only when the
 //! direct peer is a configured trusted proxy.
 
 use std::{net::SocketAddr, time::Instant};
@@ -22,7 +22,10 @@ pub async fn log(
     let started = Instant::now();
     let client = client_ip(&state, peer, &req);
     let method = req.method().clone();
-    let path = req.uri().path().to_owned();
+    let path = match req.uri().path() {
+        p if p.starts_with("/sonos/") => "/sonos/…".to_owned(),
+        p => p.to_owned(),
+    };
     let res = next.run(req).await;
     tracing::info!(
         target: "access",

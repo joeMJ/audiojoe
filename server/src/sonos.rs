@@ -31,6 +31,7 @@ use crate::{
     media, playback, AppState,
 };
 
+const START_TIMEOUT: Duration = Duration::from_secs(20);
 const TIMEOUT: Duration = Duration::from_secs(3);
 /// Stream URLs stay valid this long (Sonos re-requests ranges while playing).
 const URL_HOURS: i64 = 24;
@@ -59,7 +60,9 @@ async fn soap(http: &reqwest::Client, ip: &str, (path, service): (&str, &str), a
         .header("content-type", "text/xml; charset=utf-8")
         .header("soapaction", format!("\"{service}#{action}\""))
         .body(envelope(service, action, args))
-        .timeout(TIMEOUT)
+        // Starting playback waits until the speaker has opened the stream (ffmpeg start-up
+        // for converted sources); everything else must answer fast, speakers may be off.
+        .timeout(if matches!(action, "SetAVTransportURI" | "Seek" | "Play") { START_TIMEOUT } else { TIMEOUT })
         .send()
         .await
         .map_err(|_| ApiError::BadGateway(format!("speaker {ip} not reachable")))?;
@@ -174,7 +177,7 @@ async fn status_of(state: &AppState, sp: &Speaker) -> Value {
     o.insert("coordinator".into(), json!(coord));
     o.insert("state".into(), json!(transport.as_deref().and_then(|t| tag(t, "CurrentTransportState"))));
     o.insert("volume".into(), json!(volume.as_deref().and_then(|v| tag(v, "CurrentVolume")).and_then(|v| v.parse::<i64>().ok())));
-    o.insert("position_ms".into(), json!(ours.as_ref().and_then(|c| pos.as_deref().and_then(|p| tag(p, "RelTime")).and_then(|t| parse_time(&t)).map(|ms| ms + c.offset_ms))));
+    o.insert("position_ms".into(), json!(ours.as_ref().and_then(|c| pos.as_deref().and_then(|p| tag(p, "RelTime")).and_then(|t| parse_time(&t)).map(|ms| ms + c.offset_ms + c.start_ms))));
     o.insert("item_key".into(), json!(ours.map(|c| c.key)));
     out
 }
@@ -190,6 +193,9 @@ pub struct Claim {
     /// Part start within the whole item (for the position of multi-file books).
     #[serde(default)]
     pub offset_ms: i64,
+    /// Start within the file for converted streams, which the speaker cannot seek.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub start_ms: i64,
     pub profile: String,
     pub exp: i64,
     /// Name of the speaker (for the device name of positions).
@@ -206,8 +212,14 @@ pub fn sign(secret: &[u8], c: &Claim) -> String {
     format!("{payload}.{}", B64.encode(mac.finalize().into_bytes()))
 }
 
+/// Checks a token; a trailing file extension (`.mp3`, not signed) is ignored.
+fn is_zero(n: &i64) -> bool {
+    *n == 0
+}
+
 pub fn verify(secret: &[u8], token: &str) -> Option<Claim> {
     let (payload, sig) = token.split_once('.')?;
+    let sig = sig.split_once('.').map_or(sig, |(s, _)| s);
     let mut mac = HmacSha256::new_from_slice(secret).ok()?;
     mac.update(payload.as_bytes());
     mac.verify_slice(&B64.decode(sig).ok()?).ok()?;
@@ -226,12 +238,10 @@ pub fn lan_router(state: AppState) -> Router {
 }
 
 async fn lan_stream(State(state): State<AppState>, Path(token): Path<String>, headers: HeaderMap) -> Response {
-    let token = token.trim_end_matches(".mp3").trim_end_matches(".flac").to_string();
     let Some(c) = verify(&state.sonos_secret, &token) else {
         return StatusCode::FORBIDDEN.into_response();
     };
-    let user = CurrentUser { id: c.user, name: String::new(), session_id: 0, device: format!("Sonos {}", c.room) };
-    media::stream_for(&state, &user, &c.key, c.part.unwrap_or(0), &c.profile, &headers)
+    media::stream_for(&state, &stream_user(&c), &c.key, c.part.unwrap_or(0), &c.profile, c.start_ms, &headers)
         .await
         .unwrap_or_else(|e| e.into_response())
 }
@@ -324,38 +334,85 @@ pub async fn play(
         .last()
         .map(|p| (Some(p["index"].as_u64().unwrap_or(0) as usize), p["start_ms"].as_i64().unwrap_or(0)))
         .unwrap_or((None, 0));
+    let profile = if sp.s2 { "sonos-s2" } else { "sonos-s1" };
+    let offset_ms = if parts.len() > 1 { offset } else { 0 };
+    let local = req.position_ms - offset_ms;
+    let converted = media::conversion(&meta["quality"], profile)?.is_some();
     let claim = Claim {
         user: user.id,
         key: req.key.clone(),
         part: if parts.len() > 1 { part } else { None },
-        offset_ms: if parts.len() > 1 { offset } else { 0 },
-        profile: if sp.s2 { "sonos-s2" } else { "sonos-s1" }.into(),
+        offset_ms,
+        start_ms: if converted && local > 1000 { local } else { 0 },
+        profile: profile.into(),
         exp: Utc::now().timestamp() + URL_HOURS * 3600,
         room: sp.name.clone(),
     };
-    let token = sign(&state.sonos_secret, &claim);
     let live = meta["kind"] == "radio";
-    let url = if live { format!("x-rincon-mp3radio://{lan}/sonos/{token}") } else { format!("http://{lan}/sonos/{token}") };
-    let didl = didl(&meta, &url);
+    let (url, didl) = track(&state, lan, &meta, &claim);
     soap(&state.http, &coord, AVT, "SetAVTransportURI",
          &format!("<InstanceID>0</InstanceID><CurrentURI>{}</CurrentURI><CurrentURIMetaData>{}</CurrentURIMetaData>", xml_escape(&url), xml_escape(&didl))).await?;
-    let local = req.position_ms - claim.offset_ms;
-    if !live && local > 1000 {
+    if !live && !converted && local > 1000 {
         // Some sources are not seekable before playback starts; ignore that error.
         let _ = soap(&state.http, &coord, AVT, "Seek",
                      &format!("<InstanceID>0</InstanceID><Unit>REL_TIME</Unit><Target>{}</Target>", format_time(local))).await;
     }
     soap(&state.http, &coord, AVT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>").await?;
+    queue_next(&state, lan, &coord, &meta, &claim).await;
     Ok(Json(json!({ "ok": true, "speaker": sp.name, "coordinator": coord })))
 }
 
-fn didl(meta: &Value, url: &str) -> String {
+/// Signed stream URL and DIDL metadata for the file a claim describes.
+fn track(state: &AppState, lan: SocketAddr, meta: &Value, claim: &Claim) -> (String, String) {
+    let token = sign(&state.sonos_secret, claim);
+    let (ext, mime) = file_type(meta["quality"]["codec"].as_str().unwrap_or(""));
+    let url = if meta["kind"] == "radio" { format!("x-rincon-mp3radio://{lan}/sonos/{token}") } else { format!("http://{lan}/sonos/{token}.{ext}") };
+    let didl = didl(meta, &url, mime);
+    (url, didl)
+}
+
+/// Multi-file books: hands the speaker the following file, so it continues on its own.
+async fn queue_next(state: &AppState, lan: SocketAddr, coord: &str, meta: &Value, claim: &Claim) {
+    let Some(part) = claim.part else { return };
+    let Some(next) = meta["parts"].as_array().and_then(|p| p.get(part + 1)) else { return };
+    let claim = Claim {
+        part: Some(part + 1),
+        offset_ms: next["start_ms"].as_i64().unwrap_or(0),
+        start_ms: 0,
+        exp: Utc::now().timestamp() + URL_HOURS * 3600,
+        ..claim.clone()
+    };
+    let (url, didl) = track(state, lan, meta, &claim);
+    if let Err(e) = soap(&state.http, coord, AVT, "SetNextAVTransportURI",
+                         &format!("<InstanceID>0</InstanceID><NextURI>{}</NextURI><NextURIMetaData>{}</NextURIMetaData>", xml_escape(&url), xml_escape(&didl))).await {
+        tracing::warn!("sonos {coord}: next file not queued: {e:?}");
+    }
+}
+
+/// The owner of a stream, as seen by the media layer.
+fn stream_user(c: &Claim) -> CurrentUser {
+    CurrentUser { id: c.user, name: String::new(), session_id: 0, device: format!("Sonos {}", c.room) }
+}
+
+/// File extension and MIME type for a codec; Sonos rejects untyped URLs (UPnP error 714).
+fn file_type(codec: &str) -> (&'static str, &'static str) {
+    match codec {
+        "flac" => ("flac", "audio/flac"),
+        "aac" | "mp4a" | "alac" => ("m4a", "audio/mp4"),
+        "ogg" | "vorbis" => ("ogg", "application/ogg"),
+        "opus" => ("opus", "audio/ogg"),
+        "wav" | "pcm" => ("wav", "audio/wav"),
+        _ => ("mp3", "audio/mpeg"),
+    }
+}
+
+fn didl(meta: &Value, url: &str, mime: &str) -> String {
     let class = if meta["kind"] == "radio" { "object.item.audioItem.audioBroadcast" } else { "object.item.audioItem.musicTrack" };
     format!(
         "<DIDL-Lite xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\" \
          xmlns:r=\"urn:schemas-rinconnetworks-com:metadata-1-0/\" xmlns=\"urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/\">\
          <item id=\"audiojoe\" parentID=\"audiojoe\" restricted=\"true\"><dc:title>{}</dc:title><dc:creator>{}</dc:creator>\
-         <upnp:class>{class}</upnp:class><res protocolInfo=\"http-get:*:*:*\">{}</res></item></DIDL-Lite>",
+         <upnp:class>{class}</upnp:class><res protocolInfo=\"http-get:*:{mime}:*\">{}</res></item></DIDL-Lite>",
         xml_escape(meta["title"].as_str().unwrap_or("audiojoe")),
         xml_escape(meta["subtitle"].as_str().unwrap_or("")),
         xml_escape(url),
@@ -393,6 +450,8 @@ pub async fn command(
 /// Stores the position of speakers that play one of our streams.
 pub async fn poll_loop(state: AppState) {
     let mut last: HashMap<String, i64> = HashMap::new();
+    // Per coordinator: the multi-file track whose successor has been queued.
+    let mut queued: HashMap<String, String> = HashMap::new();
     loop {
         tokio::time::sleep(POLL_EVERY).await;
         let Ok(list) = speakers(&state).await else { continue };
@@ -408,8 +467,15 @@ pub async fn poll_loop(state: AppState) {
             if c.key.starts_with("radio:") {
                 continue;
             }
+            if c.part.is_some() && queued.get(&coord) != Some(&uri) {
+                // The speaker moved on to a file queued earlier: queue the one after it.
+                if let (Some(lan), Ok(meta)) = (lan_addr(&state), media::meta_for(&state, &stream_user(&c), &c.key).await) {
+                    queue_next(&state, lan, &coord, &meta, &c).await;
+                }
+                queued.insert(coord.clone(), uri.clone());
+            }
             let Some(ms) = tag(&pos, "RelTime").and_then(|t| parse_time(&t)) else { continue };
-            let global = c.offset_ms + ms;
+            let global = c.offset_ms + c.start_ms + ms;
             if last.get(&coord).is_some_and(|&p| (p - global).abs() < 2000) {
                 continue; // paused or unchanged
             }
@@ -445,11 +511,12 @@ mod tests {
     #[test]
     fn tokens() {
         let secret = b"0123456789abcdef0123456789abcdef";
-        let c = Claim { user: 1, key: "episode:5".into(), part: None, offset_ms: 0, profile: "sonos-s2".into(),
+        let c = Claim { user: 1, key: "episode:5".into(), part: None, offset_ms: 0, start_ms: 0, profile: "sonos-s2".into(),
                         exp: Utc::now().timestamp() + 60, room: "Büro".into() };
         let t = sign(secret, &c);
         assert_eq!(verify(secret, &t).unwrap().key, "episode:5");
         assert!(verify(b"another-secret-another-secret-xx", &t).is_none());
+        assert_eq!(verify(secret, &format!("{t}.mp3")).unwrap().key, "episode:5");
         let mut tampered = t.clone();
         tampered.replace_range(0..1, if t.starts_with('e') { "f" } else { "e" });
         assert!(verify(secret, &tampered).is_none());

@@ -147,7 +147,7 @@ pub async fn stream(
     Query(q): Query<StreamQuery>,
     headers: HeaderMap,
 ) -> ApiResult<Response> {
-    stream_for(&state, &user, &key, q.part.unwrap_or(0), q.profile.as_deref().unwrap_or("original"), &headers).await
+    stream_for(&state, &user, &key, q.part.unwrap_or(0), q.profile.as_deref().unwrap_or("original"), 0, &headers).await
 }
 
 /// Metadata of an item (used by Sonos).
@@ -156,30 +156,37 @@ pub async fn meta_for(state: &AppState, user: &CurrentUser, key: &str) -> ApiRes
 }
 
 /// Stream of an item for a client profile: `original`, `tesla-offline` (hi-res FLAC → 48 kHz),
-/// `sonos-s2` (≤ 48 kHz) or `sonos-s1` (≤ 16 bit / 48 kHz).
-pub async fn stream_for(state: &AppState, user: &CurrentUser, key: &str, part: usize, profile: &str, headers: &HeaderMap) -> ApiResult<Response> {
+/// `sonos-s2` (≤ 48 kHz) or `sonos-s1` (≤ 16 bit / 48 kHz). `start_ms` only applies to a
+/// conversion (a converted stream cannot be seeked; the original keeps Range requests).
+pub async fn stream_for(state: &AppState, user: &CurrentUser, key: &str, part: usize, profile: &str, start_ms: i64, headers: &HeaderMap) -> ApiResult<Response> {
     let r = resolve(state, user, key, part).await?;
     let src = r.meta["quality"].clone();
-    let lossless = matches!(src["codec"].as_str().unwrap_or(""), "flac" | "alac") || src["codec"].as_str().unwrap_or("").starts_with("pcm_");
-    let rate = src["sample_rate"].as_i64().unwrap_or(0);
-    let depth = src["bit_depth"].as_i64().unwrap_or(16);
-    let hires_flac = src["codec"] == "flac" && rate > 48_000;
 
     // Live radio cannot be saved offline.
     if profile == "tesla-offline" && key.starts_with("radio:") {
         return Err(ApiError::BadRequest("live streams cannot be saved offline".into()));
     }
-    match profile {
-        "original" => {}
-        "tesla-offline" | "sonos-s2" if hires_flac => return transcode_flac(&r, src, 48_000, depth.min(24)),
-        "sonos-s1" if lossless && (rate > 48_000 || depth > 16) => return transcode_flac(&r, src, rate.clamp(1, 48_000), 16),
-        "tesla-offline" | "sonos-s2" | "sonos-s1" => {}
-        _ => return Err(ApiError::BadRequest("profile: original | tesla-offline | sonos-s2 | sonos-s1".into())),
+    if let Some((rate, depth)) = conversion(&src, profile)? {
+        return transcode_flac(&r, src, rate, depth, start_ms);
     }
     let extra: Vec<(header::HeaderName, String)> = r.auth.iter().cloned().collect();
     let mut res = crate::stream::relay(&state.http, &r.url, headers, &extra).await;
     set_quality(&mut res, json!({ "source": src, "delivered": src, "transcoded": false }));
     Ok(res)
+}
+
+/// Target sample rate and bit depth when the profile requires converting the source.
+pub fn conversion(src: &Value, profile: &str) -> ApiResult<Option<(i64, i64)>> {
+    let codec = src["codec"].as_str().unwrap_or("");
+    let lossless = matches!(codec, "flac" | "alac") || codec.starts_with("pcm_");
+    let rate = src["sample_rate"].as_i64().unwrap_or(0);
+    let depth = src["bit_depth"].as_i64().unwrap_or(16);
+    Ok(match profile {
+        "tesla-offline" | "sonos-s2" if codec == "flac" && rate > 48_000 => Some((48_000, depth.min(24))),
+        "sonos-s1" if lossless && (rate > 48_000 || depth > 16) => Some((rate.clamp(1, 48_000), 16)),
+        "original" | "tesla-offline" | "sonos-s2" | "sonos-s1" => None,
+        _ => return Err(ApiError::BadRequest("profile: original | tesla-offline | sonos-s2 | sonos-s1".into())),
+    })
 }
 
 fn set_quality(res: &mut Response, q: Value) {
@@ -189,11 +196,14 @@ fn set_quality(res: &mut Response, q: Value) {
 }
 
 /// Lossless source → FLAC with the given sample rate and bit depth, converted while streaming.
-fn transcode_flac(r: &Resolved, src: Value, rate: i64, depth: i64) -> ApiResult<Response> {
+fn transcode_flac(r: &Resolved, src: Value, rate: i64, depth: i64, start_ms: i64) -> ApiResult<Response> {
     let mut cmd = tokio::process::Command::new("ffmpeg");
     cmd.args(["-nostdin", "-hide_banner", "-loglevel", "error"]);
     if let Some((name, value)) = &r.auth {
         cmd.arg("-headers").arg(format!("{name}: {value}\r\n"));
+    }
+    if start_ms > 0 {
+        cmd.arg("-ss").arg(format!("{}.{:03}", start_ms / 1000, start_ms % 1000));
     }
     cmd.arg("-i").arg(&r.url);
     cmd.args(["-map", "0:a:0", "-map_metadata", "-1", "-c:a", "flac", "-ar", &rate.to_string()]);
