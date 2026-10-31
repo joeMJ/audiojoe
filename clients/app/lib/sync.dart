@@ -16,6 +16,23 @@ class Sync {
   static final instance = Sync._();
 
   final pendingCount = ValueNotifier<int>(0);
+
+  /// What the status pill shows: positions waiting, but only once they wait longer than a
+  /// moment (or the server is gone) – a save that goes through at once does not flash it.
+  final shownPending = ValueNotifier<int>(0);
+  Timer? _shownTimer;
+
+  void _updateShown() {
+    final n = pendingCount.value;
+    _shownTimer?.cancel();
+    if (n == 0 || !api.online.value) {
+      shownPending.value = n;
+    } else if (shownPending.value == 0) {
+      _shownTimer = Timer(const Duration(seconds: 3), () => shownPending.value = pendingCount.value);
+    } else {
+      shownPending.value = n;
+    }
+  }
   final _remote = StreamController<Playback>.broadcast();
   Stream<Playback> get remote => _remote.stream;
   /// A continue list changed (on any device): the name of the list.
@@ -59,7 +76,10 @@ class Sync {
   }
 
   void start() {
+    pendingCount.addListener(_updateShown);
+    api.online.addListener(_updateShown);
     pendingCount.value = Stores.pending.data.length;
+    _updateShown();
     api.online.addListener(() {
       if (api.online.value) {
         unawaited(flush());

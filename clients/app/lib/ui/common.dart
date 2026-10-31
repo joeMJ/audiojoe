@@ -73,23 +73,33 @@ class StatusPills extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final k = context.tok;
-    Widget pill(String text, Color fg, Color bg, {bool dot = false}) => Container(
-          margin: const EdgeInsets.only(left: 6),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(99)),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            if (dot) ...[Container(width: 9, height: 9, decoration: BoxDecoration(color: fg, shape: BoxShape.circle)), const SizedBox(width: 6)],
-            Text(text, style: TextStyle(color: fg, fontWeight: FontWeight.w700, fontSize: 13)),
+    // Each pill is as wide as its longest text, so nothing jumps when the state changes.
+    Widget pill(String text, Color fg, Color bg, List<String> reserve, {bool dot = false}) {
+      final style = TextStyle(color: fg, fontWeight: FontWeight.w700, fontSize: 13);
+      return Container(
+        margin: const EdgeInsets.only(left: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(99)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          if (dot) ...[Container(width: 9, height: 9, decoration: BoxDecoration(color: fg, shape: BoxShape.circle)), const SizedBox(width: 6)],
+          Stack(alignment: Alignment.center, children: [
+            for (final r in reserve) Opacity(opacity: 0, child: ExcludeSemantics(child: Text(r, style: style))),
+            Text(text, style: style),
           ]),
-        );
+        ]),
+      );
+    }
+
+    final server = [t('Server reachable'), t('Offline · cache')];
+    final waiting = [t('Positions synced'), t('{n} waiting to sync', {'n': 99})];
     return ListenableBuilder(
-      listenable: Listenable.merge([api.online, sync.pendingCount]),
+      listenable: Listenable.merge([api.online, sync.shownPending]),
       builder: (context, _) => Row(mainAxisSize: MainAxisSize.min, children: [
         api.online.value
-            ? pill(t('Server reachable'), k.ok, k.okBg, dot: true)
-            : pill(t('Offline · cache'), k.warn, k.warnBg, dot: true),
-        if (sync.pendingCount.value > 0)
-          pill(t('{n} waiting to sync', {'n': sync.pendingCount.value}), k.warn, k.warnBg)
+            ? pill(t('Server reachable'), k.ok, k.okBg, server, dot: true)
+            : pill(t('Offline · cache'), k.warn, k.warnBg, server, dot: true),
+        if (sync.shownPending.value > 0)
+          pill(t('{n} waiting to sync', {'n': sync.shownPending.value}), k.warn, k.warnBg, compact ? const [] : waiting)
         else if (compact)
           Tooltip(
             message: t('Positions synced'),
@@ -101,7 +111,7 @@ class StatusPills extends StatelessWidget {
             ),
           )
         else
-          pill(t('Positions synced'), k.muted, k.panel2),
+          pill(t('Positions synced'), k.muted, k.panel2, waiting),
       ]),
     );
   }
