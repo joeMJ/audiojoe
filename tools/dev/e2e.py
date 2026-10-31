@@ -105,6 +105,8 @@ check("podcast search", s == 200 and any("lagedernation" in x["feed_url"] for x 
 s, b, _ = call("POST", "/api/v1/podcasts", {"feed_url": FEED}, token=A)
 check("subscribe podcast", s == 200 and b["episodes"] > 0, f"{b.get('title') if isinstance(b, dict) else b}, {b.get('episodes') if isinstance(b, dict) else ''} episodes")
 pid = b["id"]
+s, _, _ = call("POST", f"/api/v1/podcasts/{pid}/refresh", token=A)
+check("refresh feed", s == 200, str(s))
 s, b, _ = call("POST", "/api/v1/podcasts", {"feed_url": "https://example.invalid/feed.xml"}, token=A)
 check("invalid feed rejected", s == 502, str(s))
 s, eps, _ = call("GET", f"/api/v1/podcasts/{pid}/episodes?limit=5", token=A)
@@ -114,6 +116,37 @@ check("latest episodes (device B)", s == 200 and len(latest) == 3)
 ep = eps[0]
 s, item, _ = call("GET", f"/api/v1/items/{ep['key']}", token=A)
 check("episode item with quality", s == 200 and item["quality"]["codec"] == "mp3", json.dumps(item["quality"]))
+check("episode description and cover", item.get("description") and item.get("image"),
+      f"{len(item.get('description') or '')} chars, {item.get('image')}")
+if item.get("image"):
+    s, img, h = call("GET", item["image"], token=A, raw=True)
+    check("episode cover relayed as image", s == 200 and h.get("content-type", h.get("Content-Type", "")).startswith("image/"), str(s))
+s, pods, _ = call("GET", "/api/v1/podcasts", token=A)
+pod = next((x for x in pods if x["id"] == pid), {}) if s == 200 else {}
+check("podcast description and cover", pod.get("description") and pod.get("image"), pod.get("image") or "")
+s, _, _ = call("GET", "/api/v1/image/podcast:999999", token=A, raw=True)
+check("cover of unsubscribed podcast: 404", s == 404, str(s))
+
+
+def post_text(path, text, token):
+    req = urllib.request.Request(BASE + path, data=text.encode(), method="POST",
+                                 headers={"content-type": "text/x-opml", "authorization": "Bearer " + token})
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            return r.status, json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        return e.code, e.read()
+
+
+s, opml, h = call("GET", "/api/v1/podcasts/opml", token=A, raw=True)
+check("OPML export", s == 200 and FEED.encode() in opml and b"<opml" in opml, f"{len(opml)} B")
+s, b = post_text("/api/v1/podcasts/opml", opml.decode().replace(
+    "</body>", '<outline type="rss" text="kaputt" xmlUrl="https://example.invalid/feed.xml"/></body>'), A)
+check("OPML import: known feed kept, broken feed listed",
+      s == 200 and b["added"] == 0 and b["existing"] >= 1 and [f["feed_url"] for f in b["failed"]] == ["https://example.invalid/feed.xml"],
+      json.dumps(b)[:200])
+s, _ = post_text("/api/v1/podcasts/opml", "kein xml <", A)
+check("OPML import of garbage: 400", s == 400, str(s))
 s, data, h = call("GET", f"/api/v1/stream/{ep['key']}", token=A, headers={"range": "bytes=0-9999"}, raw=True)
 q = json.loads(h.get("x-audiojoe-quality", h.get("X-Audiojoe-Quality", "null")))
 check("episode stream with Range: 206", s == 206 and len(data) == 10000, f"{s}, {len(data)} B")
@@ -360,6 +393,7 @@ if os.environ.get("ABS_TEST_FILE"):
     check("book stream part 0 with Range: 206", s == 206 and len(data) == 32768, f"{s}, {len(data)} B")
     s, _, _ = call("GET", f"/api/v1/image/{book['key']}", token=A, raw=True)
     check("book cover relayed", s == 200, str(s))
+    check("book description", "description" in book, f"{len(book.get('description') or '')} chars")
     item_id = book["key"].split(":")[2]
 
     # audiojoe -> Audiobookshelf

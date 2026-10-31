@@ -82,7 +82,7 @@ impl Jellyfin {
     pub async fn item(&self, state: &AppState, item: &str) -> ApiResult<Value> {
         let uid = self.user_id(state).await?;
         let v = self
-            .get(&state.http, &format!("/Users/{uid}/Items/{item}"), &[("Fields", "MediaSources,MediaStreams".into())])
+            .get(&state.http, &format!("/Users/{uid}/Items/{item}"), &[("Fields", "MediaSources,MediaStreams,Overview".into())])
             .await?;
         Ok(normalize(&self.kind, self.source_id, &v))
     }
@@ -147,6 +147,7 @@ fn normalize(prefix: &str, source: i64, v: &Value) -> Value {
         "disc": v["ParentIndexNumber"].as_i64(),
         "duration_ms": v["RunTimeTicks"].as_i64().map(|t| t / 10_000),
         "image": v["ImageTags"]["Primary"].as_str().map(|_| format!("/api/v1/image/{prefix}:{source}:{id}")),
+        "description": v["Overview"].as_str().map(crate::podcasts::plain_text),
         "quality": if kind == "track" { quality(v) } else { Value::Null },
     })
 }

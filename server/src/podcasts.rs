@@ -30,12 +30,15 @@ struct Episode {
     url: String,
     mime: String,
     size: Option<i64>,
+    description: String,
+    image_url: String,
 }
 
 struct Feed {
     title: String,
     author: String,
     image_url: String,
+    description: String,
     episodes: Vec<Episode>,
 }
 
@@ -45,6 +48,29 @@ fn parse_duration(s: &str) -> Option<i64> {
     let nums: Option<Vec<i64>> = parts.iter().map(|p| p.trim().parse::<f64>().ok().map(|f| f as i64)).collect();
     let nums = nums?;
     Some(nums.iter().fold(0, |acc, n| acc * 60 + n)).filter(|&d| d > 0)
+}
+
+/// Plain text from a feed's HTML description: tags removed, entities decoded, whitespace
+/// collapsed, at most 4000 characters.
+pub fn plain_text(html: &str) -> String {
+    let mut out = String::with_capacity(html.len());
+    let mut in_tag = false;
+    for ch in html.chars() {
+        match ch {
+            '<' => in_tag = true,
+            '>' if in_tag => {
+                in_tag = false;
+                out.push(' ');
+            }
+            _ if !in_tag => out.push(ch),
+            _ => {}
+        }
+    }
+    let text = out
+        .replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+        .replace("&quot;", "\"").replace("&#39;", "'").replace("&apos;", "'");
+    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    text.chars().take(4000).collect()
 }
 
 fn parse_feed(bytes: &[u8]) -> anyhow::Result<Feed> {
@@ -69,6 +95,11 @@ fn parse_feed(bytes: &[u8]) -> anyhow::Result<Feed> {
                 duration_s: it.itunes_ext().and_then(|i| i.duration()).and_then(parse_duration),
                 mime: enc.mime_type().to_string(),
                 size: enc.length().parse().ok().filter(|&n: &i64| n > 0),
+                description: plain_text(
+                    it.itunes_ext().and_then(|i| i.summary()).filter(|s| !s.trim().is_empty())
+                        .or(it.description()).or(it.content()).unwrap_or(""),
+                ),
+                image_url: it.itunes_ext().and_then(|i| i.image()).unwrap_or("").to_string(),
                 url,
             })
         })
@@ -81,6 +112,7 @@ fn parse_feed(bytes: &[u8]) -> anyhow::Result<Feed> {
             .map(str::to_string)
             .or_else(|| ch.image().map(|i| i.url().to_string()))
             .unwrap_or_default(),
+        description: plain_text(itunes.and_then(|i| i.summary()).filter(|s| !s.trim().is_empty()).unwrap_or(ch.description())),
         episodes,
     })
 }
@@ -120,19 +152,21 @@ fn store(c: &mut rusqlite::Connection, podcast_id: i64, feed: &Feed, etag: Optio
     let tx = c.transaction()?;
     tx.execute(
         "UPDATE podcast SET title = ?2, author = ?3, image_url = ?4, etag = ?5, last_modified = ?6,
-         last_fetch = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), last_error = NULL WHERE id = ?1",
-        (podcast_id, &feed.title, &feed.author, &feed.image_url, etag, lm),
+         last_fetch = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), last_error = NULL, description = ?7 WHERE id = ?1",
+        (podcast_id, &feed.title, &feed.author, &feed.image_url, etag, lm, &feed.description),
     )?;
     let mut n = 0;
     {
         let mut stmt = tx.prepare(
-            "INSERT INTO episode (podcast_id, guid, title, published, duration_s, url, mime, size)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            "INSERT INTO episode (podcast_id, guid, title, published, duration_s, url, mime, size, description, image_url)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
              ON CONFLICT (podcast_id, guid) DO UPDATE SET title = excluded.title, published = excluded.published,
-               duration_s = excluded.duration_s, url = excluded.url, mime = excluded.mime, size = excluded.size",
+               duration_s = excluded.duration_s, url = excluded.url, mime = excluded.mime, size = excluded.size,
+               description = excluded.description, image_url = excluded.image_url",
         )?;
         for e in &feed.episodes {
-            n += stmt.execute((podcast_id, &e.guid, &e.title, &e.published, e.duration_s, &e.url, &e.mime, e.size))?;
+            n += stmt.execute((podcast_id, &e.guid, &e.title, &e.published, e.duration_s, &e.url, &e.mime, e.size,
+                               &e.description, &e.image_url))?;
         }
     }
     tx.commit()?;
@@ -177,8 +211,9 @@ pub async fn refresh_one(state: &AppState, podcast_id: i64) -> ApiResult<()> {
 
 /// Background task: refreshes all subscribed podcasts every hour.
 pub async fn refresh_loop(state: AppState) {
+    // First pass soon after start, so feed fields added by a migration are filled.
+    tokio::time::sleep(Duration::from_secs(60)).await;
     loop {
-        tokio::time::sleep(REFRESH_EVERY).await;
         let ids = with_db(&state.db, |c| {
             let mut stmt = c.prepare("SELECT DISTINCT podcast_id FROM subscription")?;
             let ids = stmt.query_map([], |r| r.get::<_, i64>(0))?.collect::<Result<Vec<_>, _>>()?;
@@ -189,6 +224,7 @@ pub async fn refresh_loop(state: AppState) {
         for id in ids {
             let _ = refresh_one(&state, id).await;
         }
+        tokio::time::sleep(REFRESH_EVERY).await;
     }
 }
 
@@ -201,6 +237,8 @@ fn podcast_json(r: &rusqlite::Row) -> rusqlite::Result<Value> {
         "title": r.get::<_, String>("title")?,
         "author": r.get::<_, String>("author")?,
         "image_url": r.get::<_, String>("image_url")?,
+        "image": image_path("podcast", r.get("id")?, !r.get::<_, String>("image_url")?.is_empty()),
+        "description": r.get::<_, String>("description")?,
         "last_fetch": r.get::<_, Option<String>>("last_fetch")?,
         "last_error": r.get::<_, Option<String>>("last_error")?,
         "episodes": r.get::<_, i64>("episodes")?,
@@ -225,11 +263,20 @@ pub struct Subscribe {
 }
 
 pub async fn subscribe(State(state): State<AppState>, user: CurrentUser, Json(req): Json<Subscribe>) -> ApiResult<Json<Value>> {
-    let url = req.feed_url.trim().to_string();
+    let id = subscribe_url(&state, user.id, req.feed_url.trim()).await?;
+    with_db(&state.db, move |c| {
+        let p = c.query_row(&format!("{PODCAST_SELECT} WHERE s.user_id = ?1 AND p.id = ?2"), (user.id, id), podcast_json)?;
+        Ok(Json(p))
+    })
+    .await
+}
+
+/// Subscribes a user to a feed (fetching it first if it is new) and returns the podcast id.
+pub async fn subscribe_url(state: &AppState, user: i64, url: &str) -> ApiResult<i64> {
     if !(url.starts_with("https://") || url.starts_with("http://")) || url.len() > 2048 {
         return Err(ApiError::BadRequest("feed_url must be an http(s) URL".into()));
     }
-    let u = url.clone();
+    let u = url.to_string();
     let (id, new) = with_db(&state.db, move |c| {
         if let Some(id) = c.query_row("SELECT id FROM podcast WHERE feed_url = ?1", [&u], |r| r.get::<_, i64>(0)).optional()? {
             return Ok((id, false));
@@ -239,7 +286,7 @@ pub async fn subscribe(State(state): State<AppState>, user: CurrentUser, Json(re
     })
     .await?;
     if new {
-        if let Err(e) = refresh_one(&state, id).await {
+        if let Err(e) = refresh_one(state, id).await {
             // Not a usable feed: do not keep it.
             with_db(&state.db, move |c| {
                 c.execute("DELETE FROM podcast WHERE id = ?1", [id])?;
@@ -250,9 +297,8 @@ pub async fn subscribe(State(state): State<AppState>, user: CurrentUser, Json(re
         }
     }
     with_db(&state.db, move |c| {
-        c.execute("INSERT OR IGNORE INTO subscription (user_id, podcast_id) VALUES (?1, ?2)", (user.id, id))?;
-        let p = c.query_row(&format!("{PODCAST_SELECT} WHERE s.user_id = ?1 AND p.id = ?2"), (user.id, id), podcast_json)?;
-        Ok(Json(p))
+        c.execute("INSERT OR IGNORE INTO subscription (user_id, podcast_id) VALUES (?1, ?2)", (user, id))?;
+        Ok(id)
     })
     .await
 }
@@ -306,12 +352,18 @@ fn episode_json(r: &rusqlite::Row) -> rusqlite::Result<Value> {
         "duration_ms": r.get::<_, Option<i64>>("duration_s")?.map(|s| s * 1000),
         "mime": r.get::<_, String>("mime")?,
         "size": r.get::<_, Option<i64>>("size")?,
+        "image": image_path("episode", id, !r.get::<_, String>("image_url")?.is_empty() || !r.get::<_, String>("podcast_image")?.is_empty()),
+        "description": r.get::<_, String>("description")?,
         "position_ms": r.get::<_, Option<i64>>("position_ms")?,
         "finished": r.get::<_, Option<bool>>("finished")?.unwrap_or(false),
     }))
 }
 
-const EPISODE_SELECT: &str = "SELECT e.*, p.title AS podcast_title, pb.position_ms, pb.finished
+fn image_path(kind: &str, id: i64, has: bool) -> Value {
+    if has { json!(format!("/api/v1/image/{kind}:{id}")) } else { Value::Null }
+}
+
+const EPISODE_SELECT: &str = "SELECT e.*, p.title AS podcast_title, p.image_url AS podcast_image, pb.position_ms, pb.finished
      FROM episode e JOIN podcast p ON p.id = e.podcast_id
      JOIN subscription s ON s.podcast_id = p.id AND s.user_id = ?1
      LEFT JOIN playback pb ON pb.user_id = ?1 AND pb.item_key = 'episode:' || e.id";
@@ -375,15 +427,44 @@ pub async fn search(State(state): State<AppState>, _user: CurrentUser, Query(s):
     Ok(Json(Value::Array(list)))
 }
 
+pub struct EpisodeSource {
+    pub url: String,
+    pub mime: String,
+    pub size: Option<i64>,
+    pub duration_s: Option<i64>,
+    pub title: String,
+    pub podcast: String,
+    pub published: Option<String>,
+    pub description: String,
+    pub has_image: bool,
+}
+
 /// Episode URL and metadata for streaming (used by media.rs).
-pub fn episode_source(c: &rusqlite::Connection, user: i64, id: i64) -> ApiResult<(String, String, Option<i64>, Option<i64>, String, String)> {
+pub fn episode_source(c: &rusqlite::Connection, user: i64, id: i64) -> ApiResult<EpisodeSource> {
     Ok(c.query_row(
-        "SELECT e.url, e.mime, e.size, e.duration_s, e.title, p.title FROM episode e
+        "SELECT e.url, e.mime, e.size, e.duration_s, e.title, p.title, e.published, e.description,
+                e.image_url <> '' OR p.image_url <> '' FROM episode e
          JOIN podcast p ON p.id = e.podcast_id JOIN subscription s ON s.podcast_id = p.id AND s.user_id = ?1
          WHERE e.id = ?2",
         (user, id),
-        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)),
+        |r| Ok(EpisodeSource { url: r.get(0)?, mime: r.get(1)?, size: r.get(2)?, duration_s: r.get(3)?, title: r.get(4)?,
+                               podcast: r.get(5)?, published: r.get(6)?, description: r.get(7)?, has_image: r.get(8)? }),
     )?)
+}
+
+/// Cover of an episode (its own, else the podcast's) or of a podcast, for a subscriber.
+pub async fn image(state: &AppState, user: i64, kind: &str, id: i64) -> ApiResult<axum::response::Response> {
+    let sql = match kind {
+        "episode" => "SELECT CASE WHEN e.image_url <> '' THEN e.image_url ELSE p.image_url END FROM episode e
+                      JOIN podcast p ON p.id = e.podcast_id JOIN subscription s ON s.podcast_id = p.id AND s.user_id = ?1
+                      WHERE e.id = ?2",
+        _ => "SELECT p.image_url FROM podcast p JOIN subscription s ON s.podcast_id = p.id AND s.user_id = ?1 WHERE p.id = ?2",
+    };
+    let url: String = with_db(&state.db, move |c| Ok(c.query_row(sql, (user, id), |r| r.get(0))?)).await?;
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err(ApiError::NotFound);
+    }
+    crate::sources::relay_image(state.http.get(url).timeout(Duration::from_secs(20))).await
 }
 
 #[cfg(test)]
@@ -412,5 +493,20 @@ mod tests {
         assert_eq!(f.episodes.len(), 1);
         assert_eq!(f.episodes[0].published.as_deref(), Some("2026-10-30T09:00:00Z"));
         assert_eq!(f.episodes[0].duration_s, Some(60));
+        assert_eq!(f.episodes[0].description, "");
+    }
+
+    #[test]
+    fn descriptions_and_images() {
+        let xml = br#"<?xml version="1.0"?><rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
+          <channel><title>T</title><description>&lt;p&gt;Ein &amp;amp; zwei&lt;/p&gt;</description>
+          <item><title>E1</title><guid>g1</guid><description><![CDATA[<p>Erste <b>Folge</b></p>
+            <p>Zeile&nbsp;zwei</p>]]></description><itunes:image href="https://x/e1.jpg"/>
+            <enclosure url="https://x/e1.mp3" type="audio/mpeg" length="1000"/></item>
+          </channel></rss>"#;
+        let f = parse_feed(xml).unwrap();
+        assert_eq!(f.description, "Ein & zwei");
+        assert_eq!(f.episodes[0].description, "Erste Folge Zeile zwei");
+        assert_eq!(f.episodes[0].image_url, "https://x/e1.jpg");
     }
 }

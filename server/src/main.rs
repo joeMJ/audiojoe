@@ -7,6 +7,7 @@ mod db;
 mod error;
 mod jellyfin;
 mod media;
+mod opml;
 mod playback;
 mod plex;
 mod podcasts;
@@ -132,6 +133,7 @@ async fn main() -> Result<()> {
         .route("/api/v1/sources/{id}/browse", get(sources::browse))
         .route("/api/v1/image/{key}", get(sources::image))
         .route("/api/v1/podcasts", get(podcasts::list).post(podcasts::subscribe))
+        .route("/api/v1/podcasts/opml", get(opml::export).post(opml::import))
         .route("/api/v1/podcasts/{id}", delete(podcasts::unsubscribe))
         .route("/api/v1/podcasts/{id}/episodes", get(podcasts::episodes))
         .route("/api/v1/podcasts/{id}/refresh", post(podcasts::refresh))

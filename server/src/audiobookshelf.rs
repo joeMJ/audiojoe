@@ -211,6 +211,8 @@ pub async fn item(state: &AppState, abs: &Abs, id: &str) -> ApiResult<(Value, Ve
         "subtitle": match narrator { Some(n) => format!("{author} · {n}"), None => author.to_string() },
         "duration_ms": (media["duration"].as_f64().unwrap_or(offset) * 1000.0) as i64,
         "image": format!("/api/v1/image/abs:{}:{id}", abs.source_id),
+        "description": crate::podcasts::plain_text(meta["description"].as_str().unwrap_or("")),
+        "published": meta["publishedYear"].as_str(),
         "quality": {
             "codec": first["codec"].as_str().unwrap_or("").to_lowercase(),
             "bitrate": first["bitRate"].as_i64(),

@@ -47,9 +47,15 @@ pub async fn browse(
 }
 
 /// `/api/v1/image/{key}` for `jellyfin:<src>:<item>` and `abs:<src>:<item>`.
-pub async fn image(State(state): State<AppState>, _user: CurrentUser, Path(key): Path<String>) -> ApiResult<Response> {
+pub async fn image(State(state): State<AppState>, user: CurrentUser, Path(key): Path<String>) -> ApiResult<Response> {
     if let Some(uuid) = key.strip_prefix("radio:") {
         return crate::radio::image(&state, uuid).await;
+    }
+    for kind in ["episode", "podcast"] {
+        if let Some(id) = key.strip_prefix(kind).and_then(|r| r.strip_prefix(':')) {
+            let id: i64 = id.parse().map_err(|_| ApiError::NotFound)?;
+            return crate::podcasts::image(&state, user.id, kind, id).await;
+        }
     }
     let mut parts = key.splitn(3, ':');
     let (Some(k), Some(src), Some(item)) = (parts.next(), parts.next(), parts.next()) else {
@@ -66,7 +72,9 @@ pub async fn image(State(state): State<AppState>, _user: CurrentUser, Path(key):
 
 pub async fn relay_image(req: reqwest::RequestBuilder) -> ApiResult<Response> {
     let res = req.send().await.map_err(|e| ApiError::BadGateway(e.without_url().to_string()))?;
-    if !res.status().is_success() {
+    // Images only (addresses may come from feeds); at most 8 MB.
+    let is_image = res.headers().get(header::CONTENT_TYPE).and_then(|v| v.to_str().ok()).is_some_and(|t| t.starts_with("image/"));
+    if !res.status().is_success() || !is_image || res.content_length().is_some_and(|n| n > 8 << 20) {
         return Err(ApiError::NotFound);
     }
     let mut headers = HeaderMap::new();

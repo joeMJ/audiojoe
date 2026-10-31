@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
-# gen-icons.sh – renders design/icon.svg into the app icons (Android mipmaps, Windows .ico,
-# Linux PNG) and the web app icons. Needs ImageMagick with SVG support (rsvg).
+# gen-icons.sh – renders the logo (design/icon.png) into the app icons (Android mipmaps,
+# Windows .ico, Linux PNG) and the web app icons. Sizes up to 32 px use a crop of the head
+# with headphones (design/icon-small.png, generated here), larger ones the full logo.
 #
 #   tools/gen-icons.sh
 set -euo pipefail
 cd "$(dirname "$(readlink -f "$0")")/.."
-SVG=design/icon.svg
-render() { convert -background none -density 384 "$SVG" -resize "$1x$1" "$2"; }
+SRC=design/icon.png
+SMALL=design/icon-small.png
+convert "$SRC" -crop 600x600+160+110 +repage \
+    \( -size 600x600 xc:none -fill white -draw "circle 300,300 300,2" \) -compose DstIn -composite "$SMALL"
+render() {
+    local src=$SRC
+    [ "$1" -le 32 ] && src=$SMALL
+    convert "$src" -filter Lanczos -resize "$1x$1" -strip "$2"
+}
 
 APP=clients/app
 for d in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
@@ -21,4 +29,5 @@ rm -rf "$tmp"
 mkdir -p clients/web/public
 render 192 clients/web/public/icon-192.png
 render 512 clients/web/public/icon-512.png
+render 32 clients/web/public/favicon.png
 echo "icons written"

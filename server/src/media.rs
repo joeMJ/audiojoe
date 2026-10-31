@@ -72,19 +72,20 @@ async fn resolve(state: &AppState, user: &CurrentUser, key: &str, part: usize) -
     match parse_key(key)? {
         Key::Episode(id) => {
             let uid = user.id;
-            let (url, mime, size, duration, title, podcast) =
-                with_db(&state.db, move |c| podcasts::episode_source(c, uid, id)).await?;
-            let bitrate = match (size, duration) {
+            let e = with_db(&state.db, move |c| podcasts::episode_source(c, uid, id)).await?;
+            let bitrate = match (e.size, e.duration_s) {
                 (Some(s), Some(d)) if d > 0 => Some(s * 8 / d),
                 _ => None,
             };
             Ok(Resolved {
-                url,
+                url: e.url,
                 auth: None,
                 meta: json!({
-                    "key": key, "kind": "episode", "title": title, "subtitle": podcast,
-                    "duration_ms": duration.map(|d| d * 1000),
-                    "quality": { "codec": codec_from_mime(&mime), "bitrate": bitrate, "size": size,
+                    "key": key, "kind": "episode", "title": e.title, "subtitle": e.podcast,
+                    "published": e.published, "description": e.description,
+                    "image": if e.has_image { json!(format!("/api/v1/image/{key}")) } else { Value::Null },
+                    "duration_ms": e.duration_s.map(|d| d * 1000),
+                    "quality": { "codec": codec_from_mime(&e.mime), "bitrate": bitrate, "size": e.size,
                                  "sample_rate": null, "bit_depth": null, "channels": null },
                 }),
             })
