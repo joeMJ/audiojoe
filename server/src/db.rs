@@ -7,7 +7,10 @@ use anyhow::{Context, Result};
 use rusqlite::Connection;
 
 /// Schema migrations, applied in order. The index + 1 is stored in `PRAGMA user_version`.
-const MIGRATIONS: &[&str] = &[include_str!("../migrations/0001_init.sql")];
+const MIGRATIONS: &[&str] = &[
+    include_str!("../migrations/0001_init.sql"),
+    include_str!("../migrations/0002_core.sql"),
+];
 
 pub type Db = Arc<Mutex<Connection>>;
 

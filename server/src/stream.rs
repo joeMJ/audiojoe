@@ -18,17 +18,27 @@ const PASS_HEADERS: &[HeaderName] = &[
     header::LAST_MODIFIED,
 ];
 
-pub async fn relay(client: &reqwest::Client, url: &str, req_headers: &HeaderMap) -> Response {
+/// `extra` are request headers for the upstream (e.g. the source's authorization).
+pub async fn relay(
+    client: &reqwest::Client,
+    url: &str,
+    req_headers: &HeaderMap,
+    extra: &[(HeaderName, String)],
+) -> Response {
     let mut req = client.get(url);
     for h in [header::RANGE, header::IF_RANGE] {
         if let Some(v) = req_headers.get(&h) {
             req = req.header(h, v);
         }
     }
+    for (k, v) in extra {
+        req = req.header(k, v);
+    }
     let upstream = match req.send().await {
         Ok(r) => r,
         Err(e) => {
-            tracing::warn!("upstream {url} unreachable: {e}");
+            // Without the URL: it may contain credentials of the source.
+            tracing::warn!("upstream unreachable: {}", e.without_url());
             return (StatusCode::BAD_GATEWAY, "upstream unreachable").into_response();
         }
     };

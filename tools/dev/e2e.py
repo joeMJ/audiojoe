@@ -1,0 +1,227 @@
+#!/usr/bin/env python3
+"""End-to-end test of the audiojoe API (stage 1), standard library only.
+
+    tools/dev/e2e.py BASE_URL CREDENTIALS_JSON
+
+CREDENTIALS_JSON: {"username": ..., "password": ..., "totp_secret": ...} of a test user.
+Optional environment: JELLYFIN_URL, JELLYFIN_API_KEY (adds and tests a Jellyfin source),
+E2E_FEED (podcast feed URL, default: Lage der Nation).
+The rate-limit check runs last because it blocks logins from this address for 15 minutes.
+"""
+
+import base64, hashlib, hmac, json, os, struct, sys, threading, time
+import urllib.error, urllib.request
+from datetime import datetime, timedelta, timezone
+
+BASE = sys.argv[1].rstrip("/")
+CRED = json.load(open(sys.argv[2]))
+FEED = os.environ.get("E2E_FEED", "https://feeds.lagedernation.org/feeds/ldn-mp3.xml")
+failed = 0
+
+
+def check(name, cond, detail=""):
+    global failed
+    print(("✔ " if cond else "✖ ") + name + (f" – {detail}" if detail else ""), flush=True)
+    if not cond:
+        failed += 1
+
+
+def totp(secret, t=None):
+    key = base64.b32decode(secret + "=" * (-len(secret) % 8))
+    counter = int((t or time.time()) // 30)
+    h = hmac.new(key, struct.pack(">Q", counter), hashlib.sha1).digest()
+    o = h[-1] & 15
+    return "%06d" % ((struct.unpack(">I", h[o:o + 4])[0] & 0x7FFFFFFF) % 1000000)
+
+
+def call(method, path, body=None, token=None, headers=None, raw=False):
+    h = {"accept": "application/json", **(headers or {})}
+    data = None
+    if body is not None:
+        data = json.dumps(body).encode()
+        h["content-type"] = "application/json"
+    if token:
+        h["authorization"] = "Bearer " + token
+    req = urllib.request.Request(BASE + path, data=data, method=method, headers=h)
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            content = r.read() if raw else r.read()
+            return r.status, (content if raw else (json.loads(content) if content else None)), dict(r.headers)
+    except urllib.error.HTTPError as e:
+        content = e.read()
+        try:
+            content = json.loads(content)
+        except Exception:
+            pass
+        return e.code, content, dict(e.headers)
+
+
+def wait_next_step():
+    time.sleep(30 - time.time() % 30 + 1)
+
+
+def login(device, code=None):
+    return call("POST", "/api/v1/auth/login", {
+        "username": CRED["username"], "password": CRED["password"],
+        "totp": code or totp(CRED["totp_secret"]), "device": device})
+
+
+# ------------------------------------------------------------------ authentication
+s, b, _ = call("GET", "/api/v1/me")
+check("without login: 401", s == 401, str(s))
+s, _, _ = call("POST", "/api/v1/auth/login", {"username": CRED["username"], "password": "wrong-password",
+                                                  "totp": totp(CRED["totp_secret"]), "device": "e2e"})
+check("wrong password: 401", s == 401, str(s))
+s, _, _ = call("POST", "/api/v1/auth/login", {"username": CRED["username"], "password": CRED["password"],
+                                                  "totp": "000000", "device": "e2e"})
+check("wrong TOTP: 401", s == 401, str(s))
+
+wait_next_step()
+code = totp(CRED["totp_secret"])
+s, b, h = login("e2e-phone", code)
+check("login device A", s == 200 and b.get("token"), str(s))
+A = b["token"]
+check("session cookie is HttpOnly, Secure, SameSite=Strict",
+      all(x in h.get("set-cookie", h.get("Set-Cookie", "")) for x in ("HttpOnly", "Secure", "SameSite=Strict")))
+s, _, _ = login("e2e-replay", code)
+check("same TOTP code twice: 401 (replay)", s == 401, str(s))
+s, b, _ = call("GET", "/api/v1/me", token=A)
+check("/me", s == 200 and b["user"] == CRED["username"] and b["device"] == "e2e-phone", json.dumps(b))
+
+wait_next_step()
+s, b, _ = login("e2e-tesla")
+check("login device B", s == 200, str(s))
+B = b["token"]
+
+# ------------------------------------------------------------------ podcasts
+s, b, _ = call("POST", "/api/v1/podcasts", {"feed_url": FEED}, token=A)
+check("subscribe podcast", s == 200 and b["episodes"] > 0, f"{b.get('title') if isinstance(b, dict) else b}, {b.get('episodes') if isinstance(b, dict) else ''} episodes")
+pid = b["id"]
+s, b, _ = call("POST", "/api/v1/podcasts", {"feed_url": "https://example.invalid/feed.xml"}, token=A)
+check("invalid feed rejected", s == 502, str(s))
+s, eps, _ = call("GET", f"/api/v1/podcasts/{pid}/episodes?limit=5", token=A)
+check("episodes", s == 200 and len(eps) == 5 and eps[0]["published"], eps[0]["title"] if eps else "")
+s, latest, _ = call("GET", "/api/v1/episodes/latest?limit=3", token=B)
+check("latest episodes (device B)", s == 200 and len(latest) == 3)
+ep = eps[0]
+s, item, _ = call("GET", f"/api/v1/items/{ep['key']}", token=A)
+check("episode item with quality", s == 200 and item["quality"]["codec"] == "mp3", json.dumps(item["quality"]))
+s, data, h = call("GET", f"/api/v1/stream/{ep['key']}", token=A, headers={"range": "bytes=0-9999"}, raw=True)
+q = json.loads(h.get("x-audiojoe-quality", h.get("X-Audiojoe-Quality", "null")))
+check("episode stream with Range: 206", s == 206 and len(data) == 10000, f"{s}, {len(data)} B")
+check("quality header", q and q["transcoded"] is False and q["delivered"]["codec"] == "mp3")
+s, _, _ = call("GET", f"/api/v1/stream/{ep['key']}")
+check("stream without login: 401", s == 401, str(s))
+
+# ------------------------------------------------------------------ playback sync + events
+events = []
+
+
+def listen():
+    req = urllib.request.Request(BASE + "/api/v1/events", headers={"authorization": "Bearer " + B})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            for line in r:
+                line = line.decode().strip()
+                if line.startswith("data:"):
+                    events.append((time.time(), json.loads(line[5:])))
+    except Exception:
+        pass
+
+
+threading.Thread(target=listen, daemon=True).start()
+time.sleep(1.5)
+now = datetime.now(timezone.utc)
+iso = lambda t: t.isoformat().replace("+00:00", "Z")
+t0 = time.time()
+s, b, _ = call("PUT", f"/api/v1/playback/{ep['key']}", {
+    "position_ms": 842000, "duration_ms": ep["duration_ms"], "updated_at": iso(now),
+    "title": ep["title"], "subtitle": ep["podcast"]}, token=A)
+check("device A saves position 14:02", s == 200 and b["applied"], json.dumps(b.get("state", b))[:120])
+time.sleep(1.5)
+ev = [e for e in events if e[1]["state"]["key"] == ep["key"]]
+check("device B receives the change live (SSE)", bool(ev) and ev[0][1]["state"]["position_ms"] == 842000,
+      f"after {ev[0][0] - t0:.2f} s, from {ev[0][1]['state']['device']}" if ev else "no event")
+s, b, _ = call("GET", f"/api/v1/playback/{ep['key']}", token=B)
+check("device B reads position", s == 200 and b["position_ms"] == 842000 and b["device"] == "e2e-phone")
+s, b, _ = call("PUT", f"/api/v1/playback/{ep['key']}", {"position_ms": 100000, "updated_at": iso(now - timedelta(minutes=5))}, token=B)
+check("older offline position does not overwrite", s == 200 and not b["applied"] and b["state"]["position_ms"] == 842000)
+s, b, _ = call("PUT", f"/api/v1/playback/{ep['key']}", {"position_ms": 900000, "updated_at": iso(now + timedelta(days=1))}, token=B)
+check("future timestamp is clamped", s == 200 and b["applied"] and b["state"]["updated_at"] < iso(now + timedelta(minutes=1)))
+s, b, _ = call("POST", "/api/v1/playback", [
+    {"key": eps[1]["key"], "position_ms": 1000, "updated_at": iso(now), "title": eps[1]["title"]},
+    {"key": eps[2]["key"], "position_ms": 2000, "updated_at": iso(now), "finished": True}], token=B)
+check("bulk sync of buffered positions", s == 200 and all(x["applied"] for x in b))
+s, b, _ = call("GET", "/api/v1/playback?unfinished=true", token=A)
+keys = [x["key"] for x in b] if s == 200 else []
+check("continue listening: unfinished only", eps[1]["key"] in keys and ep["key"] in keys and eps[2]["key"] not in keys, str(keys[:3]))
+s, b, _ = call("GET", f"/api/v1/podcasts/{pid}/episodes?limit=3", token=A)
+check("episode list shows position", s == 200 and b[0]["position_ms"] == 900000)
+
+# ------------------------------------------------------------------ jellyfin
+if os.environ.get("JELLYFIN_URL"):
+    s, b, _ = call("POST", "/api/v1/sources", {"kind": "jellyfin", "name": "Jellyfin (e2e)",
+                                               "url": os.environ["JELLYFIN_URL"], "api_key": "wrong"}, token=A)
+    check("jellyfin with wrong key rejected", s == 502, str(s))
+    s, b, _ = call("POST", "/api/v1/sources", {"kind": "jellyfin", "name": "Jellyfin (e2e)",
+                                               "url": os.environ["JELLYFIN_URL"], "api_key": os.environ["JELLYFIN_API_KEY"]}, token=A)
+    check("add jellyfin source", s == 200, f"version {b.get('version')}" if s == 200 else str(b))
+    sid = b["id"]
+    s, srcs, _ = call("GET", "/api/v1/sources", token=A)
+    check("source list contains no secret", s == 200 and all("secret" not in x and "api_key" not in x for x in srcs))
+    s, root, _ = call("GET", f"/api/v1/sources/{sid}/browse", token=A)
+    views = root.get("items", []) if s == 200 else []
+    check("jellyfin libraries", s == 200 and views, ", ".join(v["title"] for v in views))
+    tracks, hires = [], None
+    for view in views:
+        s, albums, _ = call("GET", f"/api/v1/sources/{sid}/browse?parent={view['key'].split(':')[2]}&limit=40", token=A)
+        for album in [a for a in albums.get("items", []) if a["kind"] in ("album", "folder")][:40]:
+            s, t, _ = call("GET", f"/api/v1/sources/{sid}/browse?parent={album['key'].split(':')[2]}&limit=5", token=A)
+            for tr in [x for x in t.get("items", []) if x["kind"] == "track"]:
+                tracks.append(tr)
+                qq = tr.get("quality") or {}
+                if not hires and qq.get("codec") == "flac" and (qq.get("sample_rate") or 0) > 48000:
+                    hires = tr
+            if hires and len(tracks) > 3:
+                break
+        if hires:
+            break
+    check("jellyfin tracks found", bool(tracks), f"{len(tracks)} tracks")
+    if tracks:
+        tr = tracks[0]
+        s, item, _ = call("GET", f"/api/v1/items/{tr['key']}", token=A)
+        check("track item with quality", s == 200 and item["quality"] and item["quality"]["codec"], json.dumps(item.get("quality")))
+        s, data, h = call("GET", f"/api/v1/stream/{tr['key']}", token=A, headers={"range": "bytes=0-65535"}, raw=True)
+        check("jellyfin stream with Range: 206", s == 206 and len(data) == 65536, f"{s}, {len(data)} B")
+        s, _, _ = call("GET", f"/api/v1/image/{tr['key']}", token=A, raw=True)
+        check("cover image relayed (or none)", s in (200, 404), str(s))
+    if hires:
+        q = hires["quality"]
+        req = urllib.request.Request(BASE + f"/api/v1/stream/{hires['key']}?profile=tesla-offline",
+                                     headers={"authorization": "Bearer " + A})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            head = r.read(65536)
+            qh = json.loads(r.headers.get("x-audiojoe-quality"))
+        check("hi-res FLAC → 48 kHz for Tesla offline", head[:4] == b"fLaC" and qh["transcoded"] and qh["delivered"]["sample_rate"] == 48000,
+              f"source {q['bit_depth']}/{q['sample_rate']} → {qh['delivered']['bit_depth']}/{qh['delivered']['sample_rate']}")
+    else:
+        print("  (no hi-res FLAC found in the first albums – conversion not tested against Jellyfin)")
+    s, _, _ = call("DELETE", f"/api/v1/sources/{sid}", token=A)
+    check("remove jellyfin source", s == 200)
+else:
+    print("  (JELLYFIN_URL not set – Jellyfin not tested)")
+
+# ------------------------------------------------------------------ cleanup, logout
+call("DELETE", f"/api/v1/podcasts/{pid}", token=A)
+s, _, _ = call("POST", "/api/v1/auth/logout", token=A)
+s2, _, _ = call("GET", "/api/v1/me", token=A)
+check("logout ends the session", s == 200 and s2 == 401, f"{s}/{s2}")
+call("POST", "/api/v1/auth/logout", token=B)
+
+# ------------------------------------------------------------------ throttling (last)
+codes = [call("POST", "/api/v1/auth/login", {"username": "ghost-e2e", "password": "x" * 12, "totp": "123456", "device": "e2e"})[0]
+         for _ in range(6)]
+check("6th failed login: 429", codes[:5] == [401] * 5 and codes[5] == 429, str(codes))
+
+print(f"\n{failed} check(s) failed" if failed else "\nall checks passed")
+sys.exit(1 if failed else 0)

@@ -118,5 +118,5 @@ pub async fn stream(
         url.push('?');
         url.push_str(&query.join("&"));
     }
-    crate::stream::relay(&state.http, &url, &headers).await
+    crate::stream::relay(&state.http, &url, &headers, &[]).await
 }

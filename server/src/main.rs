@@ -1,17 +1,29 @@
 mod access;
+mod auth;
+mod cli;
 mod config;
 mod db;
+mod error;
+mod jellyfin;
+mod media;
+mod playback;
+mod podcasts;
 mod probe;
 mod stream;
 
-use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{
+    collections::HashMap,
+    net::SocketAddr,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 use anyhow::Result;
 use axum::{
     extract::DefaultBodyLimit,
     http::{header, HeaderValue},
     middleware,
-    routing::{get, post},
+    routing::{delete, get, post},
     Json, Router,
 };
 use tower_http::{
@@ -24,6 +36,12 @@ pub struct AppState {
     pub config: Arc<config::Config>,
     pub db: db::Db,
     pub http: reqwest::Client,
+    pub guard: Arc<auth::Guard>,
+    /// Argon2 hash of a random password; verified for unknown user names (equal timing).
+    pub dummy_hash: Arc<String>,
+    pub events: playback::Events,
+    /// Jellyfin user id per source, looked up once.
+    pub jellyfin_users: Arc<Mutex<HashMap<i64, String>>>,
 }
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -38,11 +56,24 @@ async fn main() -> Result<()> {
         .with_ansi(std::io::IsTerminal::is_terminal(&std::io::stderr()))
         .init();
 
-    let path = std::env::args()
-        .skip_while(|a| a != "--config")
-        .nth(1)
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("/etc/audiojoe/config.toml"));
+    // [--config FILE] [serve | help | user …]
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    let path = match args.iter().position(|a| a == "--config") {
+        Some(i) if i + 1 < args.len() => {
+            let p = PathBuf::from(args.remove(i + 1));
+            args.remove(i);
+            p
+        }
+        _ => PathBuf::from("/etc/audiojoe/config.toml"),
+    };
+    match args.first().map(String::as_str) {
+        None | Some("serve") => {}
+        Some("help" | "--help" | "-h") => {
+            println!("audiojoe-server {VERSION}\n\n  audiojoe-server [--config FILE] [serve]\n  audiojoe-server [--config FILE] user add|passwd|totp-reset|delete NAME [--password-file FILE]\n  audiojoe-server [--config FILE] user list");
+            return Ok(());
+        }
+        Some(_) => return cli::run(&config::Config::load(&path)?, &args),
+    }
     let config = config::Config::load(&path)?;
     let state = AppState {
         db: db::open(&config.database)?,
@@ -51,7 +82,12 @@ async fn main() -> Result<()> {
             .connect_timeout(std::time::Duration::from_secs(5))
             .build()?,
         config: Arc::new(config),
+        guard: Default::default(),
+        dummy_hash: Arc::new(auth::hash_password(&auth::random_token())?),
+        events: tokio::sync::broadcast::channel(256).0,
+        jellyfin_users: Default::default(),
     };
+    tokio::spawn(podcasts::refresh_loop(state.clone()));
 
     let web = ServeDir::new(&state.config.web_root)
         .fallback(ServeFile::new(state.config.web_root.join("index.html")));
@@ -59,6 +95,23 @@ async fn main() -> Result<()> {
         .route("/api/v1/health", get(health))
         .route("/api/v1/probe/results", post(probe::submit).get(probe::list))
         .route("/api/v1/probe/stream/{file}", get(probe::stream))
+        .route("/api/v1/auth/login", post(auth::login))
+        .route("/api/v1/auth/logout", post(auth::logout))
+        .route("/api/v1/me", get(auth::me))
+        .route("/api/v1/sources", get(jellyfin::list_sources).post(jellyfin::add_source))
+        .route("/api/v1/sources/{id}", delete(jellyfin::delete_source))
+        .route("/api/v1/sources/{id}/browse", get(jellyfin::browse))
+        .route("/api/v1/image/{key}", get(jellyfin::image))
+        .route("/api/v1/podcasts", get(podcasts::list).post(podcasts::subscribe))
+        .route("/api/v1/podcasts/{id}", delete(podcasts::unsubscribe))
+        .route("/api/v1/podcasts/{id}/episodes", get(podcasts::episodes))
+        .route("/api/v1/podcasts/{id}/refresh", post(podcasts::refresh))
+        .route("/api/v1/episodes/latest", get(podcasts::latest))
+        .route("/api/v1/items/{key}", get(media::item))
+        .route("/api/v1/stream/{key}", get(media::stream))
+        .route("/api/v1/playback", get(playback::list).post(playback::sync))
+        .route("/api/v1/playback/{key}", get(playback::get).put(playback::put))
+        .route("/api/v1/events", get(playback::events))
         .fallback_service(web)
         .layer(DefaultBodyLimit::max(64 * 1024))
         .layer(middleware::from_fn_with_state(state.clone(), access::log))
