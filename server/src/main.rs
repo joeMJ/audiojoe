@@ -7,6 +7,7 @@ mod db;
 mod error;
 mod jellyfin;
 mod media;
+mod notes;
 mod opml;
 mod playback;
 mod plex;

@@ -19,6 +19,8 @@ export interface Item {
   podcast?: string;
   published?: string | null;
   description?: string | null;
+  /** Shownotes as filtered HTML (paragraphs, lists, emphasis, links) from the server. */
+  notes?: string | null;
   favorite?: boolean;
   track?: number | null;
   year?: number | null;

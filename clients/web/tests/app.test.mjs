@@ -137,8 +137,13 @@ try {
   await clickText("☾ 15 min"); await clickText("☾ 30 min"); await clickText("☾ 60 min"); await clickText("☾ Ende des Titels");
   check("sleep timer cycles back to off", /Schlaf-Timer/.test(await page.evaluate(() => document.querySelector(".tools .big")?.innerText)));
   await clickText("Details");
-  const desc = await page.evaluate(() => document.querySelector(".desc")?.innerText ?? "");
-  check("details tab shows the episode description", desc.length > 40 && !/Keine Beschreibung/.test(desc), `${desc.length} chars`);
+  const notes = await page.evaluate(() => {
+    const n = document.querySelector(".notes");
+    return { text: (n ?? document.querySelector(".desc"))?.innerText ?? "", blocks: n?.querySelectorAll("p, li").length ?? 0,
+             links: n?.querySelectorAll("a").length ?? 0, foreign: n?.querySelectorAll("img, script, iframe, [style], [onclick]").length ?? 0 };
+  });
+  check("details tab shows shownotes in paragraphs", notes.text.length > 40 && notes.blocks >= 1, `${notes.text.length} chars, ${notes.blocks} blocks`);
+  check("shownotes: no clickable links, images or scripts in the car", notes.links === 0 && notes.foreign === 0, `links ${notes.links}, foreign ${notes.foreign}`);
   await shot("04b-details");
   await clickText("Wiedergabe");
   await page.evaluate(() => document.querySelector(".ctrl .play").click()); // pause → saves position

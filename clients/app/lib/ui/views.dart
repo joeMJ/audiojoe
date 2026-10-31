@@ -9,6 +9,7 @@ import '../models.dart';
 import '../player.dart';
 import '../store.dart';
 import 'common.dart';
+import 'notes.dart';
 
 Future<void> startPlayback(BuildContext context, List<Item> items, [int i = 0, VoidCallback? opened]) async {
   // A search field may still hold the keyboard; the player view must get the full height.
@@ -227,7 +228,15 @@ void showEpisode(BuildContext context, Item e, VoidCallback onPlay) => showModal
             ),
           ),
           const SizedBox(height: 12),
-          SelectableText((e.description ?? '').isEmpty ? t('No description.') : e.description!, style: const TextStyle(fontSize: 15, height: 1.45)),
+          // The list carries the short text; the shownotes come with the item itself.
+          FutureBuilder<dynamic>(
+            future: api.call('GET', '/items/${Uri.encodeComponent(e.key)}').catchError((_) => null),
+            builder: (ctx, s) {
+              final notes = s.data is Map ? (s.data as Map)['notes'] as String? : null;
+              if ((notes ?? '').isNotEmpty) return NotesView(notes!);
+              return SelectableText((e.description ?? '').isEmpty ? t('No description.') : e.description!, style: const TextStyle(fontSize: 15, height: 1.45));
+            },
+          ),
         ]),
       ),
     );

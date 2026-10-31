@@ -148,6 +148,7 @@ fn normalize(prefix: &str, source: i64, v: &Value) -> Value {
         "duration_ms": v["RunTimeTicks"].as_i64().map(|t| t / 10_000),
         "image": v["ImageTags"]["Primary"].as_str().map(|_| format!("/api/v1/image/{prefix}:{source}:{id}")),
         "description": v["Overview"].as_str().map(crate::podcasts::plain_text),
+        "notes": v["Overview"].as_str().map(crate::notes::html).filter(|s| !s.is_empty()),
         "quality": if kind == "track" { quality(v) } else { Value::Null },
     })
 }

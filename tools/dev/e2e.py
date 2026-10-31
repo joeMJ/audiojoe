@@ -118,6 +118,9 @@ s, item, _ = call("GET", f"/api/v1/items/{ep['key']}", token=A)
 check("episode item with quality", s == 200 and item["quality"]["codec"] == "mp3", json.dumps(item["quality"]))
 check("episode description and cover", item.get("description") and item.get("image"),
       f"{len(item.get('description') or '')} chars, {item.get('image')}")
+notes = item.get("notes") or ""
+check("episode shownotes filtered HTML", notes.startswith("<") and not any(x in notes.lower() for x in ("<script", "<img", "<iframe", "style=", "onclick=")),
+      f"{len(notes)} chars, {notes.count('<p>')} paragraphs, {notes.count('<a ')} links")
 if item.get("image"):
     s, img, h = call("GET", item["image"], token=A, raw=True)
     check("episode cover relayed as image", s == 200 and h.get("content-type", h.get("Content-Type", "")).startswith("image/"), str(s))

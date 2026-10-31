@@ -82,7 +82,7 @@ async fn resolve(state: &AppState, user: &CurrentUser, key: &str, part: usize) -
                 auth: None,
                 meta: json!({
                     "key": key, "kind": "episode", "title": e.title, "subtitle": e.podcast,
-                    "published": e.published, "description": e.description,
+                    "published": e.published, "description": e.description, "notes": e.notes,
                     "image": if e.has_image { json!(format!("/api/v1/image/{key}")) } else { Value::Null },
                     "duration_ms": e.duration_s.map(|d| d * 1000),
                     "quality": { "codec": codec_from_mime(&e.mime), "bitrate": bitrate, "size": e.size,

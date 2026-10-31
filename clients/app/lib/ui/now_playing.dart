@@ -9,6 +9,7 @@ import '../models.dart';
 import '../player.dart';
 import '../sonos.dart';
 import 'common.dart';
+import 'notes.dart';
 
 class NowPlayingView extends StatelessWidget {
   const NowPlayingView({super.key});
@@ -349,7 +350,10 @@ class _DetailsTab extends StatelessWidget {
       const SizedBox(height: 20),
       Text(t('Description'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
       Divider(color: k.line),
-      SelectableText(desc.isEmpty ? t('No description.') : desc, style: TextStyle(fontSize: 15, height: 1.45, color: desc.isEmpty ? k.muted : null)),
+      if ((it.notes ?? '').isNotEmpty)
+        NotesView(it.notes!)
+      else
+        SelectableText(desc.isEmpty ? t('No description.') : desc, style: TextStyle(fontSize: 15, height: 1.45, color: desc.isEmpty ? k.muted : null)),
       if (it.quality != null && it.quality!.codec.isNotEmpty) ...[
         const SizedBox(height: 20),
         Text(t('Format'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),

@@ -31,6 +31,7 @@ struct Episode {
     mime: String,
     size: Option<i64>,
     description: String,
+    notes: String,
     image_url: String,
 }
 
@@ -99,6 +100,14 @@ fn parse_feed(bytes: &[u8]) -> anyhow::Result<Feed> {
                     it.itunes_ext().and_then(|i| i.summary()).filter(|s| !s.trim().is_empty())
                         .or(it.description()).or(it.content()).unwrap_or(""),
                 ),
+                // Shownotes: the long version first, like Pocket Casts.
+                notes: crate::notes::html(
+                    [it.content(), it.description(), it.itunes_ext().and_then(|i| i.summary())]
+                        .into_iter()
+                        .flatten()
+                        .find(|s| !s.trim().is_empty())
+                        .unwrap_or(""),
+                ),
                 image_url: it.itunes_ext().and_then(|i| i.image()).unwrap_or("").to_string(),
                 url,
             })
@@ -158,15 +167,15 @@ fn store(c: &mut rusqlite::Connection, podcast_id: i64, feed: &Feed, etag: Optio
     let mut n = 0;
     {
         let mut stmt = tx.prepare(
-            "INSERT INTO episode (podcast_id, guid, title, published, duration_s, url, mime, size, description, image_url)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+            "INSERT INTO episode (podcast_id, guid, title, published, duration_s, url, mime, size, description, image_url, notes)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
              ON CONFLICT (podcast_id, guid) DO UPDATE SET title = excluded.title, published = excluded.published,
                duration_s = excluded.duration_s, url = excluded.url, mime = excluded.mime, size = excluded.size,
-               description = excluded.description, image_url = excluded.image_url",
+               description = excluded.description, image_url = excluded.image_url, notes = excluded.notes",
         )?;
         for e in &feed.episodes {
             n += stmt.execute((podcast_id, &e.guid, &e.title, &e.published, e.duration_s, &e.url, &e.mime, e.size,
-                               &e.description, &e.image_url))?;
+                               &e.description, &e.image_url, &e.notes))?;
         }
     }
     tx.commit()?;
@@ -436,6 +445,7 @@ pub struct EpisodeSource {
     pub podcast: String,
     pub published: Option<String>,
     pub description: String,
+    pub notes: String,
     pub has_image: bool,
 }
 
@@ -443,12 +453,13 @@ pub struct EpisodeSource {
 pub fn episode_source(c: &rusqlite::Connection, user: i64, id: i64) -> ApiResult<EpisodeSource> {
     Ok(c.query_row(
         "SELECT e.url, e.mime, e.size, e.duration_s, e.title, p.title, e.published, e.description,
-                e.image_url <> '' OR p.image_url <> '' FROM episode e
+                e.image_url <> '' OR p.image_url <> '', e.notes FROM episode e
          JOIN podcast p ON p.id = e.podcast_id JOIN subscription s ON s.podcast_id = p.id AND s.user_id = ?1
          WHERE e.id = ?2",
         (user, id),
         |r| Ok(EpisodeSource { url: r.get(0)?, mime: r.get(1)?, size: r.get(2)?, duration_s: r.get(3)?, title: r.get(4)?,
-                               podcast: r.get(5)?, published: r.get(6)?, description: r.get(7)?, has_image: r.get(8)? }),
+                               podcast: r.get(5)?, published: r.get(6)?, description: r.get(7)?, has_image: r.get(8)?,
+                               notes: r.get(9)? }),
     )?)
 }
 
@@ -508,5 +519,21 @@ mod tests {
         assert_eq!(f.description, "Ein & zwei");
         assert_eq!(f.episodes[0].description, "Erste Folge Zeile zwei");
         assert_eq!(f.episodes[0].image_url, "https://x/e1.jpg");
+    }
+
+    #[test]
+    fn notes_prefer_the_long_version() {
+        let xml = br#"<?xml version="1.0"?><rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"
+            xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>T</title>
+          <item><title>E1</title><guid>g1</guid><itunes:summary>Kurz</itunes:summary><description>Mittel</description>
+            <content:encoded><![CDATA[<p>Lang mit <a href="https://example.org">Link</a></p><ul><li>Punkt</li></ul>]]></content:encoded>
+            <enclosure url="https://x/e1.mp3" type="audio/mpeg"/></item>
+          <item><title>E2</title><guid>g2</guid><itunes:summary>Nur Zusammenfassung</itunes:summary>
+            <enclosure url="https://x/e2.mp3" type="audio/mpeg"/></item>
+          </channel></rss>"#;
+        let f = parse_feed(xml).unwrap();
+        assert!(f.episodes[0].notes.starts_with(r#"<p>Lang mit <a href="https://example.org""#), "{}", f.episodes[0].notes);
+        assert!(f.episodes[0].notes.contains("<ul><li>Punkt</li></ul>"));
+        assert_eq!(f.episodes[1].notes, "<p>Nur Zusammenfassung</p>");
     }
 }

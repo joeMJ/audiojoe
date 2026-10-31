@@ -214,8 +214,33 @@ function renderDetails(it: Item) {
     h("div", { className: "head" }, thumb({ title: it.subtitle || it.title, image: it.image }),
       h("div", {}, h("div", { className: "title" }, it.title), h("div", { className: "sub" }, it.subtitle ?? ""),
         h("div", { className: "facts" }, ...facts.map((f) => h("span", { className: "badge" }, String(f)))))),
-    h("div", { className: "desc" }, it.description || t("No description.")),
+    it.notes ? notesView(it.notes) : h("div", { className: "desc" }, it.description || t("No description.")),
     it.quality?.codec ? h("div", { className: "note" }, `${t("Format")}: ${qualityText(it.quality)}`) : null));
+}
+
+/** Shownotes rebuilt from an allow-list of elements. Links stay plain text: in the car a
+ *  link would leave the app. */
+function notesView(html: string) {
+  const block: Record<string, string> = { P: "p", UL: "ul", OL: "ol", LI: "li", BLOCKQUOTE: "blockquote",
+    H1: "h4", H2: "h4", H3: "h4", H4: "h4", H5: "h4", H6: "h4" };
+  const inline: Record<string, string> = { B: "b", STRONG: "b", I: "i", EM: "i", A: "span" };
+  const copy = (from: Node, to: HTMLElement) => {
+    for (const n of Array.from(from.childNodes)) {
+      if (n.nodeType === Node.TEXT_NODE) to.append(n.textContent ?? "");
+      else if (n instanceof Element) {
+        if (n.tagName === "BR") { to.append(document.createElement("br")); continue; }
+        const tag = block[n.tagName] ?? inline[n.tagName];
+        if (!tag) { copy(n, to); continue; }
+        const el = document.createElement(tag);
+        if (n.tagName === "A") el.className = "link";
+        copy(n, el);
+        to.append(el);
+      }
+    }
+  };
+  const box = h("div", { className: "notes" });
+  copy(new DOMParser().parseFromString(html, "text/html").body, box);
+  return box;
 }
 
 function renderChapters(it: Item) {

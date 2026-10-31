@@ -18,6 +18,7 @@ base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
 futures-util.workspace = true
 hmac = "0.12"
+ammonia = "4"
 quick-xml = "0.41"
 rand = "0.8"
 reqwest = { workspace = true, features = ["json"] }

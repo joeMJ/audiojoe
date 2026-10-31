@@ -125,6 +125,7 @@ fn normalize(src: i64, m: &Value) -> Value {
         "duration_ms": m["duration"].as_i64(),
         "image": m["thumb"].as_str().map(|_| format!("/api/v1/image/plex:{src}:{id}")),
         "description": m["summary"].as_str().filter(|s| !s.is_empty()).map(crate::podcasts::plain_text),
+        "notes": m["summary"].as_str().map(crate::notes::html).filter(|s| !s.is_empty()),
         "quality": if kind == "track" { quality(m) } else { Value::Null },
     })
 }

@@ -215,6 +215,7 @@ pub async fn item(state: &AppState, abs: &Abs, id: &str) -> ApiResult<(Value, Ve
         "duration_ms": (media["duration"].as_f64().unwrap_or(offset) * 1000.0) as i64,
         "image": format!("/api/v1/image/abs:{}:{id}", abs.source_id),
         "description": crate::podcasts::plain_text(meta["description"].as_str().unwrap_or("")),
+        "notes": crate::notes::html(meta["description"].as_str().unwrap_or("")),
         "published": meta["publishedYear"].as_str(),
         "quality": {
             "codec": first["codec"].as_str().unwrap_or("").to_lowercase(),
