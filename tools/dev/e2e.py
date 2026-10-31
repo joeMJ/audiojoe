@@ -201,7 +201,9 @@ check("episode list shows position", s == 200 and b[0]["position_ms"] == 900000)
 
 # ------------------------------------------------------------------ internet radio
 s, st, _ = call("GET", "/api/v1/radio/search?q=deutschlandfunk", token=A)
-check("radio search", s == 200 and len(st) > 0, f"{len(st)} stations, first: {st[0]['title'] if st else ''}")
+if not isinstance(st, list):  # directory unreachable: report, do not crash
+    st = []
+check("radio search", s == 200 and len(st) > 0, f"{s}, {len(st)} stations, first: {st[0]['title'] if st else ''}")
 if st:
     r0 = st[0]
     s, _, _ = call("PUT", f"/api/v1/radio/favorites/{r0['key'][6:]}", token=A)
@@ -368,6 +370,9 @@ if os.environ.get("ABS_TEST_FILE"):
         except urllib.error.HTTPError as e:
             return e.code, None
 
+    s, b, _ = call("POST", "/api/v1/sources", {"kind": "audiobookshelf", "name": "falsch",
+                                               "url": absc["url"], "api_key": "kein-gueltiger-schluessel"}, token=A)
+    check("audiobookshelf with wrong key: 400 with reason", s == 400 and "API key" in str(b.get("error")), str(b))
     s, b, _ = call("POST", "/api/v1/sources", {"kind": "audiobookshelf", "name": "Audiobookshelf (e2e)",
                                                "url": absc["url"], "api_key": absc["api_key"]}, token=A)
     check("add audiobookshelf source", s == 200, f"{b.get('server')} {b.get('version')}" if s == 200 else str(b))

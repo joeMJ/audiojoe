@@ -52,6 +52,9 @@ impl Abs {
             .map_err(|e| ApiError::BadGateway(format!("audiobookshelf unreachable: {}", e.without_url())))?;
         match res.status() {
             s if s == reqwest::StatusCode::NOT_FOUND => Err(ApiError::NotFound),
+            s if s == reqwest::StatusCode::UNAUTHORIZED || s == reqwest::StatusCode::FORBIDDEN => {
+                Err(ApiError::BadRequest(format!("audiobookshelf rejected the API key ({s})")))
+            }
             s if !s.is_success() => Err(ApiError::BadGateway(format!("audiobookshelf answered {s}"))),
             _ => res.json().await.map_err(|e| ApiError::BadGateway(format!("audiobookshelf: invalid response: {e}"))),
         }

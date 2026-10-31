@@ -76,7 +76,8 @@ export async function api<T>(method: string, path: string, body?: unknown): Prom
     throw new ApiError(0, String(e));
   }
   // Behind the reverse proxy a stopped server shows up as 502/503/504: that is "offline".
-  if (res.status >= 502 && res.status <= 504) {
+  // A 502 with our own JSON error comes from the server itself (a source failed).
+  if (res.status >= 502 && res.status <= 504 && !res.headers.get("content-type")?.includes("json")) {
     setOnline(false);
     throw new ApiError(0, `server unavailable (${res.status})`);
   }

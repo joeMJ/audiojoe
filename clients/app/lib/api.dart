@@ -50,7 +50,9 @@ class Api {
       throw ApiError(0, '$e');
     }
     // Behind the reverse proxy a stopped server shows up as 502/503/504: that is "offline".
-    if (res.statusCode >= 502 && res.statusCode <= 504) {
+    // A 502 with our own JSON error comes from the server itself (a source failed).
+    final ownError = (res.headers['content-type'] ?? '').contains('json');
+    if (res.statusCode >= 502 && res.statusCode <= 504 && !ownError) {
       online.value = false;
       throw ApiError(0, 'server unavailable (${res.statusCode})');
     }

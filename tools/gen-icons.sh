@@ -20,6 +20,13 @@ APP=clients/app
 for d in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
     render "${d#*:}" "$APP/android/app/src/main/res/mipmap-${d%%:*}/ic_launcher.png"
 done
+# Adaptive icon (Android 8+): without it launchers shrink the round logo into a white disc.
+# Foreground canvas 108 dp; the logo covers 78 % so its circle fills the launcher mask.
+for d in mdpi:108 hdpi:162 xhdpi:216 xxhdpi:324 xxxhdpi:432; do
+    n=${d#*:}
+    convert "$SRC" -filter Lanczos -resize "$((n * 78 / 100))x$((n * 78 / 100))" -background none -gravity center \
+        -extent "${n}x${n}" -strip "$APP/android/app/src/main/res/mipmap-${d%%:*}/ic_launcher_foreground.png"
+done
 mkdir -p "$APP/assets"
 render 256 "$APP/assets/icon.png"
 tmp=$(mktemp -d)
