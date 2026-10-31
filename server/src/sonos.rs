@@ -452,6 +452,8 @@ pub async fn poll_loop(state: AppState) {
     let mut last: HashMap<String, i64> = HashMap::new();
     // Per coordinator: the multi-file track whose successor has been queued.
     let mut queued: HashMap<String, String> = HashMap::new();
+    // Title and subtitle per item, so a position stored by the speaker carries them.
+    let mut titles: HashMap<String, (String, String)> = HashMap::new();
     loop {
         tokio::time::sleep(POLL_EVERY).await;
         let Ok(list) = speakers(&state).await else { continue };
@@ -467,6 +469,11 @@ pub async fn poll_loop(state: AppState) {
             if c.key.starts_with("radio:") {
                 continue;
             }
+            // A stopped speaker keeps its last track at 0:00: that is no position to store.
+            let Ok(transport) = soap(&state.http, &coord, AVT, "GetTransportInfo", "<InstanceID>0</InstanceID>").await else { continue };
+            if !matches!(tag(&transport, "CurrentTransportState").as_deref(), Some("PLAYING" | "PAUSED_PLAYBACK")) {
+                continue;
+            }
             if c.part.is_some() && queued.get(&coord) != Some(&uri) {
                 // The speaker moved on to a file queued earlier: queue the one after it.
                 if let (Some(lan), Ok(meta)) = (lan_addr(&state), media::meta_for(&state, &stream_user(&c), &c.key).await) {
@@ -480,13 +487,20 @@ pub async fn poll_loop(state: AppState) {
                 continue; // paused or unchanged
             }
             last.insert(coord.clone(), global);
+            if !titles.contains_key(&c.key) {
+                if let Ok(meta) = media::meta_for(&state, &stream_user(&c), &c.key).await {
+                    let text = |k: &str| meta[k].as_str().unwrap_or_default().to_string();
+                    titles.insert(c.key.clone(), (text("title"), text("subtitle")));
+                }
+            }
+            let (title, subtitle) = titles.get(&c.key).cloned().unwrap_or_default();
             let ext = playback::External {
                 position_ms: global,
                 duration_ms: None,
                 finished: false,
                 updated_at: Utc::now(),
-                title: String::new(),
-                subtitle: String::new(),
+                title,
+                subtitle,
             };
             let _ = playback::apply_external(&state, c.user, &format!("Sonos {}", c.room), &c.key, ext).await;
         }

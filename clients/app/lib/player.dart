@@ -23,7 +23,9 @@ class Player extends ChangeNotifier {
   }
   static final instance = Player._();
 
-  final audio = AudioPlayer();
+  // Headers (session token) go straight to the platform player: just_audio's default local
+  // proxy needs cleartext HTTP to 127.0.0.1, which Android blocks.
+  final audio = AudioPlayer(useProxyForRequestHeaders: false);
   Item? item;
   List<Item> queue = [];
   int index = 0;

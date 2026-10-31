@@ -137,6 +137,28 @@ class Badge2 extends StatelessWidget {
   }
 }
 
+/// Primary button of a list row; fixed width so rows line up whatever the label.
+Widget rowButton(String label, VoidCallback? onPressed) =>
+    SizedBox(width: 124, child: FilledButton(onPressed: onPressed, child: Text(label, maxLines: 1, overflow: TextOverflow.fade, softWrap: false)));
+
+/// Offline state of an item as a fixed-size icon (download button when there is no copy).
+Widget offlineIcon(BuildContext context, String key, {VoidCallback? onSave, bool showOnlineOnly = false}) {
+  final k = context.tok;
+  final e = downloads.entry(key);
+  Widget icon(IconData i, Color c, String tip) => Tooltip(message: tip, child: Icon(i, color: c, size: 28));
+  final Widget child = switch (e?.status) {
+    'done' => icon(Icons.download_done, k.ok, t('in cache')),
+    'error' => icon(Icons.error_outline, k.bad, t('failed')),
+    'loading' => Tooltip(
+        message: t('loading {p}', {'p': '${((e?.progress ?? 0) * 100).round()} %'}),
+        child: SizedBox(width: 26, height: 26, child: CircularProgressIndicator(value: e?.progress, strokeWidth: 3))),
+    String() => icon(Icons.schedule, k.warn, t('waiting')),
+    null when onSave != null => IconButton.outlined(tooltip: t('Save offline'), onPressed: onSave, icon: const Icon(Icons.download)),
+    null => showOnlineOnly ? icon(Icons.cloud_outlined, k.muted, t('online only')) : const SizedBox.shrink(),
+  };
+  return SizedBox(width: 48, height: 48, child: Center(child: child));
+}
+
 /// Status of an item's offline copy, or null when there is none.
 Widget? offlineBadge(String key) {
   final e = downloads.entry(key);

@@ -152,19 +152,10 @@ try {
   await waitText("Zuletzt auf Telefon (Test)");
   await shot("06-weiterhoeren");
 
-  // Sonos: only the list of rooms (read-only) – nothing is played on a speaker.
+  // The car plays on its own speakers only: no output selection (Sonos is in the apps).
   await clickText("Jetzt läuft");
-  await page.evaluate(() => [...document.querySelectorAll("main .chip")].find((b) => b.innerText.includes("Dieses Gerät"))?.click());
-  await waitText("Ausgabe");
-  // An empty list counts as "not loaded yet" (waitForFunction waits for a truthy value).
-  const rooms = await page.waitForFunction(() => {
-    const r = [...document.querySelectorAll("main .item .t1")].filter((x) => x.innerText.startsWith("Sonos ")).map((x) => x.innerText);
-    return r.length ? r : null;
-  }, { timeout: 20000 })
-    .then((h) => h.jsonValue()).catch(() => []);
-  check("output list shows Sonos rooms (read only)", rooms.length > 0, rooms.join(", "));
-  await shot("06b-ausgabe");
-  await clickText("Zurück");
+  const outputChip = await page.evaluate(() => [...document.querySelectorAll("main .chip")].some((b) => b.innerText.includes("Dieses Gerät")));
+  check("no output selection in the web app", !outputChip);
 
   // ------------------------------------------------------------ audiobooks (optional)
   if (process.env.ABS_TEST_FILE) {

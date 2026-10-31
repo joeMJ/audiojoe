@@ -44,14 +44,25 @@ class _ShellState extends State<Shell> {
     };
   }
 
-  void _openNowPlaying() => Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => Scaffold(appBar: AppBar(title: Text(t('Now playing')), actions: const [StatusPills(), SizedBox(width: 8)]), body: const NowPlayingView())));
+  void _openNowPlaying() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => Scaffold(
+              // No text input here: never shrink for a keyboard left over from a search field.
+              resizeToAvoidBottomInset: false,
+              appBar: AppBar(actions: const [StatusPills(), SizedBox(width: 8)]),
+              body: const NowPlayingView(),
+            )));
+  }
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(builder: (context, c) {
         final wide = c.maxWidth >= 720;
         final bar = AppBar(
-          title: const Text('audiojoe', style: TextStyle(fontWeight: FontWeight.w800)),
+          // The app icon instead of the name: the status pills need the width on phones.
+          title: wide
+              ? const Text('audiojoe', style: TextStyle(fontWeight: FontWeight.w800))
+              : Semantics(label: 'audiojoe', child: Image.asset('assets/icon.png', height: 36)),
           actions: [const StatusPills(), if (!wide) IconButton(onPressed: () => setState(() => index = 6), icon: const Icon(Icons.settings)), const SizedBox(width: 8)],
         );
         if (wide) {

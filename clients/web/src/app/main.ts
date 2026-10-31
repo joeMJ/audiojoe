@@ -5,7 +5,6 @@ import { api, ApiError, onConnection } from "./api";
 import { checkOffline, onOfflineChange } from "./downloads";
 import { t } from "./i18n";
 import { onPlayer, setDevice } from "./player";
-import { onSonos } from "./sonos";
 import { onRemote, onSyncState, startSync, stopSync } from "./sync";
 import { mountShell, refresh, renderTop } from "./ui";
 import "./app.css";
@@ -118,7 +117,6 @@ async function startApp() {
   onConnection(renderTop);
   onSyncState(renderTop);
   onPlayer(() => refresh("player"));
-  onSonos(() => refresh("player"));
   onRemote(() => refresh("data"));
   onOfflineChange(() => {
     refresh("offline");

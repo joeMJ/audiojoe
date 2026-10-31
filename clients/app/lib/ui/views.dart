@@ -12,6 +12,8 @@ import '../store.dart';
 import 'common.dart';
 
 Future<void> startPlayback(BuildContext context, List<Item> items, [int i = 0, VoidCallback? opened]) async {
+  // A search field may still hold the keyboard; the player view must get the full height.
+  FocusManager.instance.primaryFocus?.unfocus();
   try {
     await player.play(items, i);
     opened?.call();
@@ -22,8 +24,7 @@ Future<void> startPlayback(BuildContext context, List<Item> items, [int i = 0, V
 
 Widget saveOfflineButton(Item it, [List<Item>? all]) => ListenableBuilder(
       listenable: downloads,
-      builder: (context, _) => offlineBadge(it.key) ??
-          OutlinedButton(onPressed: () => downloads.add(all ?? [it]), child: Text(t('Save offline'))),
+      builder: (context, _) => offlineIcon(context, it.key, onSave: () => downloads.add(all ?? [it])),
     );
 
 // ---------------------------------------------------------------- now playing
@@ -133,9 +134,9 @@ class OutputSheet extends StatelessWidget {
               subtitle: t('from cache or stream'),
               trailing: [
                 FilledButton(
-                  onPressed: sonos.output == null ? null : () async {
-                    await sonos.backToDevice();
-                    if (context.mounted) Navigator.pop(context);
+                  onPressed: sonos.output == null ? null : () {
+                    Navigator.pop(context);
+                    sonos.backToDevice();
                   },
                   child: Text(sonos.output == null ? t('active') : t('Switch here')),
                 ),
@@ -154,12 +155,14 @@ class OutputSheet extends StatelessWidget {
                         Badge2(!r.reachable ? t('switched off') : r.playing ? t('playing') : t('available'),
                             kind: !r.reachable ? 'bad' : r.playing ? 'warn' : 'ok'),
                         FilledButton(
+                          // Close the sheet at once; an error shows on the player view below.
                           onPressed: !r.reachable ? null : () async {
+                            final messenger = ScaffoldMessenger.of(context);
+                            Navigator.pop(context);
                             try {
                               await sonos.playOn(r);
-                              if (context.mounted) Navigator.pop(context);
                             } catch (e) {
-                              if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${t('Error')}: $e')));
+                              messenger.showSnackBar(SnackBar(content: Text('${t('Error')}: $e')));
                             }
                           },
                           child: Text(t('Play here')),
@@ -208,14 +211,11 @@ class ContinueView extends StatelessWidget {
                     '${p.device.isEmpty ? ago(p.updatedAt) : t('Last on {device} · {ago}', {'device': p.device, 'ago': ago(p.updatedAt)})}',
                 progress: p.durationMs != null && p.durationMs! > 0 ? p.positionMs / p.durationMs! : null,
                 trailing: [
-                  ListenableBuilder(listenable: downloads, builder: (_, _) => offlineBadge(p.key) ?? Badge2(t('online only'), kind: 'warn')),
-                  FilledButton(
-                    onPressed: () => startPlayback(context, [
-                      Item(key: p.key, kind: p.key.startsWith('episode:') ? 'episode' : p.key.startsWith('abs:') ? 'book' : 'track',
-                          title: p.title, subtitle: p.subtitle)
-                    ], 0, onPlay),
-                    child: Text(t('Resume')),
-                  ),
+                  ListenableBuilder(listenable: downloads, builder: (context, _) => offlineIcon(context, p.key, showOnlineOnly: true)),
+                  rowButton(t('Resume'), () => startPlayback(context, [
+                        Item(key: p.key, kind: p.key.startsWith('episode:') ? 'episode' : p.key.startsWith('abs:') ? 'book' : 'track',
+                            title: p.title, subtitle: p.subtitle)
+                      ], 0, onPlay)),
                 ],
               ),
           ]);
@@ -294,7 +294,7 @@ class _PodcastsViewState extends State<PodcastsView> {
               progress: e.positionMs != null && e.durationMs != null && !e.finished ? e.positionMs! / e.durationMs! : null,
               trailing: [
                 saveOfflineButton(e),
-                FilledButton(onPressed: () => startPlayback(context, [e], 0, widget.onPlay), child: Text((e.positionMs ?? 0) > 0 ? t('Resume') : t('Play'))),
+                rowButton((e.positionMs ?? 0) > 0 ? t('Resume') : t('Play'), () => startPlayback(context, [e], 0, widget.onPlay)),
               ],
             ),
         ]),
@@ -435,7 +435,7 @@ class _BrowseViewState extends State<BrowseView> {
                   trailing: [
                     if (it.quality?.badge.isNotEmpty == true) Badge2(it.quality!.badge),
                     saveOfflineButton(it),
-                    if (it.kind == 'book') FilledButton(onPressed: () => startPlayback(context, [it], 0, widget.onPlay), child: Text(t('Play'))),
+                    if (it.kind == 'book') rowButton(t('Play'), () => startPlayback(context, [it], 0, widget.onPlay)),
                   ],
                 ),
           ]);
