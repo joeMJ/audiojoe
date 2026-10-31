@@ -1,40 +1,36 @@
-// Appearance per device: automatic (follows the system), light or dark.
-
-export type Appearance = "auto" | "light" | "dark";
+// Dark mode per device: on or off. Without a choice the system setting applies.
 
 const KEY = "aj_appearance";
-const ORDER: Appearance[] = ["auto", "light", "dark"];
+const system = matchMedia("(prefers-color-scheme: dark)");
 const listeners: (() => void)[] = [];
+let memory: string | null = null; // when storage is blocked: applies until reload
 
-export function appearance(): Appearance {
+function stored() {
   if (memory) return memory;
   try {
-    const v = localStorage.getItem(KEY) as Appearance | null;
-    return v && ORDER.includes(v) ? v : "auto";
+    return localStorage.getItem(KEY);
   } catch {
-    return "auto";
+    return null;
   }
 }
 
-/** Next step of the moon button: automatic → light → dark → automatic. */
-export function nextAppearance() {
-  const v = ORDER[(ORDER.indexOf(appearance()) + 1) % ORDER.length];
+export function isDark() {
+  const v = stored();
+  return v === "dark" ? true : v === "light" ? false : system.matches;
+}
+
+/** The moon button: dark mode on ↔ off. */
+export function toggleDark() {
+  const v = isDark() ? "light" : "dark";
   try {
     localStorage.setItem(KEY, v);
   } catch {
-    /* private mode: applies until reload */
     memory = v;
   }
   listeners.forEach((f) => f());
 }
 
-let memory: Appearance | null = null;
-
-export function isDark(systemDark: boolean) {
-  const a = appearance();
-  return a === "dark" || (a === "auto" && systemDark);
-}
-
 export function onAppearance(f: () => void) {
   listeners.push(f);
+  system.addEventListener("change", f);
 }

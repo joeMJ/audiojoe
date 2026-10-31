@@ -393,3 +393,9 @@ msgstr "Album abspielen"
 
 msgid "Next item"
 msgstr "Nächster"
+
+msgid "Dark mode: on"
+msgstr "Dunkelmodus: an"
+
+msgid "Dark mode: off"
+msgstr "Dunkelmodus: aus"

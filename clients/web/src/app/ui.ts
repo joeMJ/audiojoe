@@ -6,7 +6,7 @@ import { ago, bytes, clock, t } from "./i18n";
 import { idbAll } from "./idb";
 import * as player from "./player";
 import { pendingCount } from "./sync";
-import { appearance, nextAppearance, onAppearance } from "./theme";
+import { isDark, onAppearance, toggleDark } from "./theme";
 
 type View = "np" | "cont" | "pod" | "books" | "lib" | "off";
 let view: View = "np";
@@ -85,7 +85,7 @@ export function mountShell(root: HTMLElement, logout: () => void) {
     (nav.lastElementChild as HTMLElement).dataset.v = v;
   }
   main = h("main");
-  root.replaceChildren(h("div", { className: "shell" }, top, nav, main));
+  root.replaceChildren(h("div", { className: "shell" }, top, nav, main, themeButton()));
   renderTop();
   show(view);
 }
@@ -98,27 +98,26 @@ export function renderTop() {
   const sync = pendingCount
     ? h("div", { className: "pill warn", id: "sync" }, t("{n} waiting to sync", { n: pendingCount }))
     : h("div", { className: "pill", id: "sync" }, t("Positions synced"));
-  const moon = themeButton();
-  top.replaceChildren(h("div", { className: "logo" }, h("img", { src: "/icon-192.png", alt: "" }), "audiojoe"), net, sync, moon);
-  void offlineUsage().then((u) => u && moon.before(h("div", { className: "pill" }, `${t("Offline")} ${u}`)));
+  top.replaceChildren(h("div", { className: "logo" }, h("img", { src: "/icon-192.png", alt: "" }), "audiojoe"), net, sync);
+  void offlineUsage().then((u) => u && top.append(h("div", { className: "pill" }, `${t("Offline")} ${u}`)));
 }
 
-const appearanceLabel = (a: string) =>
-  a === "dark" ? t("Appearance: dark") : a === "light" ? t("Appearance: light") : t("Appearance: automatic");
-
-/** Moon button: automatic (half moon) → light (sun) → dark (moon), remembered per device. */
+/** Moon button below the top bar, top right over the content: dark mode on (filled, accent)
+ *  or off (outline). */
 function themeButton() {
-  const paths = {
-    auto: '<path d="M12 3a9 9 0 1 0 0 18z" fill="currentColor"/><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/>',
-    light: '<circle cx="12" cy="12" r="4.5" fill="currentColor"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
-    dark: '<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" fill="currentColor"/>',
+  const b = h("button", { className: "theme", onclick: () => toggleDark() });
+  const paint = () => {
+    const on = isDark();
+    b.classList.toggle("on", on);
+    b.ariaLabel = b.title = on ? t("Dark mode: on") : t("Dark mode: off");
+    b.replaceChildren(icon(on
+      ? '<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" fill="currentColor"/>'
+      : '<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/>'));
   };
-  const a = appearance();
-  return h("button", { className: "theme", title: appearanceLabel(a), ariaLabel: appearanceLabel(a), onclick: () => nextAppearance() },
-    icon(paths[a]));
+  paint();
+  onAppearance(paint);
+  return b;
 }
-
-onAppearance(() => renderTop());
 
 async function offlineUsage() {
   const done = (await offlineList()).filter((e) => e.status === "done");

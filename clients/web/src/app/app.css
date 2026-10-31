@@ -18,9 +18,15 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .pill .dot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
 .pill.ok { color: var(--ok); background: var(--okBg); }
 .pill.warn { color: var(--warn); background: var(--warnBg); }
-.top .theme { width: 48px; height: 48px; flex: none; display: flex; align-items: center; justify-content: center;
-              border: 2px solid var(--line); border-radius: 12px; background: var(--panel2); }
-.top .theme svg { width: 26px; height: 26px; }
+/* Moon below the top bar, top right over the content; every view leaves room there. */
+.shell { position: relative; }
+.shell > .theme { position: absolute; top: 60px; right: 22px; width: 48px; height: 48px; display: flex; align-items: center;
+                  justify-content: center; border: 2px solid var(--line); border-radius: 12px; background: var(--panel);
+                  color: var(--muted); z-index: 2; }
+.shell > .theme.on { background: var(--accent); border-color: var(--accent); color: var(--accentText); }
+.shell > .theme svg { width: 26px; height: 26px; }
+/* A heading as first line of a view is as tall as the moon beside it. */
+main > h2:first-child { min-height: 48px; display: flex; align-items: center; margin-top: 0; padding-right: 64px; }
 
 nav { background: var(--panel); border-right: 2px solid var(--line); display: flex; flex-direction: column;
       gap: 6px; padding: 8px 6px; overflow: hidden; }

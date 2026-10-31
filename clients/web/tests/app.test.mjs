@@ -88,21 +88,23 @@ try {
   const cookie = (await page.cookies()).find((c) => c.name === "aj_session");
   check("session cookie HttpOnly + Secure", cookie?.httpOnly && cookie?.secure);
 
-  // Appearance: moon button cycles automatic → light → dark, survives a reload, back to automatic.
+  // Moon below the top bar: dark mode on/off, kept after a reload; without a choice the system applies.
   await page.emulateMediaFeatures([{ name: "prefers-color-scheme", value: "light" }]);
-  const look = () => page.evaluate(() => ({ label: document.querySelector(".top .theme")?.ariaLabel,
-    bg: getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() }));
-  const auto = await look();
-  await page.click(".top .theme"); const light = await look();
-  await page.click(".top .theme"); const dark = await look();
-  await page.reload({ waitUntil: "domcontentloaded" }); await page.waitForSelector(".top .theme"); await sleep(1000);
+  const look = () => page.evaluate(() => {
+    const m = document.querySelector(".shell > .theme"), r = m?.getBoundingClientRect();
+    return { label: m?.ariaLabel, on: m?.classList.contains("on"), bg: getComputedStyle(document.documentElement).getPropertyValue("--bg").trim(),
+             inBar: !!document.querySelector(".top .theme"), bar: document.querySelector(".top").offsetHeight, top: r?.top, right: innerWidth - r?.right };
+  });
+  const off = await look();
+  await page.click(".shell > .theme"); const on = await look();
+  await page.reload({ waitUntil: "domcontentloaded" }); await page.waitForSelector(".shell > .theme"); await sleep(1000);
   const kept = await look();
   await shot("00-dunkel");
-  await page.click(".top .theme"); const back = await look();
-  check("moon button: automatic → light → dark, kept after reload",
-    /automatisch/.test(auto.label) && /hell/.test(light.label) && /dunkel/.test(dark.label) && light.bg !== dark.bg
-      && kept.bg === dark.bg && /automatisch/.test(back.label) && back.bg === light.bg,
-    `${auto.bg} → ${light.bg} → ${dark.bg}, reload ${kept.bg}, back ${back.bg}`);
+  await page.click(".shell > .theme"); const back = await look();
+  check("moon: dark on/off, kept after reload", /aus/.test(off.label) && !off.on && /an/.test(on.label) && on.on && on.bg !== off.bg
+      && kept.on && kept.bg === on.bg && !back.on && back.bg === off.bg,
+    `${off.bg} → ${on.bg}, reload ${kept.bg}, back ${back.bg}`);
+  check("moon below the top bar, top right", !off.inBar && off.bar === 52 && off.top >= 52 && off.right < 60, `bar ${off.bar}, top ${off.top}, right ${off.right}`);
 
   // ------------------------------------------------------------ podcast + offline
   const sub = await call("POST", "/podcasts", { feed_url: FEED });
