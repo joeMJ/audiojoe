@@ -86,6 +86,27 @@ fn apply(c: &rusqlite::Connection, user: i64, device: &str, key: &str, u: &Updat
     Ok((n > 0, row))
 }
 
+/// A position from another system (e.g. Audiobookshelf).
+pub struct External {
+    pub position_ms: i64,
+    pub duration_ms: Option<i64>,
+    pub finished: bool,
+    pub updated_at: DateTime<Utc>,
+    pub title: String,
+    pub subtitle: String,
+}
+
+pub async fn apply_external(state: &AppState, user: i64, device: &str, key: &str, e: External) -> ApiResult<()> {
+    let u = Update { key: None, position_ms: e.position_ms, duration_ms: e.duration_ms, finished: e.finished,
+                     updated_at: e.updated_at, title: e.title, subtitle: e.subtitle };
+    let (dev, k) = (device.to_string(), key.to_string());
+    let (applied, row) = with_db(&state.db, move |c| apply(c, user, &dev, &k, &u)).await?;
+    if applied {
+        let _ = state.events.send((user, json!({ "type": "playback", "state": row })));
+    }
+    Ok(())
+}
+
 pub async fn put(
     State(state): State<AppState>,
     user: CurrentUser,
@@ -97,6 +118,7 @@ pub async fn put(
     let (applied, row) = with_db(&state.db, move |c| apply(c, uid, &dev, &k, &u)).await?;
     if applied {
         let _ = state.events.send((user.id, json!({ "type": "playback", "state": row.clone() })));
+        crate::audiobookshelf::push_later(&state, user.id, &key);
     }
     Ok(Json(json!({ "applied": applied, "state": row })))
 }
@@ -121,6 +143,7 @@ pub async fn sync(State(state): State<AppState>, user: CurrentUser, Json(list): 
     for (applied, row) in &results {
         if *applied {
             let _ = state.events.send((user.id, json!({ "type": "playback", "state": row })));
+            crate::audiobookshelf::push_later(&state, user.id, row["key"].as_str().unwrap_or(""));
         }
     }
     Ok(Json(Value::Array(results.into_iter().map(|(a, r)| json!({ "applied": a, "state": r })).collect())))

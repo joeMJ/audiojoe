@@ -342,6 +342,39 @@ pub async fn latest(State(state): State<AppState>, user: CurrentUser, Query(p): 
     .await
 }
 
+#[derive(Deserialize)]
+pub struct Search {
+    q: String,
+}
+
+/// Podcast search in the fyyd directory (no account needed); returns feed URLs to subscribe.
+pub async fn search(State(state): State<AppState>, _user: CurrentUser, Query(s): Query<Search>) -> ApiResult<Json<Value>> {
+    let q = s.q.trim();
+    if q.is_empty() || q.len() > 200 {
+        return Err(ApiError::BadRequest("query required".into()));
+    }
+    let res = state
+        .http
+        .get("https://api.fyyd.de/0.2/search/podcast")
+        .query(&[("term", q), ("count", "30")])
+        .timeout(Duration::from_secs(15))
+        .send()
+        .await
+        .map_err(|e| ApiError::BadGateway(format!("podcast search unreachable: {}", e.without_url())))?;
+    let v: Value = res.json().await.map_err(|e| ApiError::BadGateway(format!("podcast search: {e}")))?;
+    let list: Vec<Value> = v["data"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter(|p| p["xmlURL"].as_str().is_some_and(|u| u.starts_with("http")))
+                .map(|p| json!({ "title": p["title"], "author": p["author"], "feed_url": p["xmlURL"],
+                                 "image_url": p["imgURL"], "description": p["subtitle"] }))
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok(Json(Value::Array(list)))
+}
+
 /// Episode URL and metadata for streaming (used by media.rs).
 pub fn episode_source(c: &rusqlite::Connection, user: i64, id: i64) -> ApiResult<(String, String, Option<i64>, Option<i64>, String, String)> {
     Ok(c.query_row(

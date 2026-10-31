@@ -3,19 +3,12 @@
 
 use std::time::Duration;
 
-use axum::{
-    body::Body,
-    extract::{Path, Query, State},
-    http::{header, HeaderMap, StatusCode},
-    response::{IntoResponse, Response},
-    Json,
-};
-use serde::Deserialize;
+use axum::{http::header, response::Response};
 use serde_json::{json, Value};
 
 use crate::{
-    auth::CurrentUser,
     error::{with_db, ApiError, ApiResult},
+    sources::Browse,
     AppState,
 };
 
@@ -147,33 +140,20 @@ fn normalize(source: i64, v: &Value) -> Value {
     })
 }
 
-// ---------------------------------------------------------------- handlers
+// ---------------------------------------------------------------- browsing
 
-#[derive(Deserialize)]
-pub struct Browse {
-    parent: Option<String>,
-    search: Option<String>,
-    start: Option<u32>,
-    limit: Option<u32>,
-}
-
-fn valid_id(id: &str) -> bool {
+pub fn valid_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
 }
 
-pub async fn browse(
-    State(state): State<AppState>,
-    _user: CurrentUser,
-    Path(source_id): Path<i64>,
-    Query(q): Query<Browse>,
-) -> ApiResult<Json<Value>> {
-    let jf = source(&state, source_id).await?;
-    let uid = jf.user_id(&state).await?;
+pub async fn browse(state: &AppState, source_id: i64, q: &Browse) -> ApiResult<Value> {
+    let jf = source(state, source_id).await?;
+    let uid = jf.user_id(state).await?;
     let start = q.start.unwrap_or(0).to_string();
     let limit = q.limit.unwrap_or(100).clamp(1, 500).to_string();
     let fields = ("Fields", "MediaSources,MediaStreams".to_string());
 
-    let items: Value = if let Some(term) = q.search.filter(|s| !s.trim().is_empty()) {
+    let items: Value = if let Some(term) = q.search.clone().filter(|s| !s.trim().is_empty()) {
         jf.get(&state.http, &format!("/Users/{uid}/Items"), &[
             ("SearchTerm", term),
             ("IncludeItemTypes", "MusicAlbum,Audio,MusicArtist".into()),
@@ -183,7 +163,7 @@ pub async fn browse(
             fields,
         ])
         .await?
-    } else if let Some(parent) = q.parent {
+    } else if let Some(parent) = q.parent.clone() {
         if !valid_id(&parent) {
             return Err(ApiError::BadRequest("invalid parent".into()));
         }
@@ -225,101 +205,26 @@ pub async fn browse(
     };
 
     let list: Vec<Value> = items["Items"].as_array().map(|a| a.iter().map(|v| normalize(source_id, v)).collect()).unwrap_or_default();
-    Ok(Json(json!({ "items": list, "total": items["TotalRecordCount"] })))
+    Ok(json!({ "items": list, "total": items["TotalRecordCount"] }))
 }
 
-/// Cover images, relayed so the API key never reaches the client.
-pub async fn image(State(state): State<AppState>, _user: CurrentUser, Path(key): Path<String>) -> ApiResult<Response> {
-    let mut parts = key.splitn(3, ':');
-    let (Some("jellyfin"), Some(src), Some(item)) = (parts.next(), parts.next(), parts.next()) else {
-        return Err(ApiError::NotFound);
-    };
-    let src: i64 = src.parse().map_err(|_| ApiError::NotFound)?;
+/// Cover image of an item, relayed so the API key never reaches the client.
+pub async fn image(state: &AppState, src: i64, item: &str) -> ApiResult<Response> {
     if !valid_id(item) {
         return Err(ApiError::NotFound);
     }
-    let jf = source(&state, src).await?;
-    let res = state
+    let jf = source(state, src).await?;
+    let req = state
         .http
         .get(format!("{}/Items/{item}/Images/Primary", jf.base))
         .query(&[("maxHeight", "400"), ("quality", "85")])
-        .header(header::AUTHORIZATION, jf.auth_header())
-        .send()
-        .await
-        .map_err(|e| ApiError::BadGateway(e.to_string()))?;
-    if !res.status().is_success() {
-        return Err(ApiError::NotFound);
-    }
-    let ct = res.headers().get(header::CONTENT_TYPE).cloned();
-    let mut headers = HeaderMap::new();
-    if let Some(ct) = ct {
-        headers.insert(header::CONTENT_TYPE, ct);
-    }
-    headers.insert(header::CACHE_CONTROL, "private, max-age=86400".parse().unwrap());
-    let body = res.bytes().await.map_err(|e| ApiError::BadGateway(e.to_string()))?;
-    Ok((StatusCode::OK, headers, Body::from(body)).into_response())
+        .header(header::AUTHORIZATION, jf.auth_header());
+    crate::sources::relay_image(req).await
 }
 
-// ---------------------------------------------------------------- source management
-
-pub async fn list_sources(State(state): State<AppState>, _user: CurrentUser) -> ApiResult<Json<Value>> {
-    with_db(&state.db, |c| {
-        let mut stmt = c.prepare("SELECT id, kind, name, url, created_at FROM source ORDER BY name")?;
-        let rows = stmt
-            .query_map([], |r| {
-                Ok(json!({ "id": r.get::<_, i64>(0)?, "kind": r.get::<_, String>(1)?, "name": r.get::<_, String>(2)?,
-                           "url": r.get::<_, String>(3)?, "created_at": r.get::<_, String>(4)? }))
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(Json(Value::Array(rows)))
-    })
-    .await
-}
-
-#[derive(Deserialize)]
-pub struct NewSource {
-    kind: String,
-    name: String,
-    url: String,
-    api_key: String,
-}
-
-pub async fn add_source(State(state): State<AppState>, _user: CurrentUser, Json(req): Json<NewSource>) -> ApiResult<Json<Value>> {
-    if req.kind != "jellyfin" {
-        return Err(ApiError::BadRequest("supported kinds: jellyfin".into()));
-    }
-    let mut url = req.url.trim().trim_end_matches('/').to_string();
-    // A bare host name means HTTPS.
-    if !url.contains("://") {
-        url = format!("https://{url}");
-    }
-    if !(url.starts_with("https://") || url.starts_with("http://")) {
-        return Err(ApiError::BadRequest("url must be http(s)".into()));
-    }
-    let name = req.name.trim().to_string();
-    if name.is_empty() || name.len() > 80 {
-        return Err(ApiError::BadRequest("name required (max. 80)".into()));
-    }
-    // Check the connection and the key before storing anything.
-    let probe = Jellyfin { source_id: 0, base: url.clone(), key: req.api_key.trim().to_string() };
+/// Checks URL and key; returns server name and version.
+pub async fn check(state: &AppState, url: &str, key: &str) -> ApiResult<Value> {
+    let probe = Jellyfin { source_id: 0, base: url.to_string(), key: key.to_string() };
     let info = probe.get(&state.http, "/System/Info", &[]).await?;
-    let key = probe.key.clone();
-    let id = with_db(&state.db, move |c| {
-        c.execute("INSERT INTO source (kind, name, url, secret) VALUES ('jellyfin', ?1, ?2, ?3)", (&name, &url, &key))?;
-        Ok(c.last_insert_rowid())
-    })
-    .await?;
-    Ok(Json(json!({ "id": id, "server": info["ServerName"], "version": info["Version"] })))
-}
-
-pub async fn delete_source(State(state): State<AppState>, _user: CurrentUser, Path(id): Path<i64>) -> ApiResult<Json<Value>> {
-    with_db(&state.db, move |c| {
-        if c.execute("DELETE FROM source WHERE id = ?1", [id])? == 0 {
-            return Err(ApiError::NotFound);
-        }
-        Ok(())
-    })
-    .await?;
-    state.jellyfin_users.lock().unwrap().remove(&id);
-    Ok(Json(json!({ "ok": true })))
+    Ok(json!({ "server": info["ServerName"], "version": info["Version"] }))
 }

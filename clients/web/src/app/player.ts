@@ -1,9 +1,11 @@
 // The single audio element: plays from the offline cache when available, otherwise as a
 // stream from the server; saves positions; Media Session for the car's mini player.
+// Books may consist of several audio files ("parts"); positions are always positions in
+// the whole item, the player switches parts as needed.
 
 import { offlineUrl } from "../offline";
 import { api, online, type Item, type Playback, type Quality } from "./api";
-import { isOffline, offlineEntry } from "./downloads";
+import { isOffline, offlineEntry, partKey } from "./downloads";
 import { idbGet, idbPut } from "./idb";
 import { localPosition, onRemote, savePosition } from "./sync";
 
@@ -11,6 +13,8 @@ export interface PlayerState {
   item?: Item;
   queue: Item[];
   index: number;
+  /** Current part of a multi-file item. */
+  part: number;
   playing: boolean;
   fromCache: boolean;
   delivered?: Quality | null;
@@ -22,14 +26,23 @@ export interface PlayerState {
 
 const audio = new Audio();
 audio.preload = "auto";
-export const state: PlayerState = { queue: [], index: 0, playing: false, fromCache: false, transcoded: false, rate: 1 };
+export const state: PlayerState = { queue: [], index: 0, part: 0, playing: false, fromCache: false, transcoded: false, rate: 1 };
 let myDevice = "";
 const listeners = new Set<() => void>();
 export const onPlayer = (l: () => void) => listeners.add(l);
 const notify = () => listeners.forEach((l) => l());
 
-export const position = () => audio.currentTime * 1000;
-export const duration = () => (Number.isFinite(audio.duration) ? audio.duration * 1000 : state.item?.duration_ms ?? 0);
+const parts = () => state.item?.parts ?? [];
+const partStart = () => parts()[state.part]?.start_ms ?? 0;
+
+export const position = () => partStart() + audio.currentTime * 1000;
+export const duration = () =>
+  parts().length ? state.item?.duration_ms ?? 0 : Number.isFinite(audio.duration) ? audio.duration * 1000 : state.item?.duration_ms ?? 0;
+
+export function chapter(): string {
+  const ms = position();
+  return state.item?.chapters?.find((c) => ms >= c.start_ms && ms < c.end_ms)?.title ?? "";
+}
 
 export function setDevice(name: string) {
   myDevice = name;
@@ -64,8 +77,40 @@ export async function play(queue: Item[], index = 0) {
   await load(queue[index], true);
 }
 
+function partFor(ms: number): number {
+  const p = parts();
+  const i = p.findIndex((x) => ms >= x.start_ms && ms < x.start_ms + x.duration_ms);
+  return i < 0 ? Math.max(0, p.length - 1) : i;
+}
+
+/** Points the audio element at the right file for a position in the whole item. */
+async function seekGlobal(ms: number, autoplay: boolean) {
+  const it = state.item!;
+  const p = parts();
+  const part = p.length ? partFor(ms) : 0;
+  const local = (ms - (p[part]?.start_ms ?? 0)) / 1000;
+  if (!audio.src || part !== state.part || !audio.src.includes(srcFor(it, part))) {
+    state.part = part;
+    audio.src = srcFor(it, part);
+    audio.playbackRate = state.rate;
+    audio.addEventListener("loadedmetadata", () => local > 0 && (audio.currentTime = local), { once: true });
+    if (autoplay) await audio.play().catch(() => notify());
+  } else {
+    audio.currentTime = local;
+  }
+  notify();
+}
+
+function srcFor(it: Item, part: number): string {
+  const multi = (it.parts?.length ?? 0) > 1;
+  if (state.fromCache) return offlineUrl(multi ? partKey(it.key, part) : it.key);
+  return `/api/v1/stream/${encodeURIComponent(it.key)}${multi ? `?part=${part}` : ""}`;
+}
+
 async function load(it: Item, autoplay: boolean) {
   state.item = it;
+  state.part = 0;
+  audio.removeAttribute("src");
   const cached = await isOffline(it.key);
   state.fromCache = cached;
   const off = cached ? await offlineEntry(it.key) : undefined;
@@ -73,13 +118,8 @@ async function load(it: Item, autoplay: boolean) {
   state.transcoded = cached ? !!off?.transcoded : false;
   const start = await startPosition(it);
   state.takenOver = start.from ? { device: start.from.device, at: start.from.updated_at } : undefined;
-  audio.src = cached ? offlineUrl(it.key) : `/api/v1/stream/${encodeURIComponent(it.key)}`;
-  audio.playbackRate = state.rate;
-  const startSec = start.ms / 1000;
-  audio.addEventListener("loadedmetadata", () => startSec && (audio.currentTime = startSec), { once: true });
   mediaSession(it);
-  notify();
-  if (autoplay) await audio.play().catch(() => notify());
+  await seekGlobal(start.ms, autoplay);
 }
 
 export function toggle() {
@@ -89,13 +129,11 @@ export function toggle() {
 }
 
 export function seekBy(ms: number) {
-  audio.currentTime = Math.max(0, Math.min(duration() / 1000, audio.currentTime + ms / 1000));
-  void persist();
+  void seekGlobal(Math.max(0, Math.min(duration(), position() + ms)), state.playing).then(() => persist());
 }
 
 export function seekTo(fraction: number) {
-  audio.currentTime = (duration() / 1000) * fraction;
-  void persist();
+  void seekGlobal(duration() * fraction, state.playing).then(() => persist());
 }
 
 const RATES = [1, 1.2, 1.5, 2];
@@ -115,10 +153,10 @@ export async function skip(d: 1 | -1) {
 
 async function persist(finished = false) {
   const it = state.item;
-  if (!it || !audio.src || (!finished && audio.currentTime < 1)) return;
+  if (!it || !audio.src || (!finished && position() < 1000)) return;
   await savePosition({
     key: it.key,
-    position_ms: Math.round(audio.currentTime * 1000),
+    position_ms: Math.round(position()),
     duration_ms: Math.round(duration()) || null,
     finished,
     updated_at: new Date().toISOString(),
@@ -154,10 +192,15 @@ audio.addEventListener("play", () => {
 audio.addEventListener("pause", () => {
   state.playing = false;
   clearInterval(saveTimer);
-  void persist();
+  if (!audio.ended) void persist();
   notify();
 });
 audio.addEventListener("ended", async () => {
+  // Next part of the same book, else the item is finished.
+  if (state.part + 1 < parts().length) {
+    await seekGlobal(parts()[state.part + 1].start_ms, true);
+    return;
+  }
   await persist(true);
   if (state.index + 1 < state.queue.length) await skip(1);
 });
@@ -168,9 +211,8 @@ document.addEventListener("visibilitychange", () => document.hidden && void pers
 // Another device moved on: follow it while this device is not playing the item.
 onRemote((p) => {
   if (!p.key || !state.item || p.key !== state.item.key || state.playing || p.device === myDevice) return;
-  audio.currentTime = p.position_ms / 1000;
   state.takenOver = { device: p.device, at: p.updated_at };
-  notify();
+  void seekGlobal(p.position_ms, false);
 });
 
 export const audioError = () => audio.error;

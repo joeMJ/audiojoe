@@ -2,7 +2,7 @@
 
 import { download } from "../downloader";
 import { OFFLINE_CACHE, offlineUrl, removeOffline, storeOffline } from "../offline";
-import { online, onConnection, type Item, type Quality } from "./api";
+import { api, online, onConnection, type Item, type Quality } from "./api";
 import { idbAll, idbDel, idbGet, idbPut } from "./idb";
 
 export interface OfflineEntry {
@@ -23,6 +23,9 @@ const listeners = new Set<() => void>();
 export const onOfflineChange = (l: () => void) => listeners.add(l);
 const notify = () => listeners.forEach((l) => l());
 
+/** Cache key of one part of a multi-file item. */
+export const partKey = (key: string, part: number) => `${key}#${part}`;
+
 export const offlineList = () => idbAll<OfflineEntry>("offline");
 export const offlineEntry = (key: string) => idbGet<OfflineEntry>("offline", key);
 
@@ -31,8 +34,17 @@ export async function isOffline(key: string): Promise<boolean> {
 }
 
 export async function addOffline(items: Item[]) {
-  for (const it of items.filter((i) => i.kind === "track" || i.kind === "episode")) {
-    if (await offlineEntry(it.key)) continue;
+  for (const it0 of items.filter((i) => ["track", "episode", "book"].includes(i.kind))) {
+    if (await offlineEntry(it0.key)) continue;
+    // Books need their parts; list entries do not carry them.
+    let it = it0;
+    if (it.kind === "book" && !it.parts) {
+      try {
+        it = await api<Item>("GET", `/items/${encodeURIComponent(it.key)}`);
+      } catch {
+        continue;
+      }
+    }
     await idbPut("items", it.key, it);
     await idbPut("offline", it.key, {
       key: it.key, title: it.title, subtitle: it.subtitle ?? it.podcast ?? "", status: "queued", progress: 0,
@@ -45,6 +57,8 @@ export async function addOffline(items: Item[]) {
 
 export async function removeFromOffline(key: string) {
   await removeOffline(key);
+  const it = await idbGet<Item>("items", key);
+  for (const p of it?.parts ?? []) await removeOffline(partKey(key, p.index));
   await idbDel("offline", key);
   notify();
 }
@@ -70,26 +84,38 @@ async function fetchOne(e: OfflineEntry) {
   e.progress = 0;
   await idbPut("offline", e.key, e);
   notify();
-  let last = 0;
-  // The server converts hi-res FLAC to 48 kHz for the car (cached 24/96 does not play there).
-  const { blob, report } = await download(`/api/v1/stream/${encodeURIComponent(e.key)}?profile=tesla-offline`, {
-    onProgress: (b, total) => {
-      e.progress = total ? b / total : 0;
-      e.bytes = b;
-      if (Date.now() - last > 500) {
-        last = Date.now();
-        notify();
-      }
-    },
-  });
-  if (!(await offlineEntry(e.key))) return; // removed meanwhile
-  if (blob && report.ok) {
-    await storeOffline(e.key, blob);
-    const q = report.quality ? JSON.parse(report.quality) : null;
-    Object.assign(e, { status: "done", progress: 1, bytes: blob.size, delivered: q?.delivered ?? e.source, transcoded: !!q?.transcoded });
-  } else {
-    Object.assign(e, { status: "error", error: report.error ?? "download failed" });
+  const it = await idbGet<Item>("items", e.key);
+  const parts = it?.parts && it.parts.length > 1 ? it.parts : null;
+  const total = parts ? parts.reduce((s, p) => s + p.duration_ms, 0) : 1;
+  let done = 0, bytes = 0, last = 0;
+  let q: { delivered?: Quality; transcoded?: boolean } | null = null;
+  // One file, or each part of a book. The server converts hi-res FLAC to 48 kHz for the
+  // car (cached 24/96 does not play there).
+  for (const [i, p] of (parts ?? [null]).entries()) {
+    const url = `/api/v1/stream/${encodeURIComponent(e.key)}?profile=tesla-offline${p ? `&part=${i}` : ""}`;
+    const share = p ? p.duration_ms / total : 1;
+    const { blob, report } = await download(url, {
+      onProgress: (b, t) => {
+        e.progress = done + (t ? (b / t) * share : 0);
+        e.bytes = bytes + b;
+        if (Date.now() - last > 500) {
+          last = Date.now();
+          notify();
+        }
+      },
+    });
+    if (!(await offlineEntry(e.key))) return; // removed meanwhile
+    if (!blob || !report.ok) {
+      Object.assign(e, { status: "error", error: report.error ?? "download failed" });
+      await idbPut("offline", e.key, e);
+      return notify();
+    }
+    await storeOffline(p ? partKey(e.key, i) : e.key, blob);
+    q ??= report.quality ? JSON.parse(report.quality) : null;
+    bytes += blob.size;
+    done += share;
   }
+  Object.assign(e, { status: "done", progress: 1, bytes, delivered: q?.delivered ?? e.source, transcoded: !!q?.transcoded });
   await idbPut("offline", e.key, e);
   notify();
 }
@@ -99,7 +125,11 @@ export async function checkOffline() {
   const cache = await caches.open(OFFLINE_CACHE);
   for (const e of await offlineList()) {
     if (e.status === "loading") e.status = "queued";
-    if (e.status === "done" && !(await cache.match(offlineUrl(e.key)))) e.status = "missing";
+    const it = await idbGet<Item>("items", e.key);
+    const keys = it?.parts && it.parts.length > 1 ? it.parts.map((p) => partKey(e.key, p.index)) : [e.key];
+    if (e.status === "done") {
+      for (const k of keys) if (!(await cache.match(offlineUrl(k)))) e.status = "missing";
+    }
     await idbPut("offline", e.key, e);
   }
   notify();

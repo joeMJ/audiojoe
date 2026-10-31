@@ -1,4 +1,5 @@
 mod access;
+mod audiobookshelf;
 mod auth;
 mod cli;
 mod config;
@@ -9,6 +10,7 @@ mod media;
 mod playback;
 mod podcasts;
 mod probe;
+mod sources;
 mod stream;
 
 use std::{
@@ -88,6 +90,7 @@ async fn main() -> Result<()> {
         jellyfin_users: Default::default(),
     };
     tokio::spawn(podcasts::refresh_loop(state.clone()));
+    tokio::spawn(audiobookshelf::sync_loop(state.clone()));
 
     let web = ServeDir::new(&state.config.web_root)
         .fallback(ServeFile::new(state.config.web_root.join("index.html")));
@@ -98,10 +101,13 @@ async fn main() -> Result<()> {
         .route("/api/v1/auth/login", post(auth::login))
         .route("/api/v1/auth/logout", post(auth::logout))
         .route("/api/v1/me", get(auth::me))
-        .route("/api/v1/sources", get(jellyfin::list_sources).post(jellyfin::add_source))
-        .route("/api/v1/sources/{id}", delete(jellyfin::delete_source))
-        .route("/api/v1/sources/{id}/browse", get(jellyfin::browse))
-        .route("/api/v1/image/{key}", get(jellyfin::image))
+        .route("/api/v1/sessions", get(auth::sessions))
+        .route("/api/v1/sessions/{id}", delete(auth::revoke))
+        .route("/api/v1/podcasts/search", get(podcasts::search))
+        .route("/api/v1/sources", get(sources::list).post(sources::add))
+        .route("/api/v1/sources/{id}", delete(sources::delete))
+        .route("/api/v1/sources/{id}/browse", get(sources::browse))
+        .route("/api/v1/image/{key}", get(sources::image))
         .route("/api/v1/podcasts", get(podcasts::list).post(podcasts::subscribe))
         .route("/api/v1/podcasts/{id}", delete(podcasts::unsubscribe))
         .route("/api/v1/podcasts/{id}/episodes", get(podcasts::episodes))

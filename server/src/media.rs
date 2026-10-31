@@ -21,22 +21,24 @@ use serde_json::{json, Value};
 use crate::{
     auth::CurrentUser,
     error::{with_db, ApiError, ApiResult},
-    jellyfin, podcasts, AppState,
+    audiobookshelf, jellyfin, podcasts, AppState,
 };
 
 enum Key {
     Episode(i64),
     Jellyfin(i64, String),
+    Abs(i64, String),
 }
 
 fn parse_key(key: &str) -> ApiResult<Key> {
     let mut p = key.splitn(3, ':');
     match (p.next(), p.next(), p.next()) {
         (Some("episode"), Some(id), None) => id.parse().map(Key::Episode).map_err(|_| ApiError::NotFound),
-        (Some("jellyfin"), Some(src), Some(item))
-            if item.len() <= 64 && item.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') =>
-        {
+        (Some("jellyfin"), Some(src), Some(item)) if jellyfin::valid_id(item) => {
             Ok(Key::Jellyfin(src.parse().map_err(|_| ApiError::NotFound)?, item.to_string()))
+        }
+        (Some("abs"), Some(src), Some(item)) if audiobookshelf::valid_id(item) => {
+            Ok(Key::Abs(src.parse().map_err(|_| ApiError::NotFound)?, item.to_string()))
         }
         _ => Err(ApiError::NotFound),
     }
@@ -58,7 +60,8 @@ struct Resolved {
     meta: Value,
 }
 
-async fn resolve(state: &AppState, user: &CurrentUser, key: &str) -> ApiResult<Resolved> {
+/// `part`: index of the audio file for items consisting of several files (books).
+async fn resolve(state: &AppState, user: &CurrentUser, key: &str, part: usize) -> ApiResult<Resolved> {
     match parse_key(key)? {
         Key::Episode(id) => {
             let uid = user.id;
@@ -84,11 +87,23 @@ async fn resolve(state: &AppState, user: &CurrentUser, key: &str) -> ApiResult<R
             let meta = jf.item(state, &item).await?;
             Ok(Resolved { url: jf.stream_url(&item), auth: Some(jf.auth_header()), meta })
         }
+        Key::Abs(src, item) => {
+            let abs = audiobookshelf::source(state, src).await?;
+            let (meta, parts) = audiobookshelf::item(state, &abs, &item).await?;
+            let url = parts.get(part).map(|p| p.url.clone()).ok_or(ApiError::NotFound)?;
+            Ok(Resolved { url, auth: Some(abs.auth_header()), meta })
+        }
     }
 }
 
 pub async fn item(State(state): State<AppState>, user: CurrentUser, Path(key): Path<String>) -> ApiResult<Json<Value>> {
-    let mut meta = resolve(&state, &user, &key).await?.meta;
+    let mut meta = resolve(&state, &user, &key, 0).await?.meta;
+    // Fresh listening progress from Audiobookshelf before answering.
+    if let Ok(Key::Abs(src, item)) = parse_key(&key) {
+        if let Ok(abs) = audiobookshelf::source(&state, src).await {
+            audiobookshelf::sync_item(&state, &abs, &item).await;
+        }
+    }
     let (uid, k) = (user.id, key.clone());
     meta["playback"] = with_db(&state.db, move |c| {
         Ok(c.query_row(
@@ -106,6 +121,7 @@ pub async fn item(State(state): State<AppState>, user: CurrentUser, Path(key): P
 #[derive(Deserialize)]
 pub struct StreamQuery {
     profile: Option<String>,
+    part: Option<usize>,
 }
 
 pub async fn stream(
@@ -115,7 +131,7 @@ pub async fn stream(
     Query(q): Query<StreamQuery>,
     headers: HeaderMap,
 ) -> ApiResult<Response> {
-    let r = resolve(&state, &user, &key).await?;
+    let r = resolve(&state, &user, &key, q.part.unwrap_or(0)).await?;
     let src = r.meta["quality"].clone();
     let profile = q.profile.as_deref().unwrap_or("original");
     let hires_flac = src["codec"] == "flac" && src["sample_rate"].as_i64().unwrap_or(0) > 48_000;

@@ -152,6 +152,63 @@ try {
   await waitText("Zuletzt auf Telefon (Test)");
   await shot("06-weiterhoeren");
 
+  // ------------------------------------------------------------ audiobooks (optional)
+  if (process.env.ABS_TEST_FILE) {
+    const absc = JSON.parse(readFileSync(process.env.ABS_TEST_FILE, "utf8"));
+    const src = await call("POST", "/sources", { kind: "audiobookshelf", name: "Hörbücher (Test)", url: absc.url, api_key: absc.api_key });
+    check("audiobookshelf source added", src.status === 200, src.body?.server);
+    const libs = (await call("GET", `/sources/${src.body.id}/browse`)).body.items;
+    const books = (await call("GET", `/sources/${src.body.id}/browse?parent=${libs[0].key.split(":")[2]}&limit=200`)).body.items;
+    let book = null;
+    for (const b of books.slice().sort((a, b) => (a.duration_ms ?? 0) - (b.duration_ms ?? 0))) {
+      const m = (await call("GET", `/items/${encodeURIComponent(b.key)}`)).body;
+      if (m?.parts?.length > 1) { book = m; break; }
+    }
+    check("multi-part book found", !!book, book ? `${book.title}: ${book.parts.length} parts, ${Math.round(book.duration_ms / 60000)} min` : "");
+    if (book) {
+      await clickText("Hörbücher");
+      await waitText(book.title.slice(0, 15));
+      await shot("09-hoerbuecher");
+      await page.evaluate((title) => {
+        const row = [...document.querySelectorAll("main .item")].find((r) => r.innerText.includes(title));
+        [...row.querySelectorAll("button")].find((b) => ["Abspielen", "Weiter"].includes(b.innerText)).click();
+      }, book.title);
+      await waitText("Jetzt läuft");
+      await page.waitForFunction(() => document.querySelector(".ctrl .play")?.innerText === "❚❚", { timeout: 20000 });
+      // Jump just past the start of the second file.
+      const target = book.parts[1].start_ms + 15000;
+      await page.evaluate((f) => {
+        const bar = document.querySelector(".bar").getBoundingClientRect();
+        const ev = (type) => new PointerEvent(type, { clientX: bar.left + bar.width * f, clientY: bar.top + 5, bubbles: true });
+        document.querySelector(".bar").dispatchEvent(ev("pointerdown"));
+      }, target / book.duration_ms);
+      await sleep(6000);
+      await shot("10-hoerbuch-teil2");
+      await page.evaluate(() => document.querySelector(".ctrl .play").click());
+      await sleep(2500);
+      const pbk = (await call("GET", `/playback/${encodeURIComponent(book.key)}`)).body;
+      check("book: position across file boundary saved", Math.abs(pbk.position_ms - target) < 15000, `${Math.round(pbk.position_ms / 1000)} s (target ${Math.round(target / 1000)} s)`);
+      const absProg = await fetch(`${absc.url}/api/me/progress/${book.key.split(":")[2]}`, { headers: { authorization: `Bearer ${absc.api_key}` } }).then((r) => r.json());
+      check("book: position arrived in Audiobookshelf", Math.abs(absProg.currentTime * 1000 - pbk.position_ms) < 3000, `${Math.round(absProg.currentTime)} s`);
+      if (book.duration_ms < 3 * 3600 * 1000) {
+        await clickText("Hörbücher");
+        await waitText(book.title.slice(0, 15));
+        await page.evaluate((title) => {
+          const row = [...document.querySelectorAll("main .item")].find((r) => r.innerText.includes(title));
+          [...row.querySelectorAll("button")].find((b) => b.innerText === "Offline").click();
+        }, book.title);
+        await clickText("Offline");
+        await page.waitForFunction((t) => [...document.querySelectorAll("main .item")].some((r) => r.innerText.includes(t) && r.innerText.includes("fertig")),
+          { timeout: 600000, polling: 1000 }, book.title.slice(0, 15));
+        check("book with all parts saved offline", true);
+      } else {
+        console.log("  (book longer than 3 h – offline download skipped)");
+      }
+      await fetch(`${absc.url}/api/me/progress/${book.key.split(":")[2]}`, { method: "DELETE", headers: { authorization: `Bearer ${absc.api_key}` } });
+    }
+    await call("DELETE", `/sources/${src.body.id}`);
+  }
+
   // ------------------------------------------------------------ server down: offline
   execSync("systemctl stop audiojoe-server");
   await page.reload({ waitUntil: "domcontentloaded" });
@@ -159,7 +216,10 @@ try {
     () => check("server down: app starts from cache, shows offline", false));
   await clickText("Weiterhören");
   await waitText(ep.title.slice(0, 20));
-  await clickText("Weiter");
+  await page.evaluate((title) => {
+    const row = [...document.querySelectorAll("main .item")].find((r) => r.innerText.includes(title));
+    [...row.querySelectorAll("button")].find((b) => b.innerText === "Weiter").click();
+  }, ep.title.slice(0, 20));
   await waitText("Jetzt läuft");
   await page.waitForFunction(() => document.querySelector(".ctrl .play")?.innerText === "❚❚", { timeout: 15000 });
   await sleep(5000);

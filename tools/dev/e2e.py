@@ -93,7 +93,13 @@ s, b, _ = login("e2e-tesla")
 check("login device B", s == 200, str(s))
 B = b["token"]
 
+s, b, _ = call("GET", "/api/v1/sessions", token=A)
+check("device list with current session", s == 200 and any(x["current"] and x["device"] == "e2e-phone" for x in b), f"{len(b)} sessions")
+sid_b = next(x["id"] for x in b if x["device"] == "e2e-tesla")
+
 # ------------------------------------------------------------------ podcasts
+s, b, _ = call("GET", "/api/v1/podcasts/search?q=lage%20der%20nation", token=A)
+check("podcast search", s == 200 and any("lagedernation" in x["feed_url"] for x in b), f"{len(b)} results")
 s, b, _ = call("POST", "/api/v1/podcasts", {"feed_url": FEED}, token=A)
 check("subscribe podcast", s == 200 and b["episodes"] > 0, f"{b.get('title') if isinstance(b, dict) else b}, {b.get('episodes') if isinstance(b, dict) else ''} episodes")
 pid = b["id"]
@@ -211,14 +217,88 @@ if os.environ.get("JELLYFIN_URL"):
 else:
     print("  (JELLYFIN_URL not set – Jellyfin not tested)")
 
+# ------------------------------------------------------------------ audiobookshelf
+if os.environ.get("ABS_TEST_FILE"):
+    absc = json.load(open(os.environ["ABS_TEST_FILE"]))
+
+    def abs_call(method, path, body=None):
+        req = urllib.request.Request(absc["url"] + path, method=method,
+                                     data=json.dumps(body).encode() if body is not None else None,
+                                     headers={"authorization": "Bearer " + absc["api_key"], "content-type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                c = r.read()
+                return r.status, (json.loads(c) if c and c[:1] in b"{[" else None)
+        except urllib.error.HTTPError as e:
+            return e.code, None
+
+    s, b, _ = call("POST", "/api/v1/sources", {"kind": "audiobookshelf", "name": "Audiobookshelf (e2e)",
+                                               "url": absc["url"], "api_key": absc["api_key"]}, token=A)
+    check("add audiobookshelf source", s == 200, f"{b.get('server')} {b.get('version')}" if s == 200 else str(b))
+    aid = b["id"]
+    s, libs, _ = call("GET", f"/api/v1/sources/{aid}/browse", token=A)
+    check("audiobookshelf libraries", s == 200 and libs["items"], ", ".join(l["title"] for l in libs.get("items", [])))
+    lib = libs["items"][0]["key"].split(":")[2]
+    s, books, _ = call("GET", f"/api/v1/sources/{aid}/browse?parent={lib}&limit=20", token=A)
+    check("books listed", s == 200 and books["items"], f"{len(books.get('items', []))} books")
+    multi = None
+    for bk in books["items"]:
+        s, meta, _ = call("GET", f"/api/v1/items/{bk['key']}", token=A)
+        if s == 200 and multi is None and len(meta.get("parts", [])) > 1:
+            multi = meta
+        if s == 200 and len(meta.get("parts", [])) >= 1 and meta.get("chapters"):
+            book = meta
+            break
+    else:
+        book = meta
+    check("book with parts, chapters, quality", book.get("parts") and book.get("quality", {}).get("codec"),
+          f"{book['title']}: {len(book['parts'])} part(s), {len(book.get('chapters', []))} chapters, {book['quality']['codec']}")
+    s, data, h = call("GET", f"/api/v1/stream/{book['key']}?part=0", token=A, headers={"range": "bytes=0-32767"}, raw=True)
+    check("book stream part 0 with Range: 206", s == 206 and len(data) == 32768, f"{s}, {len(data)} B")
+    s, _, _ = call("GET", f"/api/v1/image/{book['key']}", token=A, raw=True)
+    check("book cover relayed", s == 200, str(s))
+    item_id = book["key"].split(":")[2]
+
+    # audiojoe -> Audiobookshelf
+    s, b, _ = call("PUT", f"/api/v1/playback/{book['key']}", {"position_ms": 123000, "duration_ms": book["duration_ms"],
+                    "updated_at": iso(datetime.now(timezone.utc)), "title": book["title"], "subtitle": book["subtitle"]}, token=A)
+    time.sleep(3)
+    s, prog = abs_call("GET", f"/api/me/progress/{item_id}")
+    check("position pushed to Audiobookshelf", s == 200 and abs(prog["currentTime"] - 123) < 1.5, f"{prog and prog['currentTime']} s")
+
+    # Audiobookshelf -> audiojoe (pull when the item is opened)
+    time.sleep(1.2)
+    abs_call("PATCH", f"/api/me/progress/{item_id}", {"currentTime": 456.0, "duration": book["duration_ms"] / 1000, "isFinished": False})
+    s, meta, _ = call("GET", f"/api/v1/items/{book['key']}", token=A)
+    s, pb, _ = call("GET", f"/api/v1/playback/{book['key']}", token=A)
+    check("position from Audiobookshelf taken over", s == 200 and pb["position_ms"] == 456000 and pb["device"] == "Audiobookshelf",
+          f"{pb.get('position_ms')} ms from {pb.get('device')}")
+
+    # no ping-pong: an unchanged state is not written back
+    s, before = abs_call("GET", f"/api/me/progress/{item_id}")
+    call("GET", f"/api/v1/items/{book['key']}", token=A)
+    time.sleep(1)
+    s, after = abs_call("GET", f"/api/me/progress/{item_id}")
+    check("unchanged state not written back", before["lastUpdate"] == after["lastUpdate"])
+
+    abs_call("DELETE", f"/api/me/progress/{item_id}")
+    call("DELETE", f"/api/v1/sources/{aid}", token=A)
+    s, b, _ = call("GET", "/api/v1/playback", token=A)
+    check("removing a source removes its positions", s == 200 and not any(x["key"].startswith(f"abs:{aid}:") for x in b))
+else:
+    print("  (ABS_TEST_FILE not set – Audiobookshelf not tested)")
+
 # ------------------------------------------------------------------ cleanup, logout
+s, _, _ = call("DELETE", f"/api/v1/sessions/{sid_b}", token=A)
+s2, _, _ = call("GET", "/api/v1/me", token=B)
+check("sign out another device", s == 200 and s2 == 401, f"{s}/{s2}")
 call("DELETE", f"/api/v1/podcasts/{pid}", token=A)
 s, b, _ = call("GET", "/api/v1/playback", token=A)
 check("unsubscribe removes its positions", s == 200 and not any(x["key"] in {e["key"] for e in eps} for x in b), str(len(b)))
 s, _, _ = call("POST", "/api/v1/auth/logout", token=A)
 s2, _, _ = call("GET", "/api/v1/me", token=A)
 check("logout ends the session", s == 200 and s2 == 401, f"{s}/{s2}")
-call("POST", "/api/v1/auth/logout", token=B)
+
 
 # ------------------------------------------------------------------ throttling (last)
 codes = [call("POST", "/api/v1/auth/login", {"username": "ghost-e2e", "password": "x" * 12, "totp": "123456", "device": "e2e"})[0]

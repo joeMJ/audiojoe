@@ -20,6 +20,9 @@ export interface Item {
   published?: string | null;
   track?: number | null;
   year?: number | null;
+  /** Audio files of a book; positions are positions in the whole item. */
+  parts?: { index: number; start_ms: number; duration_ms: number; title: string }[];
+  chapters?: { title: string; start_ms: number; end_ms: number }[];
   position_ms?: number | null;
   finished?: boolean;
   playback?: Playback | null;

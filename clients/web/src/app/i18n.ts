@@ -6,6 +6,8 @@ const de: Record<string, string> = {
   "Continue": "Weiter\u00adhören",
   "Podcasts": "Podcasts",
   "Music": "Musik",
+  "Audiobooks": "Hör\u00adbücher",
+  "No audiobook sources. Add Audiobookshelf in the desktop or phone app.": "Keine Hörbuch-Quelle. Audiobookshelf in der Desktop- oder Telefon-App hinzufügen.",
   "Offline": "Offline",
   "Server reachable": "Server erreichbar",
   "Offline · cache": "Offline · Cache",

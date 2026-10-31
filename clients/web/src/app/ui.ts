@@ -7,7 +7,7 @@ import { idbAll } from "./idb";
 import * as player from "./player";
 import { pendingCount } from "./sync";
 
-type View = "np" | "cont" | "pod" | "lib" | "off";
+type View = "np" | "cont" | "pod" | "books" | "lib" | "off";
 let view: View = "np";
 let main!: HTMLElement;
 let top!: HTMLElement;
@@ -36,10 +36,11 @@ const ICONS: Record<View, string> = {
   np: '<path d="M8 5v14l11-7z" fill="currentColor" stroke="none"/>',
   cont: '<path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="9"/>',
   pod: '<circle cx="12" cy="11" r="3"/><path d="M12 14v7M6.3 16.5a8 8 0 1 1 11.4 0"/>',
+  books: '<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/>',
   lib: '<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>',
   off: '<path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14"/>',
 };
-const LABELS: Record<View, string> = { np: "Now playing", cont: "Continue", pod: "Podcasts", lib: "Music", off: "Offline" };
+const LABELS: Record<View, string> = { np: "Now playing", cont: "Continue", pod: "Podcasts", books: "Audiobooks", lib: "Music", off: "Offline" };
 
 function initials(s: string) {
   return s.split(/\s+/).filter(Boolean).slice(0, 3).map((w) => w[0]).join("").toUpperCase() || "♫";
@@ -101,7 +102,7 @@ export function show(v: View) {
   document.querySelectorAll<HTMLElement>("nav button").forEach((b) => b.classList.toggle("active", b.dataset.v === v));
   main.replaceChildren();
   main.scrollTop = 0;
-  ({ np: renderNowPlaying, cont: renderContinue, pod: renderPodcasts, lib: renderMusic, off: renderOffline })[v]();
+  ({ np: renderNowPlaying, cont: renderContinue, pod: renderPodcasts, books: renderBooks, lib: renderMusic, off: renderOffline })[v]();
 }
 
 /** Re-render the current view when its data changed (except lists the user scrolls in). */
@@ -114,7 +115,7 @@ export function refresh(kind: "player" | "data" | "offline") {
 // ---------------------------------------------------------------- now playing
 
 let npRefs: { bar: HTMLElement; fill: HTMLElement; knob: HTMLElement; pos: HTMLElement; rest: HTMLElement;
-              play: HTMLElement; from: HTMLElement; rate: HTMLElement; here: HTMLElement } | null = null;
+              play: HTMLElement; from: HTMLElement; rate: HTMLElement; here: HTMLElement; sub: HTMLElement } | null = null;
 
 function renderNowPlaying() {
   const s = player.state;
@@ -139,11 +140,12 @@ function renderNowPlaying() {
   const here = h("span", { className: "val" });
   const from = h("div", { className: "from" });
   const kind = it.kind === "episode" ? `Podcast · ${it.subtitle ?? ""}` : it.subtitle ?? "";
+  const sub = h("div", { className: "sub" }, it.kind === "episode" ? it.published?.slice(0, 10) ?? "" : it.kind === "book" ? "" : it.subtitle ?? "");
   main.append(
     h("div", { className: "np" }, cover, h("div", {},
       h("div", { className: "kind" }, kind),
       h("div", { className: "title" }, it.title),
-      h("div", { className: "sub" }, it.kind === "episode" ? it.published?.slice(0, 10) ?? "" : it.subtitle ?? ""),
+      sub,
       h("div", { className: "quality" },
         h("div", { className: "row" }, h("span", { className: "lbl" }, t("Source")), h("span", { className: "val" }, qualityText(it.quality))),
         h("div", { className: "row" }, h("span", { className: "lbl" }, t("Here")), here)),
@@ -155,7 +157,7 @@ function renderNowPlaying() {
         s.queue.length > 1 ? h("button", { onclick: () => void player.skip(1), ariaLabel: "next" }, icon('<path d="M18 5v14M6 6l9 6-9 6z" fill="currentColor"/>')) : rate),
       from)),
   );
-  npRefs = { bar, fill, knob, pos, rest, play, from, rate, here };
+  npRefs = { bar, fill, knob, pos, rest, play, from, rate, here, sub };
   updateNowPlaying();
 }
 
@@ -172,6 +174,10 @@ function updateNowPlaying() {
   npRefs.rate.textContent = `${s.rate.toLocaleString()}×`;
   const suffix = s.transcoded ? t("converted") : s.fromCache ? t("from cache") : t("unchanged");
   npRefs.here.textContent = `${qualityText(s.delivered)} · ${suffix}`;
+  if (s.item?.chapters?.length) {
+    const c = player.chapter();
+    if (npRefs.sub.textContent !== c) npRefs.sub.textContent = c;
+  }
   npRefs.from.textContent = s.takenOver ? t("Taken over from {device} · {ago}", { device: s.takenOver.device, ago: ago(s.takenOver.at) }) : "";
 }
 
@@ -195,7 +201,8 @@ async function renderContinue() {
   for (const p of list) {
     const off = await offlineEntry(p.key);
     const f = p.duration_ms ? p.position_ms / p.duration_ms : 0;
-    const item: Item = { key: p.key, kind: p.key.startsWith("episode:") ? "episode" : "track", title: p.title, subtitle: p.subtitle };
+    const kind = p.key.startsWith("episode:") ? "episode" : p.key.startsWith("abs:") ? "book" : "track";
+    const item: Item = { key: p.key, kind, title: p.title, subtitle: p.subtitle };
     box.append(h("div", { className: "item" }, thumb({ title: p.subtitle || p.title }),
       h("div", { className: "tx" }, h("div", { className: "t1" }, p.title || p.key),
         h("div", { className: "t2" }, `${clock(p.position_ms)}${p.duration_ms ? " / " + clock(p.duration_ms) : ""} · ${p.device ? t("Last on {device} · {ago}", { device: p.device, ago: ago(p.updated_at) }) : ago(p.updated_at)}`),
@@ -265,7 +272,7 @@ let libStack: { source: number; parent?: string; title: string }[] = [];
 async function renderMusic() {
   try {
     if (!libStack.length) {
-      const sources = await api<{ id: number; name: string; kind: string }[]>("GET", "/sources");
+      const sources = (await api<{ id: number; name: string; kind: string }[]>("GET", "/sources")).filter((x) => x.kind === "jellyfin");
       main.append(h("h2", {}, t("Music")));
       if (!sources.length) return void main.append(h("div", { className: "empty" }, t("No sources. Add them in the desktop or phone app.")));
       if (sources.length === 1) {
@@ -304,6 +311,61 @@ async function renderMusic() {
           thumb(it), h("div", { className: "tx" }, h("div", { className: "t1" }, it.title),
             h("div", { className: "t2" }, [it.subtitle, it.year].filter(Boolean).join(" · ")))));
       }
+    }
+    main.append(box);
+  } catch (e) {
+    main.append(failure(e));
+  }
+}
+
+// ---------------------------------------------------------------- audiobooks
+
+let bookStack: { source: number; parent?: string; title: string }[] = [];
+
+async function renderBooks() {
+  try {
+    if (!bookStack.length) {
+      const sources = (await api<{ id: number; name: string; kind: string }[]>("GET", "/sources")).filter((x) => x.kind === "audiobookshelf");
+      if (!sources.length) {
+        main.append(h("h2", {}, t("Audiobooks")), h("div", { className: "empty" }, t("No audiobook sources. Add Audiobookshelf in the desktop or phone app.")));
+        return;
+      }
+      bookStack = [{ source: sources[0].id, title: sources[0].name }];
+    }
+    const cur = bookStack[bookStack.length - 1];
+    const q = cur.parent ? `?parent=${encodeURIComponent(cur.parent)}&limit=500` : "";
+    const res = await api<{ items: Item[] }>("GET", `/sources/${cur.source}/browse${q}`);
+    // A single library: show its books directly.
+    if (!cur.parent && res.items.length === 1 && res.items[0].kind === "folder") {
+      bookStack.push({ source: cur.source, parent: res.items[0].key.split(":")[2], title: res.items[0].title });
+      return show("books");
+    }
+    const head = h("div", { className: "chips" });
+    if (bookStack.length > 1 && !(bookStack.length === 2 && res.items.every((i) => i.kind === "book"))) {
+      head.append(h("button", { className: "chip", onclick: () => (bookStack.pop(), show("books")) }, `← ${t("Back")}`));
+    }
+    head.append(h("h2", { style: "margin:0" }, t("Audiobooks")));
+    main.append(head);
+    const positions = new Map<string, Playback>();
+    try {
+      for (const p of await api<Playback[]>("GET", "/playback?limit=200")) positions.set(p.key, p);
+    } catch { /* offline: no positions */ }
+    const box = h("div", { className: "list" });
+    for (const it of res.items) {
+      if (it.kind === "folder") {
+        box.append(h("div", { className: "item tap", onclick: () => (bookStack.push({ source: cur.source, parent: it.key.split(":")[2], title: it.title }), show("books")) },
+          thumb(it), h("div", { className: "tx" }, h("div", { className: "t1" }, it.title))));
+        continue;
+      }
+      const p = positions.get(it.key);
+      const f = p && it.duration_ms && !p.finished ? p.position_ms / it.duration_ms : 0;
+      const off = await offlineEntry(it.key);
+      box.append(h("div", { className: "item" }, thumb(it),
+        h("div", { className: "tx" }, h("div", { className: "t1" }, it.title),
+          h("div", { className: "t2" }, [it.subtitle, it.duration_ms ? clock(it.duration_ms) : ""].filter(Boolean).join(" · ")),
+          f ? h("div", { className: "prog" }, h("i", { style: `width:${f * 100}%` })) : null),
+        offBadge(off) ?? h("button", { className: "big sec", onclick: (ev: Event) => { (ev.target as HTMLButtonElement).disabled = true; void addOffline([it]); } }, t("Save offline")),
+        h("button", { className: "big", onclick: () => void start([it]) }, f ? t("Resume") : t("Play"))));
     }
     main.append(box);
   } catch (e) {

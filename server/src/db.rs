@@ -10,6 +10,7 @@ use rusqlite::Connection;
 const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0001_init.sql"),
     include_str!("../migrations/0002_core.sql"),
+    include_str!("../migrations/0003_source_owner.sql"),
 ];
 
 pub type Db = Arc<Mutex<Connection>>;
