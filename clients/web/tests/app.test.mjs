@@ -114,6 +114,8 @@ try {
   // ------------------------------------------------------------ play, position on the server
   await clickText("Podcasts");
   await waitText(ep.title.slice(0, 20));
+  const rowSizes = await page.evaluate(() => [...document.querySelectorAll("main .item .big, main .item .badge.slot")].map((e) => e.offsetHeight));
+  check("list buttons and offline state equally tall", rowSizes.length > 1 && new Set(rowSizes).size === 1, [...new Set(rowSizes)].join(", "));
   await page.evaluate((title) => {
     const row = [...document.querySelectorAll("main .item")].find((r) => r.innerText.includes(title));
     [...row.querySelectorAll("button")].find((b) => ["Abspielen", "Weiter"].includes(b.innerText)).click();

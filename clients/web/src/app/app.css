@@ -99,6 +99,8 @@ h2 { margin: 0 0 10px; font-size: 21px; }
 .big { min-width: 96px; height: var(--touch); border-radius: 12px; border: 0; background: var(--accent);
        color: var(--accentText); font-size: 15px; font-weight: 750; padding: 0 12px; flex: none; }
 .big.sec { background: var(--panel2); color: var(--text); }
+.badge.slot { min-width: 96px; height: var(--touch); border-radius: 12px; display: flex; align-items: center;
+              justify-content: center; font-size: 15px; padding: 0 12px; flex: none; }
 .chips { display: flex; gap: 8px; margin-bottom: 10px; align-items: center; }
 .chip { height: 48px; padding: 0 16px; border-radius: 999px; border: 2px solid var(--line); background: var(--panel);
         font-size: 15px; font-weight: 700; }

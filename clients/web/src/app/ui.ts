@@ -335,11 +335,12 @@ async function renderPodcasts() {
   }
 }
 
+/** Offline state in place of the "Save offline" button, with the same size. */
 function offBadge(off?: OfflineEntry) {
   if (!off) return null;
-  if (off.status === "done") return h("span", { className: "badge ok" }, t("in cache"));
-  if (off.status === "error") return h("span", { className: "badge bad" }, t("failed"));
-  return h("span", { className: "badge warn" }, off.status === "loading" ? t("loading {p}", { p: `${Math.round(off.progress * 100)} %` }) : t("waiting"));
+  if (off.status === "done") return h("span", { className: "badge slot ok" }, t("in cache"));
+  if (off.status === "error") return h("span", { className: "badge slot bad" }, t("failed"));
+  return h("span", { className: "badge slot warn" }, off.status === "loading" ? t("loading {p}", { p: `${Math.round(off.progress * 100)} %` }) : t("waiting"));
 }
 
 // ---------------------------------------------------------------- music
