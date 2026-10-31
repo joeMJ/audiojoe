@@ -209,9 +209,6 @@ msgstr "vor {n} Std."
 msgid "{n} min ago"
 msgstr "vor {n} Min."
 
-msgid "{n} waiting to sync"
-msgstr "{n} warten auf Abgleich"
-
 msgid "Live"
 msgstr "Live"
 
@@ -543,3 +540,9 @@ msgstr "Server"
 
 msgid "Position"
 msgstr "Position"
+
+msgid "{n} positions waiting for the server"
+msgstr "{n} Positionen warten auf den Server"
+
+msgid "1 position waiting for the server"
+msgstr "1 Position wartet auf den Server"

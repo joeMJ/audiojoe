@@ -116,6 +116,23 @@ async function startPosition(it: Item): Promise<{ ms: number; from?: Playback }>
 let nextAfter: ((e: Entry) => Promise<(() => Promise<void>) | null>) | null = null;
 export const setNextAfter = (f: typeof nextAfter) => void (nextAfter = f);
 
+/** The queue (e.g. an album) on this device, so a reload continues it instead of one title. */
+const QUEUE = "aj_queue";
+function saveQueue() {
+  try {
+    localStorage.setItem(QUEUE, JSON.stringify({ queue: state.queue, index: state.index, entry: state.entry ?? null }));
+  } catch { /* private window or full: a reload then continues the title alone */ }
+}
+function savedQueue(key: string): { queue: Item[]; index: number; entry?: Entry } | null {
+  try {
+    const q = JSON.parse(localStorage.getItem(QUEUE) ?? "null") as { queue: Item[]; index: number; entry: Entry | null } | null;
+    if (!q || q.queue?.[q.index]?.key !== key) return null;
+    return { queue: q.queue, index: q.index, entry: q.entry ?? undefined };
+  } catch {
+    return null;
+  }
+}
+
 export async function play(queue: Item[], index = 0, entry?: Entry) {
   await persist();
   state.queue = queue;
@@ -123,6 +140,7 @@ export async function play(queue: Item[], index = 0, entry?: Entry) {
   const it = queue[index];
   // Episodes and books are list entries themselves; music only when played as an album entry.
   state.entry = entry ?? (it.kind === "episode" ? { list: "podcasts", key: it.key } : it.kind === "book" ? { list: "books", key: it.key } : undefined);
+  saveQueue();
   await load(queue[index], true);
 }
 
@@ -209,9 +227,17 @@ export async function cueLast() {
     if (it) break;
   }
   if (!it || state.item) return;
-  state.queue = [it];
-  state.index = 0;
-  state.entry = it.kind === "episode" ? { list: "podcasts", key: it.key } : it.kind === "book" ? { list: "books", key: it.key } : undefined;
+  const saved = savedQueue(it.key);
+  if (saved) {
+    state.queue = saved.queue;
+    state.queue[saved.index] = it;
+    state.index = saved.index;
+    state.entry = saved.entry;
+  } else {
+    state.queue = [it];
+    state.index = 0;
+    state.entry = it.kind === "episode" ? { list: "podcasts", key: it.key } : it.kind === "book" ? { list: "books", key: it.key } : undefined;
+  }
   await load(it, false, true);
 }
 
@@ -244,6 +270,7 @@ export async function skip(d: 1 | -1) {
   if (i < 0 || i >= state.queue.length) return;
   await persist();
   state.index = i;
+  saveQueue();
   await load(state.queue[i], true);
 }
 

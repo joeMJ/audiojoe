@@ -71,16 +71,16 @@ class StatusPills extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final k = context.tok;
-    // Short labels: a dot before "Server", a tick before "Position"; the pending count appears
-    // only after a few seconds (sync.shownPending), so nothing flickers on each save.
-    Widget pill(String text, Color fg, Color bg, {bool dot = false, bool tick = false, String? tip}) {
+    // Short labels: a dot before "Server"; "Position" with a tick, a cross once a position has
+    // waited more than 30 s for the server (sync.stale) – nothing flashes on each save.
+    Widget pill(String text, Color fg, Color bg, {bool dot = false, IconData? icon, String? tip}) {
       final p = Container(
         margin: const EdgeInsets.only(left: 6),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(99)),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           if (dot) ...[Container(width: 9, height: 9, decoration: BoxDecoration(color: fg, shape: BoxShape.circle)), const SizedBox(width: 6)],
-          if (tick) ...[Icon(Icons.check, size: 15, color: fg), const SizedBox(width: 4)],
+          if (icon != null) ...[Icon(icon, size: 15, color: fg), const SizedBox(width: 4)],
           Text(text, style: TextStyle(color: fg, fontWeight: FontWeight.w700, fontSize: 13)),
         ]),
       );
@@ -88,15 +88,17 @@ class StatusPills extends StatelessWidget {
     }
 
     return ListenableBuilder(
-      listenable: Listenable.merge([api.online, sync.shownPending]),
+      listenable: Listenable.merge([api.online, sync.stale, sync.pendingCount]),
       builder: (context, _) => Row(mainAxisSize: MainAxisSize.min, children: [
         api.online.value
             ? pill(t('Server'), k.ok, k.okBg, dot: true, tip: t('Server reachable'))
             : pill(t('Offline · cache'), k.warn, k.warnBg, dot: true),
-        if (sync.shownPending.value > 0)
-          pill(t('{n} waiting to sync', {'n': sync.shownPending.value}), k.warn, k.warnBg)
-        else
-          pill(t('Position'), k.ok, k.okBg, tick: true, tip: t('Positions synced')),
+        sync.stale.value
+            ? pill(t('Position'), k.bad, k.badBg, icon: Icons.close,
+                tip: sync.pendingCount.value == 1
+                    ? t('1 position waiting for the server')
+                    : t('{n} positions waiting for the server', {'n': sync.pendingCount.value}))
+            : pill(t('Position'), k.ok, k.okBg, icon: Icons.check, tip: t('Positions synced')),
       ]),
     );
   }

@@ -85,9 +85,13 @@ try {
   await inputs[3].click({ clickCount: 3 });
   await inputs[3].type("Tesla (Test)");
   await page.click("form button");
-  await waitText("Server erreichbar");
+  await waitText("Server");
+  await page.waitForSelector("#net.ok");
   check("signed in, server reachable", true);
-  const pillW = () => page.evaluate(() => ["net", "sync"].map((id) => document.getElementById(id)?.getBoundingClientRect().width ?? 0).join("/"));
+  const syncPill = () => page.evaluate(() => { const p = document.getElementById("sync"); return `${p?.className}|${p?.innerText.trim()}`; });
+  check("short pills: Server with dot, Position with tick", (await syncPill()) === "pill ok|✓\nPosition" || (await syncPill()) === "pill ok|✓Position",
+    await syncPill());
+  const pillW = () => page.evaluate(() => ["sync"].map((id) => document.getElementById(id)?.getBoundingClientRect().width ?? 0).join("/"));
   const pillsOnline = await pillW();
   const cookie = (await page.cookies()).find((c) => c.name === "aj_session");
   check("session cookie HttpOnly + Secure", cookie?.httpOnly && cookie?.secure);
@@ -180,12 +184,16 @@ try {
   await page.evaluate(() => document.querySelector("main .item.tap")?.click());
   await waitText(ep.title.slice(0, 20));
   const other = eps.find((e) => e.key !== ep.key && e.title);
+  // Leftovers of an earlier run (playing adds an episode to the list) would keep their place.
+  for (const e of [ep, other]) await call("DELETE", `/lists/podcasts/${encodeURIComponent(e.key)}`);
   for (const e of [other, ep]) {
     await page.evaluate((title) => {
       const row = [...document.querySelectorAll("main .item")].find((r) => r.innerText.includes(title));
       [...row.querySelectorAll("button")].find((b) => b.innerText === "Next").click();
     }, e.title);
-    await sleep(700);
+    // Wait until the server has it, so the order is the order of the taps.
+    await page.waitForFunction((title) => [...document.querySelectorAll("main .item")].find((r) => r.innerText.includes(title))?.innerText.includes("✓"),
+      { timeout: 15000, polling: 200 }, e.title);
   }
   let lk = await listKeys();
   check("Next appends at the end of the podcast list", lk.at(-1) === ep.key && lk.at(-2) === other.key, `${lk.length} entries, last ${lk.at(-1)}`);
@@ -256,10 +264,13 @@ try {
   check("controls large enough for driving (≥ 64 px)", sizes.length >= 4 && Math.min(...sizes) >= 64, sizes.join(", "));
   const fits = await page.evaluate(() => document.querySelector("main").scrollHeight <= document.querySelector("main").clientHeight + 2);
   check("player fits the car screen without scrolling", fits);
+  // With chapters the right button goes to the next chapter.
+  const hasChapters = await page.evaluate(() => /Kapitel \d+\/\d+ · /.test(document.body.innerText));
+  if (hasChapters) console.log("  episode has chapters: " + await page.evaluate(() => document.querySelector(".np .sub")?.innerText));
   const tb = await page.evaluate(() => [...document.querySelector(".tools").children].map((c) => ({ t: c.innerText.trim(), w: c.offsetWidth, h: c.offsetHeight,
     inner: c.firstElementChild ? c.firstElementChild.offsetWidth : c.offsetWidth })));
   check("car toolbar: offline left, speed, next right; no sleep timer",
-    tb.length === 3 && /Cache|Offline|lädt|wartet/.test(tb[0].t) && /Tempo/.test(tb[1].t) && /Nächster/.test(tb[2].t) && !tb.some((x) => /Schlaf/.test(x.t)),
+    tb.length === 3 && /Cache|Offline|lädt|wartet/.test(tb[0].t) && /Tempo/.test(tb[1].t) && (hasChapters ? /Nächstes Kapitel/ : /Nächster/).test(tb[2].t) && !tb.some((x) => /Schlaf/.test(x.t)),
     tb.map((x) => x.t).join(" | "));
   check("offline state fills its field", tb[0].inner >= tb[0].w - 2 && Math.abs(tb[0].w - tb[1].w) <= 2, `${tb[0].inner}/${tb[0].w} vs ${tb[1].w}`);
   await clickText("Details");
@@ -446,15 +457,21 @@ try {
   await page.evaluate(() => document.querySelector(".ctrl .play").click());
   await sleep(1000);
   const offlinePos = await page.evaluate(() => document.querySelector(".times span")?.innerText);
-  await waitText("1 warten auf Abgleich", 5000).then(() => check("position buffered while offline", true, offlinePos),
-    () => check("position buffered while offline", false));
+  const buffered = await page.evaluate(async () => (await new Promise((res) => {
+    const r = indexedDB.open("audiojoe");
+    r.onsuccess = () => { const q = r.result.transaction("pending").objectStore("pending").count(); q.onsuccess = () => res(q.result); };
+  })));
+  check("position buffered while offline", buffered === 1, `${offlinePos}, ${buffered} waiting`);
+  check("Position stays green while the wait is short", (await syncPill()).startsWith("pill ok"), await syncPill());
+  await page.waitForSelector("#sync.bad", { timeout: 40000 }).then(async () => check("after 30 s waiting: Position red with a cross", (await syncPill()).includes("✕"), await syncPill()),
+    () => check("after 30 s waiting: Position red with a cross", false));
   const pillsOffline = await pillW();
-  check("status pills keep their width (no jumping)", pillsOnline === pillsOffline, `online ${pillsOnline}, offline + waiting ${pillsOffline}`);
+  check("Position pill keeps its width (no jumping)", pillsOnline === pillsOffline, `online ${pillsOnline}, offline + waiting ${pillsOffline}`);
   await shot("07-offline-gepuffert");
 
   // ------------------------------------------------------------ server back: sync
   execSync("systemctl start audiojoe-server");
-  await waitText("Stände aktuell", 40000).then(() => check("server back: buffered position synced", true),
+  await page.waitForSelector("#sync.ok", { timeout: 40000 }).then(() => check("server back: buffered position synced", true),
     () => check("server back: buffered position synced", false));
   const after = await fetch(`${base}/api/v1/playback/${encodeURIComponent(ep.key)}`, { headers: { authorization: `Bearer ${phone}` } }).then((r) => r.json());
   check("server has the offline position from the car", after.device === "Tesla (Test)" && after.position_ms > 600000, `${Math.round(after.position_ms / 1000)} s from ${after.device}`);

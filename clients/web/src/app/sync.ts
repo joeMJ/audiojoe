@@ -18,6 +18,10 @@ type Listener = (p: Playback) => void;
 const remoteListeners = new Set<Listener>();
 const stateListeners = new Set<() => void>();
 export let pendingCount = 0;
+/** True once a position has waited more than 30 s for the server; saves that go through in
+ *  time never show. Back to false as soon as nothing waits. */
+export let stale = false;
+let staleTimer: number | undefined;
 
 export const onRemote = (l: Listener) => remoteListeners.add(l);
 export const onSyncState = (l: () => void) => stateListeners.add(l);
@@ -36,6 +40,17 @@ export async function savePosition(u: PositionUpdate) {
 
 async function refreshCount() {
   pendingCount = (await idbAll("pending")).length;
+  if (!pendingCount) {
+    clearTimeout(staleTimer);
+    staleTimer = undefined;
+    stale = false;
+  } else if (staleTimer === undefined && !stale) {
+    staleTimer = window.setTimeout(() => {
+      staleTimer = undefined;
+      stale = pendingCount > 0;
+      notify();
+    }, 30_000);
+  }
   notify();
 }
 

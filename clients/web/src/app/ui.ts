@@ -5,7 +5,7 @@ import { addOffline, dropPlayedOn, offlineEntry, offlineList, removeFromOffline,
 import { ago, bytes, clock, t } from "./i18n";
 import { idbAll } from "./idb";
 import * as player from "./player";
-import { pendingCount, savePosition } from "./sync";
+import { pendingCount, savePosition, stale } from "./sync";
 import { isDark, onAppearance, toggleDark } from "./theme";
 
 type View = "np" | "cont" | "pod" | "books" | "lib" | "radio" | "off";
@@ -172,19 +172,16 @@ export function mountShell(root: HTMLElement, logout: () => void) {
   show(view);
 }
 
-/** A status pill as wide as its longest text, so it does not jump when the state changes. */
-function pill(id: string, cls: string, texts: string[], shown: number, dot = false) {
-  return h("div", { className: `pill fixed ${cls}`, id },
-    ...texts.map((x, i) => h("span", { className: i === shown ? "" : "off", ariaHidden: i === shown ? null : "true" }, dot ? h("span", { className: "dot" }) : null, x)));
-}
-
 let usage = "";
 export function renderTop() {
   if (!top) return;
-  const net = pill("net", online ? "ok" : "warn", [t("Server reachable"), t("Offline · cache")], online ? 0 : 1, true);
-  // The last text only reserves room for two-digit counts.
-  const sync = pill("sync", pendingCount ? "warn" : "", [t("Positions synced"), t("{n} waiting to sync", { n: pendingCount }), t("{n} waiting to sync", { n: 99 })],
-    pendingCount ? 1 : 0);
+  // As wide as its own text: "Server" is short, offline is a real change of state.
+  const net = h("div", { className: online ? "pill ok" : "pill warn", id: "net", title: online ? t("Server reachable") : t("Offline · cache") },
+    h("span", { className: "dot" }), online ? t("Server") : t("Offline · cache"));
+  // "Position" with a tick; a cross in red once a position has waited more than 30 s for the server.
+  const sync = h("div", { className: stale ? "pill bad" : "pill ok", id: "sync",
+    title: !stale ? t("Positions synced") : pendingCount === 1 ? t("1 position waiting for the server") : t("{n} positions waiting for the server", { n: pendingCount }) },
+    h("span", { className: "mark", ariaHidden: "true" }, stale ? "✕" : "✓"), t("Position"));
   // The offline size keeps its last value until the new one is known (no gap, no jump).
   // Opens the offline page (it has no place in the navigation).
   const off = h("button", { className: view === "off" ? "pill num tap on" : "pill num tap", id: "offsize", onclick: () => show("off") },
@@ -441,9 +438,10 @@ function renderChapters(it: Item) {
 
 function updateNowPlaying() {
   const s = player.state;
-  if (s.item?.key !== npKey) return renderNowPlaying();
+  // A new item (next title) replaces the view instead of being appended below it.
+  if (s.item?.key !== npKey) return show("np");
   if (npTab !== "play") return;
-  if (!npRefs) return renderNowPlaying();
+  if (!npRefs) return show("np");
   const p = player.position(), d = player.duration();
   const f = d ? Math.min(1, p / d) : 0;
   npRefs.fill.style.width = `${f * 100}%`;

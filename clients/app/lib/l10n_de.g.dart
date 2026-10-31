@@ -4,6 +4,7 @@ const deStrings = <String, String>{
   "(Source: {q})": "(Quelle: {q})",
   "(Target: {q})": "(Ziel: {q})",
   "1 album": "1 Album",
+  "1 position waiting for the server": "1 Position wartet auf den Server",
   "API key": "API-Schlüssel",
   "Add": "Hinzufügen",
   "Add podcast": "Podcast hinzufügen",
@@ -176,6 +177,6 @@ const deStrings = <String, String>{
   "{n} h ago": "vor {n} Std.",
   "{n} min": "{n} min",
   "{n} min ago": "vor {n} Min.",
+  "{n} positions waiting for the server": "{n} Positionen warten auf den Server",
   "{n} titles": "{n} Titel",
-  "{n} waiting to sync": "{n} warten auf Abgleich",
 };

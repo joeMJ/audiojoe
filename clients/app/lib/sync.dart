@@ -17,20 +17,21 @@ class Sync {
 
   final pendingCount = ValueNotifier<int>(0);
 
-  /// What the status pill shows: positions waiting, but only once they wait longer than a
-  /// moment (or the server is gone) – a save that goes through at once does not flash it.
-  final shownPending = ValueNotifier<int>(0);
-  Timer? _shownTimer;
+  /// True once a position has waited more than 30 s for the server (online or not); saves that
+  /// go through in time never show. Back to false as soon as nothing waits.
+  final stale = ValueNotifier<bool>(false);
+  Timer? _staleTimer;
 
-  void _updateShown() {
-    final n = pendingCount.value;
-    _shownTimer?.cancel();
-    if (n == 0 || !api.online.value) {
-      shownPending.value = n;
-    } else if (shownPending.value == 0) {
-      _shownTimer = Timer(const Duration(seconds: 3), () => shownPending.value = pendingCount.value);
-    } else {
-      shownPending.value = n;
+  void _updateStale() {
+    if (pendingCount.value == 0) {
+      _staleTimer?.cancel();
+      _staleTimer = null;
+      stale.value = false;
+    } else if (_staleTimer == null && !stale.value) {
+      _staleTimer = Timer(const Duration(seconds: 30), () {
+        _staleTimer = null;
+        stale.value = pendingCount.value > 0;
+      });
     }
   }
   final _remote = StreamController<Playback>.broadcast();
@@ -76,10 +77,9 @@ class Sync {
   }
 
   void start() {
-    pendingCount.addListener(_updateShown);
-    api.online.addListener(_updateShown);
+    pendingCount.addListener(_updateStale);
     pendingCount.value = Stores.pending.data.length;
-    _updateShown();
+    _updateStale();
     api.online.addListener(() {
       if (api.online.value) {
         unawaited(flush());

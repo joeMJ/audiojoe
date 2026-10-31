@@ -126,6 +126,29 @@ class Player extends ChangeNotifier {
     return j == null ? null : Item.fromJson(j);
   }
 
+  /// The queue (e.g. an album) on this device, so a restart continues it instead of one title.
+  void _saveQueue() => Stores.device.put('queue', {
+        'items': [for (final q in queue) q.toJson()],
+        'index': index,
+        'entry': entry == null ? null : {'list': entry!.list, 'key': entry!.key},
+      });
+
+  bool _restoreQueue(Item it) {
+    final q = Stores.device.get('queue');
+    try {
+      final items = [for (final j in q?['items'] as List? ?? const []) Item.fromJson((j as Map).cast<String, dynamic>())];
+      final i = q?['index'] as int? ?? -1;
+      if (i < 0 || i >= items.length || items[i].key != it.key) return false;
+      final e = q!['entry'] as Map?;
+      queue = items..[i] = it;
+      index = i;
+      entry = e == null ? null : (list: e['list'] as String, key: e['key'] as String);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> play(List<Item> items, [int i = 0, Entry? from]) async {
     await _persist();
     // Episodes and books are list entries themselves; music only when played as an album entry.
@@ -134,6 +157,7 @@ class Player extends ChangeNotifier {
     queue = [...items];
     if (full != null) queue[i] = full;
     index = i;
+    _saveQueue();
     await _load(queue[i]);
     // just_audio's play() completes only when playback stops: do not wait for it.
     unawaited(audio.play());
@@ -203,10 +227,12 @@ class Player extends ChangeNotifier {
       if (it != null) break;
     }
     if (it == null || item != null) return;
-    queue = [it];
-    index = 0;
+    if (!_restoreQueue(it)) {
+      queue = [it];
+      index = 0;
+      entry = entryOf(it);
+    }
     item = it;
-    entry = entryOf(it);
     fromCache = downloads.isOffline(it.key);
     final start = it.kind == 'radio' ? (ms: 0, from: null) : _startPosition(it);
     takenOver = start.from == null ? null : (device: start.from!.device, at: start.from!.updatedAt);
@@ -289,6 +315,7 @@ class Player extends ChangeNotifier {
     index = i;
     final full = await meta(queue[i].key);
     if (full != null) queue[i] = full;
+    _saveQueue();
     await _load(queue[i]);
     // just_audio's play() completes only when playback stops: do not wait for it.
     unawaited(audio.play());

@@ -19,9 +19,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .pill .dot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
 .pill.ok { color: var(--ok); background: var(--okBg); }
 .pill.warn { color: var(--warn); background: var(--warnBg); }
-.pill.fixed { display: inline-grid; justify-items: center; }
-.pill.fixed > span { grid-area: 1 / 1; display: flex; align-items: center; gap: 6px; }
-.pill.fixed > span.off { visibility: hidden; }
+.pill.bad { color: var(--bad); background: var(--badBg); }
+.pill .mark { font-weight: 800; }
 .pill.num { font-variant-numeric: tabular-nums; }
 .pill[hidden] { display: none; }
 /* Moon below the top bar, top right over the content; every view leaves room there. */
