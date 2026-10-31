@@ -56,6 +56,10 @@ try {
   await sleep(4000);
   const first = await title();
   check("album plays with ⏮ ⏭", (await ctrl()).steps === 2, `${first}, ${JSON.stringify(await ctrl())}`);
+  const facts = await page.evaluate(() => ({ place: document.querySelector(".np .title .count")?.innerText.trim(),
+    codec: [...document.querySelectorAll(".fchip")].map((c) => `${c.innerText}:${c.className}`).join(" ") }));
+  check("„(1 von n)“ after the title", /^\(1 von \d+\)$/.test(facts.place ?? ""), facts.place);
+  check("lossless codec chip coloured by bit depth", /(FLAC|PCM|ALAC):fchip (hi|cd)/.test(facts.codec) || !/FLAC|PCM|ALAC/.test(facts.codec), facts.codec);
   await page.evaluate(() => document.querySelector(".ctrl .play").click()); // pause, position saved
   await sleep(1500);
   await page.reload({ waitUntil: "domcontentloaded" });

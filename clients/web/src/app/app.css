@@ -61,6 +61,12 @@ h2 { margin: 0 0 10px; font-size: 21px; }
 .fchip { padding: 2px 8px; border: 2px solid var(--line); border-radius: 7px; font-weight: 750; font-size: 14px; }
 .fnote { color: var(--muted); font-size: 13px; }
 .fchip.cache { border-color: var(--accent); color: var(--accent); }
+.fchip.hi { border-color: var(--bad); color: var(--bad); background: var(--badBg); }
+.fchip.cd { border-color: var(--warn); color: var(--warn); background: var(--warnBg); }
+.np .title .count { color: var(--muted); font-weight: 600; }
+main.dock { display: flex; flex-direction: column; overflow: hidden; }
+main.dock > .np { flex: 1; min-height: 0; overflow-y: auto; align-content: start; }
+.dockbar { flex: none; border-top: 1px solid var(--line); margin-top: 8px; }
 .bar { margin-top: 18px; height: 14px; border-radius: 7px; background: var(--panel2); position: relative; touch-action: none; }
 .bar::before { content: ""; position: absolute; inset: -18px 0; }  /* larger touch area */
 .bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); border-radius: 7px; }

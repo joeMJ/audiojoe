@@ -115,6 +115,15 @@ export function qualityChips(q?: Quality | null): string[] {
   return out;
 }
 
+/** Codec label of the chips ("FLAC", "PCM", "MP3"). */
+export const codecLabel = (q?: Quality | null) => (q?.codec ?? "").replace(/^pcm_.*/, "PCM").toUpperCase();
+
+/** Lossless level for the codec chip: "hi" from 24 bit, "cd" at 16 bit, else "". */
+export function qualityTier(q?: Quality | null): string {
+  if (!q || !/^(flac|alac|pcm_)/.test(q.codec) || !q.bit_depth) return "";
+  return q.bit_depth >= 24 ? "hi" : q.bit_depth === 16 ? "cd" : "";
+}
+
 /// Short badge, e.g. "FLAC 24/96".
 export function qualityBadge(q?: Quality | null): string {
   if (!q || !q.codec) return "";

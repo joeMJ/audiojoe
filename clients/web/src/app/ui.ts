@@ -1,6 +1,6 @@
 // Screens of the web app. Plain DOM; each view renders itself into <main>.
 
-import { api, online, qualityBadge, qualityChips, qualityText, type Item, type Playback, type Quality } from "./api";
+import { api, online, codecLabel, qualityBadge, qualityChips, qualityTier, qualityText, type Item, type Playback, type Quality } from "./api";
 import { addOffline, dropPlayedOn, offlineEntry, offlineList, removeFromOffline, retryFailed, setDropPlayed, type OfflineEntry } from "./downloads";
 import { ago, bytes, clock, t } from "./i18n";
 import { idbAll } from "./idb";
@@ -219,6 +219,7 @@ export function show(v: View) {
   view = v;
   document.querySelectorAll<HTMLElement>("nav button").forEach((b) => b.classList.toggle("active", b.dataset.v === v));
   main.replaceChildren();
+  main.classList.remove("dock");
   main.scrollTop = 0;
   ({ np: renderNowPlaying, cont: renderContinue, pod: renderPodcasts, books: renderBooks, lib: renderMusic, radio: renderRadio, off: renderOffline })[v]();
   renderTop();
@@ -238,7 +239,7 @@ export function refresh(kind: "player" | "data" | "offline") {
 let npTab: "play" | "details" | "chapters" = "play";
 let npKey = "";
 let npRefs: { bar: HTMLElement; fill: HTMLElement; knob: HTMLElement; pos: HTMLElement; rest: HTMLElement; play: HTMLElement;
-              from: HTMLElement; rate: HTMLElement; here: HTMLElement; sub: HTMLElement; next: HTMLButtonElement; off: HTMLElement } | null = null;
+              from: HTMLElement; rate: HTMLElement; here: HTMLElement; sub: HTMLElement; next: HTMLButtonElement; off: HTMLElement; count: HTMLElement } | null = null;
 
 /** Offline field of the player toolbar: save button, then live progress, then "in cache". */
 async function fillOffTool(box: HTMLElement) {
@@ -265,7 +266,8 @@ function qualityRow(played: Quality | null | undefined, cached: boolean, source?
   if (!chips.length) return h("div");
   return h("div", { className: "row" }, h("span", { className: "fchips" },
     cached ? h("span", { className: "fchip cache" }, t("Cache")) : null,
-    ...chips.map((c) => h("span", { className: "fchip" }, c)),
+    // Lossless from 24 bit red, at 16 bit yellow.
+    ...chips.map((c) => h("span", { className: c === codecLabel(played) ? `fchip ${qualityTier(played)}` : "fchip" }, c)),
     source ? h("span", { className: "fnote" }, t("(Source: {q})", { q: qualityChips(source).join(" ") })) : null));
 }
 
@@ -309,12 +311,18 @@ function renderNowPlaying() {
   const off = h("div", { className: "offtool" });
   const tools = h("div", { className: "tools" }, off, rate, next);
   void fillOffTool(off);
+  // "(16 of 21)" after the title in a queue (an album); with chapters after the chapter name.
+  const count = h("span", { className: "count" });
+  // Cover and facts scroll when space is short; progress, controls and toolbar stay docked at
+  // the bottom of the window.
+  main.classList.add("dock");
   main.append(
     h("div", { className: "np" }, cover, h("div", {},
       h("div", { className: "kind" }, kind),
-      h("div", { className: "title" }, it.title),
+      h("div", { className: "title" }, it.title, count),
       sub,
-      h("div", { className: "fmt" }, here),
+      h("div", { className: "fmt" }, here))),
+    h("div", { className: "dockbar" },
       bar, h("div", { className: "times" }, pos, rest),
       h("div", { className: "ctrl" },
         player.canStep() ? h("button", { onclick: () => void player.stepBack(), ariaLabel: byChapter ? t("Previous chapter") : t("Previous") }, icon('<path d="M6 5v14M18 6l-9 6 9 6z" fill="currentColor"/>')) : null,
@@ -323,9 +331,9 @@ function renderNowPlaying() {
         player.isLive() ? null : h("button", { className: "skip", onclick: () => player.seekBy(30000), ariaLabel: t("Forward {n} s", { n: 30 }) }, skipIcon(30, false)),
         player.canStep() ? h("button", { onclick: () => void player.stepForward(), ariaLabel: byChapter ? t("Next chapter") : t("Next") }, icon('<path d="M18 5v14M6 6l9 6-9 6z" fill="currentColor"/>')) : null),
       player.isLive() ? null : tools,
-      from)),
+      from),
   );
-  npRefs = { bar, fill, knob, pos, rest, play, from, rate, here, sub, next, off };
+  npRefs = { bar, fill, knob, pos, rest, play, from, rate, here, sub, next, off, count };
   updateNowPlaying();
 }
 
@@ -457,10 +465,13 @@ function updateNowPlaying() {
     npRefs.here.dataset.v = here;
     npRefs.here.replaceChildren(qualityRow(s.delivered ?? s.item?.quality, s.fromCache, s.transcoded ? s.item?.quality : null));
   }
+  const ci = player.chapterIndex();
   if (s.item?.chapters?.length) {
-    const c = t("Chapter {c}", { c: player.chapterLine() });
+    const c = `${player.chapter()} ${t("({i} of {n})", { i: ci + 1, n: s.item.chapters.length })}`;
     if (npRefs.sub.textContent !== c) npRefs.sub.textContent = c;
   }
+  const n = ci < 0 && s.queue.length > 1 ? ` ${t("({i} of {n})", { i: s.index + 1, n: s.queue.length })}` : "";
+  if (npRefs.count.textContent !== n) npRefs.count.textContent = n;
   npRefs.from.textContent = s.takenOver ? t("Taken over from {device} · {ago}", { device: s.takenOver.device, ago: ago(s.takenOver.at) }) : "";
 }
 

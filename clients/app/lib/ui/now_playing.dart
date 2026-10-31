@@ -56,16 +56,30 @@ class _PlaybackTab extends StatelessWidget {
         final cover = CoverThumb(image: it.image, label: it.subtitle.isEmpty ? it.title : it.subtitle, size: size);
         final out = sonos.output;
         final controls = Column(mainAxisSize: MainAxisSize.min, children: [
-          Text(it.title, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis,
+          // "(16 of 21)" after the title in a queue (an album), after the chapter name with chapters.
+          Text.rich(
+              TextSpan(text: it.title, children: [
+                if (player.chapters.isEmpty && player.queue.length > 1)
+                  TextSpan(text: ' ${_count(player.index, player.queue.length)}', style: TextStyle(color: k.muted, fontWeight: FontWeight.w600)),
+              ]),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
           const SizedBox(height: 4),
           Text(it.subtitle, textAlign: TextAlign.center, maxLines: 1,
               overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 15, color: k.muted, fontWeight: FontWeight.w600)),
-          if (player.chapterLine.isNotEmpty)
+          if (player.chapter.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: Text(t('Chapter {c}', {'c': player.chapterLine}), textAlign: TextAlign.center, maxLines: 1,
-                  overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+              child: Text.rich(
+                  TextSpan(text: player.chapter, children: [
+                    TextSpan(text: ' ${_count(player.chapterIndex, player.chapters.length)}', style: TextStyle(color: k.muted, fontWeight: FontWeight.w600)),
+                  ]),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
             ),
           const SizedBox(height: 12),
           _FormatChips(it),
@@ -110,6 +124,9 @@ class _PlaybackTab extends StatelessWidget {
 
 /// One line with what is played (the source; "Cache" first when it comes from there); when a
 /// Sonos speaker gets something else, that in brackets as the target.
+/// "(16 of 21)": position i (from 0) of n.
+String _count(int i, int n) => t('({i} of {n})', {'i': i + 1, 'n': n});
+
 class _FormatChips extends StatelessWidget {
   final Item it;
   const _FormatChips(this.it);
@@ -121,15 +138,19 @@ class _FormatChips extends StatelessWidget {
     if (src == null || src.codec.isEmpty) return const SizedBox.shrink();
     final out = sonos.output;
     final target = out == null ? null : src.forSonos(out.s2);
-    Widget chip(String s, {Color? color}) => Container(
+    Widget chip(String s, {Color? color, Color? bg}) => Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
-              border: Border.all(color: color ?? k.line, width: 1.5), borderRadius: BorderRadius.circular(6)),
+              color: bg, border: Border.all(color: color ?? k.line, width: 1.5), borderRadius: BorderRadius.circular(6)),
           child: Text(s, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color)),
         );
+    // Lossless from 24 bit red, at 16 bit yellow.
+    Widget fact(String c) => c == src.codecLabel && src.tier != null
+        ? (src.tier == 'hi' ? chip(c, color: k.bad, bg: k.badBg) : chip(c, color: k.warn, bg: k.warnBg))
+        : chip(c);
     return Wrap(alignment: WrapAlignment.center, crossAxisAlignment: WrapCrossAlignment.center, spacing: 6, runSpacing: 4, children: [
       if (out == null && player.fromCache) chip(t('Cache'), color: Theme.of(context).colorScheme.primary),
-      for (final c in src.chips) chip(c),
+      for (final c in src.chips) fact(c),
       if (target != null && !target.sameAs(src))
         Text(t('(Target: {q})', {'q': target.chips.join(' ')}), style: TextStyle(color: k.muted, fontSize: 13)),
     ]);

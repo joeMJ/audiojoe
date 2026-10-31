@@ -264,8 +264,13 @@ try {
   check("controls large enough for driving (≥ 64 px)", sizes.length >= 4 && Math.min(...sizes) >= 64, sizes.join(", "));
   const fits = await page.evaluate(() => document.querySelector("main").scrollHeight <= document.querySelector("main").clientHeight + 2);
   check("player fits the car screen without scrolling", fits);
+  const dock = await page.evaluate(() => {
+    const m = document.querySelector("main").getBoundingClientRect(), d = document.querySelector(".dockbar").getBoundingClientRect();
+    return Math.round(m.bottom - d.bottom);
+  });
+  check("progress, controls and toolbar docked at the bottom", dock >= 0 && dock <= 30, `${dock} px above the bottom`);
   // With chapters the right button goes to the next chapter.
-  const hasChapters = await page.evaluate(() => /Kapitel \d+\/\d+ · /.test(document.body.innerText));
+  const hasChapters = await page.evaluate(() => /\(\d+ von \d+\)$/.test(document.querySelector(".np .sub")?.innerText ?? ""));
   if (hasChapters) console.log("  episode has chapters: " + await page.evaluate(() => document.querySelector(".np .sub")?.innerText));
   const tb = await page.evaluate(() => [...document.querySelector(".tools").children].map((c) => ({ t: c.innerText.trim(), w: c.offsetWidth, h: c.offsetHeight,
     inner: c.firstElementChild ? c.firstElementChild.offsetWidth : c.offsetWidth })));

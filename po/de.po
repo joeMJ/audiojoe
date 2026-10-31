@@ -546,3 +546,6 @@ msgstr "{n} Positionen warten auf den Server"
 
 msgid "1 position waiting for the server"
 msgstr "1 Position wartet auf den Server"
+
+msgid "({i} of {n})"
+msgstr "({i} von {n})"

@@ -20,6 +20,12 @@ class Quality {
   String get _codec => codec.startsWith('pcm_') ? 'PCM' : codec.toUpperCase();
   bool get _lossless => codec == 'flac' || codec == 'alac' || codec.startsWith('pcm_');
 
+  /// Codec label of the chips ("FLAC", "PCM", "MP3").
+  String get codecLabel => _codec;
+
+  /// Lossless level for the codec chip: 'hi' from 24 bit (red), 'cd' at 16 bit (yellow), else null.
+  String? get tier => !_lossless || bitDepth == null ? null : bitDepth! >= 24 ? 'hi' : bitDepth == 16 ? 'cd' : null;
+
   String get _rate => '${(sampleRate! / 1000).toStringAsFixed(sampleRate! % 1000 == 0 ? 0 : 1)} kHz';
 
   /// Separate facts for chips: ["24 Bit", "FLAC", "96 kHz", "Stereo"].

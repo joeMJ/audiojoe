@@ -3,6 +3,7 @@
 const deStrings = <String, String>{
   "(Source: {q})": "(Quelle: {q})",
   "(Target: {q})": "(Ziel: {q})",
+  "({i} of {n})": "({i} von {n})",
   "1 album": "1 Album",
   "1 position waiting for the server": "1 Position wartet auf den Server",
   "API key": "API-Schlüssel",
