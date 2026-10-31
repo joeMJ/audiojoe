@@ -385,6 +385,16 @@ if os.environ.get("ABS_TEST_FILE"):
     lib = libs["items"][0]["key"].split(":")[2]
     s, books, _ = call("GET", f"/api/v1/sources/{aid}/browse?parent={lib}&limit=20", token=A)
     check("books listed", s == 200 and books["items"], f"{len(books.get('items', []))} books")
+    s, libv, _ = call("GET", f"/api/v1/sources/{aid}/books?parent={lib}", token=A)
+    ser = [x for x in libv.get("series", []) if x["total"] > 1] if s == 200 else []
+    vols = []
+    if ser:
+        by_key = {x["key"]: x for x in libv["books"]}
+        vols = [by_key[k]["volume"] for k in ser[0]["books"]]
+    check("book library: authors, series in volume order", s == 200 and libv["authors"] and ser and vols == list(range(1, len(vols) + 1))
+          and all("author" in x and "added" in x for x in libv["books"]),
+          f"{len(libv.get('books', []))} books, {len(libv.get('authors', []))} authors, {len(libv.get('series', []))} series; "
+          f"{ser[0]['name'] if ser else ''}: {[by_key[k]['title'][:18] for k in ser[0]['books'][:3]] if ser else ''}")
     multi = None
     for bk in books["items"]:
         s, meta, _ = call("GET", f"/api/v1/items/{bk['key']}", token=A)

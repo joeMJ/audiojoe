@@ -390,3 +390,6 @@ msgstr "{n} Titel"
 
 msgid "Play album"
 msgstr "Album abspielen"
+
+msgid "Next item"
+msgstr "Nächster"

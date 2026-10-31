@@ -22,9 +22,6 @@ export interface PlayerState {
   /** Set when the start position came from another device. */
   takenOver?: { device: string; at: string };
   rate: number;
-  /** Sleep timer: pause at this time (ms since epoch), or at the end of the item. */
-  sleepAt?: number;
-  sleepAtEnd?: boolean;
 }
 
 const audio = new Audio();
@@ -147,27 +144,6 @@ export function nextRate() {
   notify();
 }
 
-/** Sleep timer steps for one button in the car: off → 15 → 30 → 60 min → end of item → off. */
-export function nextSleep() {
-  const left = state.sleepAt ? (state.sleepAt - Date.now()) / 60000 : 0;
-  const steps = [15, 30, 60];
-  if (state.sleepAtEnd) state.sleepAtEnd = false;
-  else if (!state.sleepAt) state.sleepAt = Date.now() + 15 * 60000;
-  else {
-    const next = steps.find((m) => m > Math.ceil(left));
-    state.sleepAt = next ? Date.now() + next * 60000 : undefined;
-    state.sleepAtEnd = !next;
-  }
-  notify();
-}
-
-function checkSleep() {
-  if (state.sleepAt && Date.now() >= state.sleepAt && !audio.paused) {
-    state.sleepAt = undefined;
-    audio.pause();
-  }
-}
-
 export async function skip(d: 1 | -1) {
   const i = state.index + d;
   if (i < 0 || i >= state.queue.length) return;
@@ -228,17 +204,9 @@ audio.addEventListener("ended", async () => {
     return;
   }
   await persist(true);
-  if (state.sleepAtEnd) {
-    state.sleepAtEnd = false;
-    notify();
-    return;
-  }
   if (state.index + 1 < state.queue.length) await skip(1);
 });
-audio.addEventListener("timeupdate", () => {
-  checkSleep();
-  notify();
-});
+audio.addEventListener("timeupdate", () => notify());
 audio.addEventListener("error", () => notify());
 document.addEventListener("visibilitychange", () => document.hidden && void persist());
 

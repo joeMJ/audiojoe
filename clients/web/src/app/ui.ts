@@ -147,7 +147,7 @@ export function refresh(kind: "player" | "data" | "offline") {
 let npTab: "play" | "details" | "chapters" = "play";
 let npKey = "";
 let npRefs: { bar: HTMLElement; fill: HTMLElement; knob: HTMLElement; pos: HTMLElement; rest: HTMLElement; play: HTMLElement;
-              from: HTMLElement; rate: HTMLElement; here: HTMLElement; sub: HTMLElement; sleep: HTMLElement; off: HTMLElement } | null = null;
+              from: HTMLElement; rate: HTMLElement; here: HTMLElement; sub: HTMLElement; next: HTMLButtonElement; off: HTMLElement } | null = null;
 
 /** Offline field of the player toolbar: save button, then live progress, then "in cache". */
 async function fillOffTool(box: HTMLElement) {
@@ -201,13 +201,15 @@ function renderNowPlaying() {
   const pos = h("span"), rest = h("span");
   const play = h("button", { className: "play", onclick: () => player.toggle() });
   const rate = h("button", { className: "big sec", onclick: () => player.nextRate() });
-  const sleep = h("button", { className: "big sec", onclick: () => player.nextSleep() });
+  // In the car: offline state left, speed, next item of the queue right (no sleep timer).
+  const next = h("button", { className: "big sec next", onclick: () => void player.skip(1) }, t("Next item"),
+    icon('<path d="M18 5v14M6 6l9 6-9 6z" fill="currentColor"/>')) as HTMLButtonElement;
   const here = h("div");
   const from = h("div", { className: "from" });
   const kind = it.kind === "episode" ? `Podcast · ${it.subtitle ?? ""}` : it.subtitle ?? "";
   const sub = h("div", { className: "sub" }, it.kind === "episode" ? it.published?.slice(0, 10) ?? "" : it.kind === "book" ? "" : it.subtitle ?? "");
   const off = h("div", { className: "offtool" });
-  const tools = h("div", { className: "tools" }, sleep, rate, off);
+  const tools = h("div", { className: "tools" }, off, rate, next);
   void fillOffTool(off);
   main.append(
     h("div", { className: "np" }, cover, h("div", {},
@@ -225,7 +227,7 @@ function renderNowPlaying() {
       player.isLive() ? null : tools,
       from)),
   );
-  npRefs = { bar, fill, knob, pos, rest, play, from, rate, here, sub, sleep, off };
+  npRefs = { bar, fill, knob, pos, rest, play, from, rate, here, sub, next, off };
   updateNowPlaying();
 }
 
@@ -349,9 +351,7 @@ function updateNowPlaying() {
   npRefs.bar.style.visibility = player.isLive() ? "hidden" : "";
   npRefs.play.textContent = s.playing ? "❚❚" : "▶";
   npRefs.rate.textContent = `${t("Speed")} ${s.rate.toLocaleString()}×`;
-  const left = s.sleepAt ? Math.ceil((s.sleepAt - Date.now()) / 60000) : 0;
-  npRefs.sleep.textContent = s.sleepAtEnd ? `☾ ${t("End of item")}` : s.sleepAt ? `☾ ${t("{n} min", { n: left })}` : `☾ ${t("Sleep timer")}`;
-  npRefs.sleep.className = s.sleepAt || s.sleepAtEnd ? "big" : "big sec";
+  npRefs.next.disabled = s.index + 1 >= s.queue.length;
   const suffix = s.transcoded ? t("converted") : s.fromCache ? t("from cache") : t("unchanged");
   const here = JSON.stringify([s.delivered, suffix]);
   if (npRefs.here.dataset.v !== here) {

@@ -69,7 +69,12 @@ h2 { margin: 0 0 10px; font-size: 21px; }
 .tools .big { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 6px; font-size: 14px; }
 .tools .big.sec { background: var(--panel); }
 .tools .offtool { flex: 1; min-width: 0; display: flex; }
-.tools .offtool > * { flex: 1; }
+.tools .offtool > *, .tools .offtool > .badge.slot { flex: 1; min-width: 0; }
+.tools .next { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.tools .next svg { width: 20px; height: 20px; flex: none; }
+.tools .next:disabled { opacity: .4; }
+/* Equal columns whatever the padding of the fields. */
+.tools { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; }
 .tools .badge { height: var(--touch); display: flex; align-items: center; justify-content: center; border-radius: 12px;
                 font-size: 14px; padding: 0 6px; }
 

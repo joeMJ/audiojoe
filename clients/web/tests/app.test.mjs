@@ -166,10 +166,12 @@ try {
   check("controls large enough for driving (≥ 64 px)", sizes.length >= 4 && Math.min(...sizes) >= 64, sizes.join(", "));
   const fits = await page.evaluate(() => document.querySelector("main").scrollHeight <= document.querySelector("main").clientHeight + 2);
   check("player fits the car screen without scrolling", fits);
-  await clickText("☾ Schlaf-Timer");
-  check("sleep timer set", /15 min/.test(await page.evaluate(() => document.querySelector(".tools .big")?.innerText)));
-  await clickText("☾ 15 min"); await clickText("☾ 30 min"); await clickText("☾ 60 min"); await clickText("☾ Ende des Titels");
-  check("sleep timer cycles back to off", /Schlaf-Timer/.test(await page.evaluate(() => document.querySelector(".tools .big")?.innerText)));
+  const tb = await page.evaluate(() => [...document.querySelector(".tools").children].map((c) => ({ t: c.innerText.trim(), w: c.offsetWidth, h: c.offsetHeight,
+    inner: c.firstElementChild ? c.firstElementChild.offsetWidth : c.offsetWidth })));
+  check("car toolbar: offline left, speed, next right; no sleep timer",
+    tb.length === 3 && /Cache|Offline|lädt|wartet/.test(tb[0].t) && /Tempo/.test(tb[1].t) && /Nächster/.test(tb[2].t) && !tb.some((x) => /Schlaf/.test(x.t)),
+    tb.map((x) => x.t).join(" | "));
+  check("offline state fills its field", tb[0].inner >= tb[0].w - 2 && Math.abs(tb[0].w - tb[1].w) <= 2, `${tb[0].inner}/${tb[0].w} vs ${tb[1].w}`);
   await clickText("Details");
   const notes = await page.evaluate(() => {
     const n = document.querySelector(".notes");
