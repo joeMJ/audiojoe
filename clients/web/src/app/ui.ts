@@ -99,7 +99,7 @@ export function renderTop() {
     ? h("div", { className: "pill warn", id: "sync" }, t("{n} waiting to sync", { n: pendingCount }))
     : h("div", { className: "pill", id: "sync" }, t("Positions synced"));
   const moon = themeButton();
-  top.replaceChildren(h("div", { className: "logo" }, "audiojoe"), net, sync, moon);
+  top.replaceChildren(h("div", { className: "logo" }, h("img", { src: "/icon-192.png", alt: "" }), "audiojoe"), net, sync, moon);
   void offlineUsage().then((u) => u && moon.before(h("div", { className: "pill" }, `${t("Offline")} ${u}`)));
 }
 
@@ -287,7 +287,7 @@ function openDetails(base: Item) {
       it.chapters?.length ? t("{n} chapters", { n: it.chapters.length }) : "", qualityBadge(it.quality)].filter(Boolean) as string[];
     const off = await offlineEntry(it.key);
     const parts: (HTMLElement | null)[] = [
-      h("div", { className: "head" }, h("div", { className: "cover" }, thumb({ title: it.subtitle || it.title, image: it.image ?? base.image })),
+      h("div", { className: "head" }, h("div", { className: "art" }, thumb({ title: it.subtitle || it.title, image: it.image ?? base.image })),
         h("div", {}, h("div", { className: "title" }, it.title), h("div", { className: "sub" }, it.subtitle ?? ""),
           it.series ? h("div", { className: "sub" }, it.series) : null,
           h("div", { className: "facts" }, ...facts.map((f) => h("span", { className: "badge" }, f))),
@@ -319,7 +319,7 @@ function albumHead(album: Item, tracks: Item[], buttons: HTMLElement[]) {
     if (a.notes) desc.replaceChildren(notesView(a.notes));
   }).catch(() => undefined);
   return h("div", { className: "details album" },
-    h("div", { className: "head" }, h("div", { className: "cover" }, thumb(album)),
+    h("div", { className: "head" }, h("div", { className: "art" }, thumb(album)),
       h("div", {}, h("div", { className: "title" }, album.title), h("div", { className: "sub" }, album.subtitle ?? ""), facts,
         h("div", { className: "chips", style: "margin-top:12px" }, ...buttons))),
     desc);

@@ -141,6 +141,11 @@ try {
     buttons: [...document.querySelectorAll(".details.page .big")].map((b) => b.innerText),
     playing: [...document.querySelectorAll("audio")].some((a) => !a.paused) }));
   await shot("03b-details-folge");
+  const cover = await page.evaluate(() => { const c = document.querySelector(".details.page .art .ic");
+    return [c?.offsetWidth, c?.offsetHeight, getComputedStyle(c.parentElement).backgroundImage]; });
+  check("details cover square, not squeezed, no frame", cover[0] === 200 && cover[1] === 200 && cover[2] === "none", cover.join(" × "));
+  const logo = await page.evaluate(() => { const i = document.querySelector(".top .logo img"); return i && i.complete && i.naturalWidth > 0 ? i.offsetWidth : 0; });
+  check("app icon before the name", logo >= 30, `${logo} px`);
   check("row tap opens details without playing", det.title?.length > 3 && det.notes > 40 && det.buttons.some((b) => /Abspielen|Weiter/.test(b)) && !det.playing,
     `${det.notes} chars, buttons ${det.buttons.join("/")}, playing ${det.playing}`);
   await clickText(`← Zurück`);
