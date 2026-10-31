@@ -113,15 +113,28 @@ class Downloads extends ChangeNotifier {
     final parts = it != null && it.multiPart ? it.parts : null;
     final total = parts?.fold<int>(0, (s, p) => s + p.durationMs) ?? 1;
     var done = 0.0, bytes = 0;
+    var shown = DateTime.now();
     await _dir.create(recursive: true);
     for (final p in parts ?? const <Part?>[null]) {
       final share = p == null ? 1.0 : p.durationMs / total;
+      // Parts finished before (restart, retry) are kept.
+      final have = file(e.key, p?.index);
+      if (p != null && await have.exists()) {
+        bytes += await have.length();
+        done += share;
+        continue;
+      }
       try {
         final n = await _download(api.streamUri(e.key, part: p?.index), file(e.key, p?.index), (b, t) {
           e
             ..progress = done + (t > 0 ? b / t * share : 0)
             ..bytes = bytes + b;
-          notifyListeners();
+          // The list reads the store: write it there, at most twice a second.
+          // (Not after a removal: that would bring the entry back.)
+          if (DateTime.now().difference(shown).inMilliseconds >= 500 && Stores.offline.get(e.key) != null) {
+            shown = DateTime.now();
+            _save(e);
+          }
         });
         bytes += n;
         done += share;

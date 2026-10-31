@@ -131,6 +131,19 @@ try {
     }, v.replace(/\u00ad/g, "")));
   }
   check("moon on one line with the first row in every view", rows.every((x) => Math.abs(+x.split(" ").pop()) < 1), rows.join(", "));
+  // Scrolling a long list: the moon goes up with the first row, it does not float over the list.
+  await clickText("Podcasts", "nav"); await sleep(2000);
+  const sc = await page.evaluate(async () => {
+    const m = document.querySelector("main"), moon = document.querySelector(".shell > .theme");
+    const row = () => (m.firstElementChild.matches(".chips") ? m.firstElementChild.firstElementChild : m.firstElementChild).getBoundingClientRect().top;
+    m.scrollTop = 30; await new Promise((r) => setTimeout(r, 200));
+    const d30 = Math.round(moon.getBoundingClientRect().top - row());
+    m.scrollTop = 400; await new Promise((r) => setTimeout(r, 200));
+    const hidden = getComputedStyle(moon).visibility === "hidden" || m.scrollHeight - m.clientHeight < 400;
+    m.scrollTop = 0; await new Promise((r) => setTimeout(r, 200));
+    return { d30, hidden, back: Math.round(moon.getBoundingClientRect().top - row()) };
+  });
+  check("moon scrolls with the first row, gone further down", sc.d30 === 0 && sc.hidden && sc.back === 0, JSON.stringify(sc));
   await clickText("Jetzt läuft", "nav"); await sleep(500);
 
   // ------------------------------------------------------------ podcast + offline

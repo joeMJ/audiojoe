@@ -456,7 +456,9 @@ class OfflineView extends StatelessWidget {
               ItemRow(
                 leading: CoverThumb(image: coverOf(e.key), label: e.title),
                 title: e.title,
-                subtitle: [e.subtitle, if (e.bytes > 0) bytes(e.bytes), e.quality?.badge ?? ''].where((s) => s.isNotEmpty).join(' · '),
+                subtitle: e.status == 'error' && (e.error ?? '').isNotEmpty
+                    ? e.error!
+                    : [e.subtitle, if (e.bytes > 0) bytes(e.bytes), e.quality?.badge ?? ''].where((s) => s.isNotEmpty).join(' · '),
                 progress: e.status == 'loading' ? e.progress : null,
                 trailing: [
                   Badge2(

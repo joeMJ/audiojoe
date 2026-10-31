@@ -85,7 +85,17 @@ export function mountShell(root: HTMLElement, logout: () => void) {
     (nav.lastElementChild as HTMLElement).dataset.v = v;
   }
   main = h("main");
-  root.replaceChildren(h("div", { className: "shell" }, top, nav, main, themeButton()));
+  const moon = themeButton();
+  // The moon belongs to the first line: it scrolls away with the content and is cut off at
+  // the top bar instead of floating over the list.
+  const follow = () => {
+    const y = main.scrollTop, gap = main.getBoundingClientRect().top - moon.offsetParent!.getBoundingClientRect().top;
+    moon.style.transform = y ? `translateY(${-y}px)` : "";
+    moon.style.clipPath = y ? `inset(${Math.max(0, gap - (moon.offsetTop - y))}px 0 0 0)` : "";
+    moon.style.visibility = y > moon.offsetTop - gap + moon.offsetHeight ? "hidden" : "";
+  };
+  main.addEventListener("scroll", follow, { passive: true });
+  root.replaceChildren(h("div", { className: "shell" }, top, nav, main, moon));
   renderTop();
   show(view);
 }
