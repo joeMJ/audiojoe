@@ -2,7 +2,7 @@
 //! cover URLs. The token stays on the server.
 //!
 //! Item keys: `plex:<source>:<ratingKey>`; music sections are browsed as `s<sectionKey>`.
-//! Untested against a real server so far (no test instance yet).
+//! Tested against Plex Media Server 1.43 (tools/dev/e2e.py, PLEX_URL).
 
 use std::time::Duration;
 

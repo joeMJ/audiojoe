@@ -5,7 +5,9 @@
 
 CREDENTIALS_JSON: {"username": ..., "password": ..., "totp_secret": ...} of a test user.
 Optional environment: JELLYFIN_URL, JELLYFIN_API_KEY (adds and tests a Jellyfin source),
-E2E_FEED (podcast feed URL, default: Lage der Nation).
+EMBY_TEST_FILE (JSON with url and api_key), PLEX_URL and PLEX_TOKEN (adds and tests these
+sources; a test server should hold at least one hi-res FLAC), E2E_FEED (podcast feed URL,
+default: Lage der Nation).
 The rate-limit check runs last because it blocks logins from this address for 15 minutes.
 """
 
@@ -274,6 +276,49 @@ if os.environ.get("JELLYFIN_URL"):
     check("remove jellyfin source", s == 200)
 else:
     print("  (JELLYFIN_URL not set – Jellyfin not tested)")
+
+# ------------------------------------------------------------------ emby, plex
+def media_server(kind, url, key):
+    s, b, _ = call("POST", "/api/v1/sources", {"kind": kind, "name": f"{kind} (e2e)", "url": url, "api_key": key}, token=A)
+    check(f"add {kind} source", s == 200, f"version {b.get('version')}" if s == 200 else str(b))
+    if s != 200:
+        return
+    sid = b["id"]
+    tracks, todo = [], [None]
+    while todo and len(tracks) < 20:
+        parent = todo.pop(0)
+        s, b, _ = call("GET", f"/api/v1/sources/{sid}/browse" + (f"?parent={parent}" if parent else ""), token=A)
+        for it in b.get("items", []) if s == 200 else []:
+            (tracks.append(it) if it["kind"] == "track" else todo.append(it["key"].split(":", 2)[2]))
+    check(f"{kind} tracks found", bool(tracks), f"{len(tracks)} tracks")
+    hires = None
+    for tr in tracks:
+        s, item, _ = call("GET", f"/api/v1/items/{tr['key']}", token=A)
+        q = item.get("quality") or {} if s == 200 else {}
+        if q.get("codec") == "flac" and (q.get("sample_rate") or 0) > 48000:
+            hires = tr
+    if tracks:
+        s, data, _ = call("GET", f"/api/v1/stream/{tracks[0]['key']}", token=A, headers={"range": "bytes=1000-1999"}, raw=True)
+        check(f"{kind} stream with Range: 206", s == 206 and len(data) == 1000, f"{s}, {len(data)} B")
+    if hires:
+        req = urllib.request.Request(BASE + f"/api/v1/stream/{hires['key']}?profile=tesla-offline", headers={"authorization": "Bearer " + A})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            head = r.read(65536)
+            qh = json.loads(r.headers.get("x-audiojoe-quality"))
+        check(f"{kind} hi-res FLAC → 48 kHz", head[:4] == b"fLaC" and qh["delivered"]["sample_rate"] == 48000)
+    s, _, _ = call("DELETE", f"/api/v1/sources/{sid}", token=A)
+    check(f"remove {kind} source", s == 200)
+
+
+if os.environ.get("EMBY_TEST_FILE"):
+    em = json.load(open(os.environ["EMBY_TEST_FILE"]))
+    media_server("emby", em["url"], em["api_key"])
+else:
+    print("  (EMBY_TEST_FILE not set – Emby not tested)")
+if os.environ.get("PLEX_URL"):
+    media_server("plex", os.environ["PLEX_URL"], os.environ.get("PLEX_TOKEN", "unclaimed"))
+else:
+    print("  (PLEX_URL not set – Plex not tested)")
 
 # ------------------------------------------------------------------ audiobookshelf
 if os.environ.get("ABS_TEST_FILE"):

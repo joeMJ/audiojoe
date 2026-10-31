@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// Jellyfin and Emby (Jellyfin is a fork of Emby; the API is largely the same).
-/// Emby support is untested against a real server so far.
+/// Emby: tested against Emby Server 4.10 (tools/dev/e2e.py, EMBY_TEST_FILE).
 #[derive(Clone)]
 pub struct Jellyfin {
     pub source_id: i64,
