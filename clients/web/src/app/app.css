@@ -64,7 +64,10 @@ h2 { margin: 0 0 10px; font-size: 21px; }
          align-items: center; }
 .tools .big { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 6px; font-size: 14px; }
 .tools .big.sec { background: var(--panel); }
-.tools .badge { flex: 1; text-align: center; padding: 12px 8px; font-size: 14px; }
+.tools .offtool { flex: 1; min-width: 0; display: flex; }
+.tools .offtool > * { flex: 1; }
+.tools .badge { height: var(--touch); display: flex; align-items: center; justify-content: center; border-radius: 12px;
+                font-size: 14px; padding: 0 6px; }
 
 /* Details and chapters */
 .details .head { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 14px; }

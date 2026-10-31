@@ -55,7 +55,7 @@ class _ShellState extends State<Shell> {
                 leading: IconButton(tooltip: t('Close'), onPressed: () => Navigator.pop(context), icon: const Icon(Icons.keyboard_arrow_down, size: 32)),
                 actions: const [StatusPills(), SizedBox(width: 8)],
               ),
-              body: const NowPlayingView(),
+              body: const SafeArea(top: false, child: NowPlayingView()),
             )));
   }
 

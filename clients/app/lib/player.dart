@@ -78,7 +78,8 @@ class Player extends ChangeNotifier {
     if (full != null) queue[i] = full;
     index = i;
     await _load(queue[i]);
-    await audio.play();
+    // just_audio's play() completes only when playback stops: do not wait for it.
+    unawaited(audio.play());
   }
 
   AudioSource _source(Item it, int? part) {
@@ -169,7 +170,8 @@ class Player extends ChangeNotifier {
     final full = await meta(queue[i].key);
     if (full != null) queue[i] = full;
     await _load(queue[i]);
-    await audio.play();
+    // just_audio's play() completes only when playback stops: do not wait for it.
+    unawaited(audio.play());
   }
 
   Future<void> _persist({bool finished = false}) async {

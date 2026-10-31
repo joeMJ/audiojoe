@@ -49,7 +49,7 @@ class _PlaybackTab extends StatelessWidget {
   Widget build(BuildContext context) => LayoutBuilder(builder: (context, c) {
         final k = context.tok;
         final wide = c.maxWidth >= 720;
-        final size = wide ? 300.0 : [c.maxWidth - 32, c.maxHeight * 0.4, 420.0].reduce((a, b) => a < b ? a : b);
+        final size = wide ? 300.0 : [c.maxWidth - 32, c.maxHeight * 0.36, 420.0].reduce((a, b) => a < b ? a : b);
         final cover = CoverThumb(image: it.image, label: it.subtitle.isEmpty ? it.title : it.subtitle, size: size);
         final out = sonos.output;
         final controls = Column(mainAxisSize: MainAxisSize.min, children: [

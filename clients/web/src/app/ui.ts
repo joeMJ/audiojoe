@@ -116,6 +116,7 @@ export function refresh(kind: "player" | "data" | "offline") {
   if (kind === "player" && view === "np") updateNowPlaying();
   else if (kind === "data" && view === "cont") show("cont");
   else if (kind === "offline" && view === "off") show("off");
+  else if (kind === "offline" && view === "np" && npRefs) void fillOffTool(npRefs.off);
 }
 
 // ---------------------------------------------------------------- now playing
@@ -124,7 +125,21 @@ export function refresh(kind: "player" | "data" | "offline") {
 let npTab: "play" | "details" | "chapters" = "play";
 let npKey = "";
 let npRefs: { bar: HTMLElement; fill: HTMLElement; knob: HTMLElement; pos: HTMLElement; rest: HTMLElement; play: HTMLElement;
-              from: HTMLElement; rate: HTMLElement; here: HTMLElement; sub: HTMLElement; sleep: HTMLElement } | null = null;
+              from: HTMLElement; rate: HTMLElement; here: HTMLElement; sub: HTMLElement; sleep: HTMLElement; off: HTMLElement } | null = null;
+
+/** Offline field of the player toolbar: save button, then live progress, then "in cache". */
+async function fillOffTool(box: HTMLElement) {
+  const it = player.state.item;
+  if (!it || player.isLive()) return box.replaceChildren();
+  const off = await offlineEntry(it.key);
+  const key = off ? `${off.status}:${Math.round((off.progress ?? 0) * 100)}` : "none";
+  if (box.dataset.v === key) return;
+  box.dataset.v = key;
+  box.replaceChildren(offBadge(off) ?? h("button", { className: "big sec", onclick: (ev: Event) => {
+    (ev.target as HTMLButtonElement).disabled = true;
+    void addOffline([it]);
+  } }, t("Save offline")));
+}
 
 const skipIcon = (n: number, back: boolean) => icon(
   (back ? '<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M5 3.5v4h4"/>' : '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19 3.5v4h-4"/>') +
@@ -169,14 +184,9 @@ function renderNowPlaying() {
   const from = h("div", { className: "from" });
   const kind = it.kind === "episode" ? `Podcast · ${it.subtitle ?? ""}` : it.subtitle ?? "";
   const sub = h("div", { className: "sub" }, it.kind === "episode" ? it.published?.slice(0, 10) ?? "" : it.kind === "book" ? "" : it.subtitle ?? "");
-  const tools = h("div", { className: "tools" }, sleep, rate);
-  void offlineEntry(it.key).then((off) => {
-    if (player.isLive()) return;
-    tools.append(offBadge(off) ?? h("button", { className: "big sec", onclick: (ev: Event) => {
-      (ev.target as HTMLButtonElement).disabled = true;
-      void addOffline([it]);
-    } }, t("Save offline")));
-  });
+  const off = h("div", { className: "offtool" });
+  const tools = h("div", { className: "tools" }, sleep, rate, off);
+  void fillOffTool(off);
   main.append(
     h("div", { className: "np" }, cover, h("div", {},
       h("div", { className: "kind" }, kind),
@@ -193,7 +203,7 @@ function renderNowPlaying() {
       player.isLive() ? null : tools,
       from)),
   );
-  npRefs = { bar, fill, knob, pos, rest, play, from, rate, here, sub, sleep };
+  npRefs = { bar, fill, knob, pos, rest, play, from, rate, here, sub, sleep, off };
   updateNowPlaying();
 }
 
