@@ -511,9 +511,11 @@ async function renderRadio() {
   const input = h("input", { className: "search", value: radioQuery, placeholder: t("Search stations"), enterKeyHint: "search" }) as HTMLInputElement;
   const go = () => ((radioQuery = input.value.trim()), show("lib"));
   input.addEventListener("keydown", (e) => (e as KeyboardEvent).key === "Enter" && go());
-  main.append(h("div", { className: "chips" },
+  // Magnifier as large as the moon, right-aligned just left of it.
+  main.append(h("div", { className: "chips searchrow" },
     h("button", { className: "chip", onclick: () => ((libStack = []), (radioQuery = ""), show("lib")) }, `← ${t("Back")}`),
-    input, h("button", { className: "big", onclick: go }, t("Search"))));
+    input, h("button", { className: "lens", onclick: go, ariaLabel: t("Search"), title: t("Search") },
+      icon('<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/>'))));
   try {
     const list = radioQuery
       ? await api<Item[]>("GET", `/radio/search?q=${encodeURIComponent(radioQuery)}`)

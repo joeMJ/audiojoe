@@ -8,7 +8,8 @@ body { background: var(--bg); color: var(--text); font: 16px/1.3 system-ui, "Seg
 button { font: inherit; color: inherit; cursor: pointer; }
 #app { height: 100%; }
 
-.shell { height: 100%; display: grid; grid-template-columns: 92px 1fr; grid-template-rows: 52px 1fr; }
+.shell { height: 100%; display: grid; grid-template-columns: 92px 1fr; grid-template-rows: var(--bar) 1fr;
+         --bar: 52px; --gap-top: 14px; }
 .top { grid-column: 1 / 3; display: flex; align-items: center; gap: 8px; padding: 0 12px;
        background: var(--panel); border-bottom: 2px solid var(--line); }
 .logo { font-weight: 800; font-size: 20px; margin-right: auto; display: flex; align-items: center; gap: 8px; }
@@ -20,7 +21,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .pill.warn { color: var(--warn); background: var(--warnBg); }
 /* Moon below the top bar, top right over the content; every view leaves room there. */
 .shell { position: relative; }
-.shell > .theme { position: absolute; top: 60px; right: 22px; width: 48px; height: 48px; display: flex; align-items: center;
+.shell > .theme { position: absolute; top: calc(var(--bar) + var(--gap-top)); right: 22px; width: 48px; height: 48px; display: flex; align-items: center;
                   justify-content: center; border: 2px solid var(--line); border-radius: 12px; background: var(--panel);
                   color: var(--muted); z-index: 2; }
 .shell > .theme.on { background: var(--accent); border-color: var(--accent); color: var(--accentText); }
@@ -37,7 +38,7 @@ nav button { flex: 1; max-height: 92px; min-height: 0; border: 0; border-radius:
 nav button svg { width: 28px; height: 28px; flex: none; }
 nav button.active { background: var(--accent); color: var(--accentText); }
 
-main { padding: 14px 16px; overflow-y: auto; overscroll-behavior: contain; }
+main { padding: var(--gap-top) 16px; overflow-y: auto; overscroll-behavior: contain; }
 h2 { margin: 0 0 10px; font-size: 21px; }
 .empty { color: var(--muted); font-size: 17px; padding: 20px 0; }
 
@@ -149,5 +150,10 @@ h2 { margin: 0 0 10px; font-size: 21px; }
 .login .big { width: 100%; margin-top: 20px; font-size: 18px; }
 .login .err { color: var(--bad); font-weight: 700; margin-top: 12px; min-height: 1.3em; }
 
+/* Room on the right for the moon, which sits at the same height. */
+.searchrow { padding-right: 64px; }
+.lens { width: 48px; height: 48px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 12px;
+        border: 2px solid var(--accent); background: var(--accent); color: var(--accentText); }
+.lens svg { width: 26px; height: 26px; }
 .search { flex: 1; min-width: 0; height: 48px; border-radius: 12px; border: 2px solid var(--line); background: var(--panel);
           color: var(--text); font: inherit; font-size: 17px; padding: 0 12px; user-select: text; }

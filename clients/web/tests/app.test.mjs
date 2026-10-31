@@ -105,6 +105,31 @@ try {
       && kept.on && kept.bg === on.bg && !back.on && back.bg === off.bg,
     `${off.bg} → ${on.bg}, reload ${kept.bg}, back ${back.bg}`);
   check("moon below the top bar, top right", !off.inBar && off.bar === 52 && off.top >= 52 && off.right < 60, `bar ${off.bar}, top ${off.top}, right ${off.right}`);
+  // Radio search: magnifier as large as the moon, right-aligned just left of it, no overlap.
+  await clickText("Musik", "nav"); await sleep(1500);
+  await page.evaluate(() => [...document.querySelectorAll("main .item")].find((r) => r.innerText.includes("Internetradio")).click());
+  await page.waitForSelector(".lens", { timeout: 15000 });
+  const rs = await page.evaluate(() => {
+    const l = document.querySelector(".lens").getBoundingClientRect(), m = document.querySelector(".shell > .theme").getBoundingClientRect();
+    return { lw: l.width, lh: l.height, mw: m.width, mh: m.height, gap: m.left - l.right, dy: Math.abs(l.top - m.top), overlap: l.right > m.left && l.bottom > m.top && l.top < m.bottom,
+             text: document.querySelector(".lens").innerText.trim() };
+  });
+  await shot("00b-radiosuche");
+  check("radio search: magnifier like the moon, left of it", rs.lw === rs.mw && rs.lh === rs.mh && !rs.overlap && rs.gap >= 4 && rs.gap <= 24 && rs.dy < 1 && rs.text === "",
+    `lens ${rs.lw}×${rs.lh}, moon ${rs.mw}×${rs.mh}, gap ${rs.gap}, height offset ${rs.dy}`);
+  // The moon on one line with the first row of every view.
+  const rows = [];
+  for (const v of ["Jetzt läuft", "Weiterhören", "Podcasts", "Hörbücher", "Musik", "Offline"]) {
+    await clickText(v, "nav"); await sleep(1500);
+    rows.push(await page.evaluate((name) => {
+      const m = document.querySelector(".shell > .theme").getBoundingClientRect();
+      const f = document.querySelector("main").firstElementChild;
+      const r = (f.matches(".chips") ? f.firstElementChild : f).getBoundingClientRect();
+      return `${name} ${Math.round(r.top - m.top)}`;
+    }, v.replace(/\u00ad/g, "")));
+  }
+  check("moon on one line with the first row in every view", rows.every((x) => Math.abs(+x.split(" ").pop()) < 1), rows.join(", "));
+  await clickText("Jetzt läuft", "nav"); await sleep(500);
 
   // ------------------------------------------------------------ podcast + offline
   const sub = await call("POST", "/podcasts", { feed_url: FEED });
