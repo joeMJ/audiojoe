@@ -85,6 +85,8 @@ try {
   await page.click("form button");
   await waitText("Server erreichbar");
   check("signed in, server reachable", true);
+  const pillW = () => page.evaluate(() => ["net", "sync"].map((id) => document.getElementById(id)?.getBoundingClientRect().width ?? 0).join("/"));
+  const pillsOnline = await pillW();
   const cookie = (await page.cookies()).find((c) => c.name === "aj_session");
   check("session cookie HttpOnly + Secure", cookie?.httpOnly && cookie?.secure);
 
@@ -330,6 +332,34 @@ try {
         await page.waitForFunction((t) => [...document.querySelectorAll("main .item")].some((r) => r.innerText.includes(t) && r.innerText.includes("fertig")),
           { timeout: 600000, polling: 1000 }, book.title.slice(0, 15));
         check("book with all parts saved offline", true);
+        // Restart: the last unfinished item (any device) stands paused in "Jetzt läuft".
+        const lastU = (await call("GET", "/playback?limit=10")).body.find((p) => !p.finished);
+        await page.goto(base, { waitUntil: "domcontentloaded" });
+        await page.waitForSelector("nav");
+        await clickText("Jetzt läuft", "nav");
+        await page.waitForFunction((x) => document.querySelector(".np .title")?.innerText === x, { timeout: 15000 }, lastU.title);
+        await sleep(1500);
+        const np = await page.evaluate(() => ({ play: document.querySelector(".ctrl .play").innerText, times: document.querySelector(".times").innerText }));
+        const shown = np.times.split(/\s/)[0].split(":").reduce((n, x) => n * 60 + +x, 0);
+        check("restart: last unfinished item paused in now playing", np.play !== "❚❚" && Math.abs(shown - lastU.position_ms / 1000) <= 1.5,
+          `${lastU.title} from ${lastU.device}, ${np.times.replace(/\n/g, " ")}`);
+        await shot("11-neustart-pausiert");
+        // Switch on: a finished item leaves the cache, but not while it is the current one.
+        await clickText("Offline", "nav");
+        await page.waitForSelector(".switch input");
+        await page.evaluate(() => document.querySelector(".switch input").click());
+        await call("PUT", `/playback/${encodeURIComponent(book.key)}`, { position_ms: book.duration_ms, duration_ms: book.duration_ms, finished: true, updated_at: new Date().toISOString() });
+        await sleep(3000);
+        const kept = await page.evaluate((x) => [...document.querySelectorAll("main .item")].some((r) => r.innerText.includes(x)), book.title.slice(0, 15));
+        await page.goto(base, { waitUntil: "domcontentloaded" });
+        await page.waitForSelector("nav");
+        await clickText("Offline", "nav");
+        const gone = await page.waitForFunction((x) => !!document.querySelector(".switch") && ![...document.querySelectorAll("main .item")].some((r) => r.innerText.includes(x)),
+          { timeout: 30000, polling: 500 }, book.title.slice(0, 15)).then(() => true, () => false);
+        await shot("12-cache-gehoert");
+        check("played media leave the cache when switched on, the current item stays",
+          gone && (kept || lastU.key !== book.key), `kept while current ${kept}, removed after restart ${gone}`);
+        await page.evaluate(() => document.querySelector(".switch input").click());
       } else {
         console.log("  (book longer than 3 h – offline download skipped)");
       }
@@ -357,6 +387,8 @@ try {
   const offlinePos = await page.evaluate(() => document.querySelector(".times span")?.innerText);
   await waitText("1 warten auf Abgleich", 5000).then(() => check("position buffered while offline", true, offlinePos),
     () => check("position buffered while offline", false));
+  const pillsOffline = await pillW();
+  check("status pills keep their width (no jumping)", pillsOnline === pillsOffline, `online ${pillsOnline}, offline + waiting ${pillsOffline}`);
   await shot("07-offline-gepuffert");
 
   // ------------------------------------------------------------ server back: sync

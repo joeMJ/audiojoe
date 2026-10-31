@@ -438,3 +438,6 @@ msgstr "Als Nächstes"
 
 msgid "Heard"
 msgstr "Gehört"
+
+msgid "Remove played media from the cache"
+msgstr "Gespielte Medien aus dem Cache entfernen"

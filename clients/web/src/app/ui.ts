@@ -1,7 +1,7 @@
 // Screens of the web app. Plain DOM; each view renders itself into <main>.
 
 import { api, online, qualityBadge, qualityChips, qualityText, type Item, type Playback } from "./api";
-import { addOffline, offlineEntry, offlineList, removeFromOffline, retryFailed, type OfflineEntry } from "./downloads";
+import { addOffline, dropPlayedOn, offlineEntry, offlineList, removeFromOffline, retryFailed, setDropPlayed, type OfflineEntry } from "./downloads";
 import { ago, bytes, clock, t } from "./i18n";
 import { idbAll } from "./idb";
 import * as player from "./player";
@@ -90,16 +90,27 @@ export function mountShell(root: HTMLElement, logout: () => void) {
   show(view);
 }
 
+/** A status pill as wide as its longest text, so it does not jump when the state changes. */
+function pill(id: string, cls: string, texts: string[], shown: number, dot = false) {
+  return h("div", { className: `pill fixed ${cls}`, id },
+    ...texts.map((x, i) => h("span", { className: i === shown ? "" : "off", ariaHidden: i === shown ? null : "true" }, dot ? h("span", { className: "dot" }) : null, x)));
+}
+
+let usage = "";
 export function renderTop() {
   if (!top) return;
-  const net = online
-    ? h("div", { className: "pill ok", id: "net" }, h("span", { className: "dot" }), t("Server reachable"))
-    : h("div", { className: "pill warn", id: "net" }, h("span", { className: "dot" }), t("Offline · cache"));
-  const sync = pendingCount
-    ? h("div", { className: "pill warn", id: "sync" }, t("{n} waiting to sync", { n: pendingCount }))
-    : h("div", { className: "pill", id: "sync" }, t("Positions synced"));
-  top.replaceChildren(h("div", { className: "logo" }, h("img", { src: "/icon-192.png", alt: "" }), "audiojoe"), net, sync);
-  void offlineUsage().then((u) => u && top.append(h("div", { className: "pill" }, `${t("Offline")} ${u}`)));
+  const net = pill("net", online ? "ok" : "warn", [t("Server reachable"), t("Offline · cache")], online ? 0 : 1, true);
+  // The last text only reserves room for two-digit counts.
+  const sync = pill("sync", pendingCount ? "warn" : "", [t("Positions synced"), t("{n} waiting to sync", { n: pendingCount }), t("{n} waiting to sync", { n: 99 })],
+    pendingCount ? 1 : 0);
+  // The offline size keeps its last value until the new one is known (no gap, no jump).
+  const off = h("div", { className: "pill num", id: "offsize", hidden: !usage }, `${t("Offline")} ${usage}`);
+  top.replaceChildren(h("div", { className: "logo" }, h("img", { src: "/icon-192.png", alt: "" }), "audiojoe"), net, sync, off);
+  void offlineUsage().then((u) => {
+    usage = u || "";
+    off.hidden = !usage;
+    off.textContent = `${t("Offline")} ${usage}`;
+  });
 }
 
 /** Moon button below the top bar, top right over the content: dark mode on (filled, accent)
@@ -685,6 +696,9 @@ async function renderOffline() {
   } catch {
     /* no storage manager */
   }
+  const drop = h("input", { type: "checkbox", checked: dropPlayedOn() }) as HTMLInputElement;
+  drop.onchange = () => setDropPlayed(drop.checked);
+  main.append(h("label", { className: "switch" }, drop, h("span", {}, t("Remove played media from the cache"))));
   const list = (await offlineList()).sort((a, b) => b.added.localeCompare(a.added));
   if (!list.length) main.append(h("div", { className: "empty" }, t("Nothing saved offline yet.")));
   const box = h("div", { className: "list" });

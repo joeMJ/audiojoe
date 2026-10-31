@@ -5,8 +5,8 @@
 
 import { offlineUrl } from "../offline";
 import { api, online, type Item, type Playback, type Quality } from "./api";
-import { isOffline, offlineEntry, partKey } from "./downloads";
-import { idbGet, idbPut } from "./idb";
+import { dropPlayed, isOffline, keepCurrent, offlineEntry, partKey } from "./downloads";
+import { idbAll, idbGet, idbPut } from "./idb";
 import { localPosition, onRemote, savePosition } from "./sync";
 
 export interface PlayerState {
@@ -35,7 +35,9 @@ const notify = () => listeners.forEach((l) => l());
 const parts = () => state.item?.parts ?? [];
 const partStart = () => parts()[state.part]?.start_ms ?? 0;
 
-export const position = () => partStart() + audio.currentTime * 1000;
+/** Position of an item that is ready but not loaded yet (after a restart). */
+let cuedMs = 0;
+export const position = () => (audio.src ? partStart() + audio.currentTime * 1000 : cuedMs);
 export const isLive = () => state.item?.kind === "radio";
 export const duration = () =>
   parts().length ? state.item?.duration_ms ?? 0 : Number.isFinite(audio.duration) ? audio.duration * 1000 : state.item?.duration_ms ?? 0;
@@ -108,8 +110,9 @@ function srcFor(it: Item, part: number): string {
   return `/api/v1/stream/${encodeURIComponent(it.key)}${multi ? `?part=${part}` : ""}`;
 }
 
-async function load(it: Item, autoplay: boolean) {
+async function load(it: Item, autoplay: boolean, cue = false) {
   state.item = it;
+  keepCurrent(it.key);
   state.part = 0;
   audio.removeAttribute("src");
   const cached = await isOffline(it.key);
@@ -120,12 +123,57 @@ async function load(it: Item, autoplay: boolean) {
   const start = it.kind === "radio" ? { ms: 0 } : await startPosition(it);
   state.takenOver = start.from ? { device: start.from.device, at: start.from.updated_at } : undefined;
   mediaSession(it);
+  void dropPlayed();
+  if (cue) {
+    // Ready, paused, nothing loaded until play is pressed (a live stream would keep loading).
+    cuedMs = start.ms;
+    return notify();
+  }
+  // Radio has no position; one entry still marks it as the last thing played on any device.
+  if (it.kind === "radio") {
+    void savePosition({ key: it.key, position_ms: 0, duration_ms: null, finished: false, updated_at: new Date().toISOString(),
+      title: it.title, subtitle: it.subtitle ?? "" });
+  }
   await seekGlobal(start.ms, autoplay);
+}
+
+/** After a restart: the last unfinished item of any device, paused at its position. */
+export async function cueLast() {
+  if (state.item) return;
+  let list: Playback[] = [];
+  if (online) {
+    try {
+      list = await api<Playback[]>("GET", "/playback?limit=10");
+    } catch {
+      /* offline: local positions */
+    }
+  }
+  if (!list.length) list = (await idbAll<Playback>("positions")).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  let it: Item | undefined;
+  for (const p of list.filter((x) => !x.finished)) {
+    if (online) {
+      // Only what the server can still play (a removed source is skipped).
+      try {
+        it = await api<Item>("GET", `/items/${encodeURIComponent(p.key)}`);
+        await idbPut("items", p.key, it);
+      } catch {
+        continue;
+      }
+    } else it = await idbGet<Item>("items", p.key);
+    if (it) break;
+  }
+  if (!it || state.item) return;
+  state.queue = [it];
+  state.index = 0;
+  await load(it, false, true);
 }
 
 export function toggle() {
   if (!state.item) return;
-  if (audio.paused) void audio.play();
+  if (!audio.src) {
+    if (state.item.kind === "radio") void load(state.item, true);
+    else void seekGlobal(cuedMs, true);
+  } else if (audio.paused) void audio.play();
   else audio.pause();
 }
 
@@ -176,7 +224,7 @@ function mediaSession(it: Item) {
     artwork: it.image ? [{ src: it.image, sizes: "400x400" }] : [],
   });
   const ms = navigator.mediaSession;
-  ms.setActionHandler("play", () => void audio.play());
+  ms.setActionHandler("play", () => (audio.src ? void audio.play() : toggle()));
   ms.setActionHandler("pause", () => audio.pause());
   ms.setActionHandler("seekbackward", () => seekBy(-15000));
   ms.setActionHandler("seekforward", () => seekBy(30000));
@@ -204,6 +252,7 @@ audio.addEventListener("ended", async () => {
     return;
   }
   await persist(true);
+  void dropPlayed();
   if (state.index + 1 < state.queue.length) await skip(1);
 });
 audio.addEventListener("timeupdate", () => notify());
@@ -214,7 +263,10 @@ document.addEventListener("visibilitychange", () => document.hidden && void pers
 onRemote((p) => {
   if (!p.key || !state.item || p.key !== state.item.key || state.playing || p.device === myDevice) return;
   state.takenOver = { device: p.device, at: p.updated_at };
-  void seekGlobal(p.position_ms, false);
+  if (!audio.src) {
+    cuedMs = p.position_ms;
+    notify();
+  } else void seekGlobal(p.position_ms, false);
 });
 
 export const audioError = () => audio.error;

@@ -1,5 +1,6 @@
 // audiojoe app for Android, Linux and Windows.
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -51,6 +52,7 @@ class _AudiojoeAppState extends State<AudiojoeApp> {
     started = true;
     sync.start();
     downloads.check();
+    unawaited(player.cueLast());
   }
 
   Future<void> _signOut() async {

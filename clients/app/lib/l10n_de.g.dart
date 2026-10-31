@@ -77,6 +77,7 @@ const deStrings = <String, String>{
   "Quieter": "Leiser",
   "Recently added": "Neu hinzugefügt",
   "Remove": "Entfernen",
+  "Remove played media from the cache": "Gespielte Medien aus dem Cache entfernen",
   "Results": "Treffer",
   "Resume": "Weiter",
   "Save offline": "Offline",

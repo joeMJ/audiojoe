@@ -2,9 +2,9 @@
 
 import tokens from "../../../../design/tokens.json";
 import { api, ApiError, onConnection } from "./api";
-import { checkOffline, onOfflineChange } from "./downloads";
+import { checkOffline, dropPlayed, onOfflineChange } from "./downloads";
 import { t } from "./i18n";
-import { onPlayer, setDevice } from "./player";
+import { cueLast, onPlayer, setDevice } from "./player";
 import { onRemote, onSyncState, startSync, stopSync } from "./sync";
 import { isDark, onAppearance } from "./theme";
 import { mountShell, refresh, renderTop } from "./ui";
@@ -117,12 +117,17 @@ async function startApp() {
   onConnection(renderTop);
   onSyncState(renderTop);
   onPlayer(() => refresh("player"));
-  onRemote(() => refresh("data"));
+  onRemote((p) => {
+    refresh("data");
+    if (p.finished) void dropPlayed();
+  });
   onOfflineChange(() => {
     refresh("offline");
     renderTop();
   });
   void checkOffline();
+  void cueLast();
+  void dropPlayed();
   try {
     await navigator.storage?.persist?.();
   } catch {

@@ -2,7 +2,7 @@
 
 import { download } from "../downloader";
 import { OFFLINE_CACHE, offlineUrl, removeOffline, storeOffline } from "../offline";
-import { api, online, onConnection, type Item, type Quality } from "./api";
+import { api, online, onConnection, type Item, type Playback, type Quality } from "./api";
 import { idbAll, idbDel, idbGet, idbPut } from "./idb";
 
 export interface OfflineEntry {
@@ -53,6 +53,48 @@ export async function addOffline(items: Item[]) {
   }
   notify();
   void process();
+}
+
+// Played media leave the cache when the switch is on (per device); the current item stays.
+const DROP = "aj_drop_played";
+let current = "";
+export const keepCurrent = (key: string) => void (current = key);
+export function dropPlayedOn(): boolean {
+  try {
+    return localStorage.getItem(DROP) === "1";
+  } catch {
+    return false;
+  }
+}
+export function setDropPlayed(on: boolean) {
+  try {
+    localStorage.setItem(DROP, on ? "1" : "0");
+  } catch {
+    /* private window: not kept */
+  }
+  void dropPlayed();
+  notify();
+}
+let dropping = false;
+export async function dropPlayed() {
+  if (!dropPlayedOn() || dropping) return;
+  dropping = true;
+  try {
+    for (const e of await offlineList()) {
+      if (e.key === current) continue;
+      let p = await idbGet<Playback>("positions", e.key);
+      if (online) {
+        try {
+          p = await api<Playback>("GET", `/playback/${encodeURIComponent(e.key)}`);
+        } catch {
+          /* not on the server (never played) or offline: local state */
+        }
+      }
+      if (p?.finished) await removeFromOffline(e.key);
+    }
+  } finally {
+    dropping = false;
+  }
 }
 
 export async function removeFromOffline(key: string) {

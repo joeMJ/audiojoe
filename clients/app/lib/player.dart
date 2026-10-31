@@ -45,7 +45,11 @@ class Player extends ChangeNotifier {
   List<Part> get _parts => item?.multiPart == true ? item!.parts : const [];
   int get _part => _parts.isEmpty ? 0 : (audio.currentIndex ?? 0);
 
-  int get position => (_parts.isEmpty ? 0 : _parts[_part].startMs) + audio.position.inMilliseconds;
+  // Ready after a start, paused, nothing loaded until play is pressed (a live stream would keep loading).
+  bool _cued = false;
+  int _cuedMs = 0;
+
+  int get position => _cued ? _cuedMs : (_parts.isEmpty ? 0 : _parts[_part].startMs) + audio.position.inMilliseconds;
   int get duration => _parts.isNotEmpty ? (item?.durationMs ?? 0) : (audio.duration?.inMilliseconds ?? item?.durationMs ?? 0);
   bool get playing => audio.playing;
   bool get live => item?.kind == 'radio';
@@ -97,6 +101,7 @@ class Player extends ChangeNotifier {
 
   Future<void> _load(Item it) async {
     item = it;
+    _cued = false;
     fromCache = downloads.isOffline(it.key);
     final start = it.kind == 'radio' ? (ms: 0, from: null) : _startPosition(it);
     takenOver = start.from == null ? null : (device: start.from!.device, at: start.from!.updatedAt);
@@ -108,6 +113,51 @@ class Player extends ChangeNotifier {
       initialPosition: Duration(milliseconds: local),
     );
     await audio.setSpeed(rate);
+    // Radio has no position; one entry still marks it as the last thing played on any device.
+    if (it.kind == 'radio') {
+      sync.savePosition(Playback(key: it.key, positionMs: 0, finished: false, title: it.title, subtitle: it.subtitle,
+          device: api.device, updatedAt: DateTime.now().toUtc().toIso8601String()));
+    }
+    notifyListeners();
+  }
+
+  /// After a start: the last unfinished item of any device, paused at its position.
+  Future<void> cueLast() async {
+    if (item != null) return;
+    var list = <Playback>[];
+    if (api.online.value) {
+      try {
+        list = [for (final j in await api.call('GET', '/playback', query: {'limit': '10'}) as List) Playback.fromJson((j as Map).cast<String, dynamic>())];
+      } catch (_) {}
+    }
+    if (list.isEmpty) {
+      list = [for (final j in Stores.positions.data.values) Playback.fromJson(j)]..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    }
+    Item? it;
+    for (final p in list.where((p) => !p.finished)) {
+      if (api.online.value) {
+        // Only what the server can still play (a removed source is skipped).
+        try {
+          it = Item.fromJson((await api.call('GET', '/items/${Uri.encodeComponent(p.key)}') as Map).cast<String, dynamic>());
+          Stores.items.put(p.key, it.toJson());
+        } catch (_) {
+          continue;
+        }
+      } else {
+        final j = Stores.items.get(p.key);
+        if (j != null) it = Item.fromJson(j);
+      }
+      if (it != null) break;
+    }
+    if (it == null || item != null) return;
+    queue = [it];
+    index = 0;
+    item = it;
+    fromCache = downloads.isOffline(it.key);
+    final start = it.kind == 'radio' ? (ms: 0, from: null) : _startPosition(it);
+    takenOver = start.from == null ? null : (device: start.from!.device, at: start.from!.updatedAt);
+    _cued = true;
+    _cuedMs = start.ms;
     notifyListeners();
   }
 
@@ -128,6 +178,10 @@ class Player extends ChangeNotifier {
   }
 
   Future<void> seekTo(int ms) async {
+    if (_cued) {
+      _cuedMs = ms.clamp(0, duration);
+      return notifyListeners();
+    }
     final (part, local) = _locate(ms.clamp(0, duration), _parts);
     await audio.seek(Duration(milliseconds: local), index: _parts.isEmpty ? null : part);
     await _persist();
@@ -135,7 +189,19 @@ class Player extends ChangeNotifier {
 
   Future<void> seekBy(int ms) => seekTo(position + ms);
 
-  void toggle() => audio.playing ? audio.pause() : audio.play();
+  void toggle() {
+    if (_cued && item != null) {
+      final it = item!;
+      // The cued position is the start: save it first, so loading begins there.
+      if (it.kind != 'radio' && _cuedMs > 0) {
+        sync.savePosition(Playback(key: it.key, positionMs: _cuedMs, durationMs: it.durationMs, finished: false, title: it.title,
+            subtitle: it.subtitle, device: api.device, updatedAt: DateTime.now().toUtc().toIso8601String()));
+      }
+      unawaited(_load(it).then((_) => audio.play()));
+      return;
+    }
+    audio.playing ? audio.pause() : audio.play();
+  }
 
   Future<void> setRate(double r) async {
     rate = r;
@@ -177,7 +243,8 @@ class Player extends ChangeNotifier {
   Future<void> _persist({bool finished = false}) async {
     final it = item;
     // Live radio has no position to continue from.
-    if (it == null || it.kind == 'radio' || (!finished && position < 1000)) return;
+    // A cued item has not been played here: nothing new to save.
+    if (it == null || _cued || it.kind == 'radio' || (!finished && position < 1000)) return;
     sync.savePosition(Playback(
       key: it.key,
       positionMs: position,
@@ -213,6 +280,10 @@ class Player extends ChangeNotifier {
   void _onRemote(Playback p) {
     if (item == null || p.key != item!.key || audio.playing || p.device == api.device) return;
     takenOver = (device: p.device, at: p.updatedAt);
+    if (_cued) {
+      _cuedMs = p.positionMs;
+      return notifyListeners();
+    }
     final (part, local) = _locate(p.positionMs, _parts);
     unawaited(audio.seek(Duration(milliseconds: local), index: _parts.isEmpty ? null : part));
     notifyListeners();
@@ -222,6 +293,7 @@ class Player extends ChangeNotifier {
     await _persist();
     await audio.stop();
     item = null;
+    _cued = false;
     notifyListeners();
   }
 }
