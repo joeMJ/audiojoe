@@ -399,3 +399,42 @@ msgstr "Dunkelmodus: an"
 
 msgid "Dark mode: off"
 msgstr "Dunkelmodus: aus"
+
+msgid "Authors"
+msgstr "Autoren"
+
+msgid "Series"
+msgstr "Serien"
+
+msgid "Titles"
+msgstr "Titel"
+
+msgid "Recently added"
+msgstr "Neu hinzugefügt"
+
+msgid "Search title, author, series, narrator"
+msgstr "Titel, Autor, Serie, Sprecher suchen"
+
+msgid "Clear"
+msgstr "Leeren"
+
+msgid "Nothing found."
+msgstr "Nichts gefunden."
+
+msgid "{a} of {b}"
+msgstr "{a} von {b}"
+
+msgid "{n} books"
+msgstr "{n} Bücher"
+
+msgid "Without series"
+msgstr "Ohne Serie"
+
+msgid "Vol. {n}"
+msgstr "Band {n}"
+
+msgid "Up next"
+msgstr "Als Nächstes"
+
+msgid "Heard"
+msgstr "Gehört"

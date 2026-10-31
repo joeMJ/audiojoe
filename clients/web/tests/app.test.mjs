@@ -255,7 +255,48 @@ try {
     check("multi-part book found", !!book, book ? `${book.title}: ${book.parts.length} parts, ${Math.round(book.duration_ms / 60000)} min` : "");
     if (book) {
       await clickText("Hörbücher");
+      await waitText("Autoren");
+      const shelf = (await call("GET", `/sources/${src.body.id}/books?parent=${libs[0].key.split(":")[2]}`)).body;
+      const views = await page.evaluate(() => [...document.querySelectorAll("main .chip")].map((b) => b.innerText));
+      const authorsShown = await page.evaluate(() => document.querySelectorAll("main .list .item").length);
+      check("books: views authors/series/titles/new, start in authors",
+        ["Autoren", "Serien", "Titel", "Neu hinzugefügt"].every((v) => views.includes(v)) && authorsShown === shelf.authors.length,
+        `${views.join(", ")}; ${authorsShown} authors`);
+      await shot("09a-autoren");
+      // An author with a series: series headings with "x von y", volumes in order.
+      const ser = shelf.series.find((x) => x.total > 1 && x.author);
+      if (ser) {
+        await page.evaluate((a) => [...document.querySelectorAll("main .item")].find((r) => r.querySelector(".t1").innerText === a).click(), ser.author);
+        await page.waitForSelector("main .section");
+        const got = await page.evaluate((name) => {
+          const hs = [...document.querySelectorAll("main .section")];
+          const h = hs.find((x) => x.innerText.startsWith(name + " · "));
+          const out = []; let n = h?.nextElementSibling;
+          while (n && n.matches(".item")) { out.push(n.querySelector(".t1").innerText); n = n.nextElementSibling; }
+          return { head: h?.innerText ?? "", titles: out };
+        }, ser.name);
+        const want = ser.books.map((k) => shelf.books.find((b) => b.key === k)).filter((b) => b.author === ser.author).map((b) => b.title);
+        check("books: author shows series in volume order", got.head.includes(" von ") && JSON.stringify(got.titles) === JSON.stringify(want),
+          `${ser.author}: ${got.head}, ${got.titles.length} volumes`);
+        await shot("09b-autor");
+        await page.evaluate(() => [...document.querySelectorAll("main .chip")].find((b) => b.innerText.includes("Zurück")).click());
+        await waitText("Neu hinzugefügt");
+      }
+      await page.evaluate(() => [...document.querySelectorAll("main .chip")].find((b) => b.innerText === "Serien").click());
+      await sleep(500);
+      const serRows = await page.evaluate(() => [...document.querySelectorAll("main .list .item .t2")].slice(0, 3).map((x) => x.innerText));
+      check("books: series rows read \"author · x von y\"", serRows.length > 0 && serRows.every((x) => / von \d+$/.test(x)), serRows.join(" | "));
+      await page.goto(base, { waitUntil: "domcontentloaded" });
+      await page.waitForSelector("nav");
+      await clickText("Hörbücher", "nav");
+      await page.waitForFunction(() => [...document.querySelectorAll("main .chip.on")].some((b) => b.innerText === "Serien"), { timeout: 15000 });
+      check("books: last view kept on this device", true);
+      await shot("09c-serien");
+      // Search over title, author, series, narrator.
+      await page.evaluate((q) => { const i = document.querySelector("main input.search"); i.value = q; i.dispatchEvent(new Event("input")); }, book.title);
       await waitText(book.title.slice(0, 15));
+      const hit = await page.evaluate(() => document.querySelectorAll("main .list .item").length);
+      check("books: search finds the title", hit >= 1, `${hit} hits`);
       await shot("09-hoerbuecher");
       await page.evaluate((title) => {
         const row = [...document.querySelectorAll("main .item")].find((r) => r.innerText.includes(title));

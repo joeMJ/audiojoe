@@ -544,54 +544,130 @@ async function renderRadio() {
 
 // ---------------------------------------------------------------- audiobooks
 
-let bookStack: { source: number; parent?: string; title: string }[] = [];
+type Book = Item & { author: string; narrator: string; series: string | null; volume: number | null; added: number | null; finished: boolean };
+type Series = { name: string; author: string; total: number; heard: number; next: string | null; books: string[]; image: string | null };
+type Shelf = { books: Book[]; authors: { name: string; books: number }[]; series: Series[] };
+
+let bookLibs: { source: number; lib: string; title: string }[] | null = null;
+let bookLib = 0;
+let bookAuthor: string | null = null;
+let bookSeries: string | null = null;
+let bookQuery = "";
+let shelf: { at: number; lib: string; data: Shelf } | null = null;
+const BOOK_VIEW = "aj_books_view";
+function bookView(): string {
+  try { return localStorage.getItem(BOOK_VIEW) ?? "authors"; } catch { return "authors"; }
+}
+
+async function loadShelf(): Promise<Shelf | null> {
+  if (!bookLibs) {
+    const libs: { source: number; lib: string; title: string }[] = [];
+    for (const src of (await api<{ id: number; kind: string }[]>("GET", "/sources")).filter((x) => x.kind === "audiobookshelf")) {
+      for (const l of (await api<{ items: Item[] }>("GET", `/sources/${src.id}/browse`)).items) libs.push({ source: src.id, lib: l.key.split(":")[2], title: l.title });
+    }
+    bookLibs = libs;
+  }
+  const l = bookLibs[Math.min(bookLib, bookLibs.length - 1)];
+  if (!l) return null;
+  const id = `${l.source}/${l.lib}`;
+  // Kept for a minute, so stepping into an author and back does not reload 400 books.
+  if (!shelf || shelf.lib !== id || Date.now() - shelf.at > 60_000) {
+    shelf = { at: Date.now(), lib: id, data: await api<Shelf>("GET", `/sources/${l.source}/books?parent=${encodeURIComponent(l.lib)}`) };
+  }
+  return shelf.data;
+}
 
 async function renderBooks() {
   try {
-    if (!bookStack.length) {
-      const sources = (await api<{ id: number; name: string; kind: string }[]>("GET", "/sources")).filter((x) => x.kind === "audiobookshelf");
-      if (!sources.length) {
-        main.append(h("h2", {}, t("Audiobooks")), h("div", { className: "empty" }, t("No audiobook sources. Add Audiobookshelf in the desktop or phone app.")));
-        return;
-      }
-      bookStack = [{ source: sources[0].id, title: sources[0].name }];
+    const data = await loadShelf();
+    if (!data) {
+      main.append(h("h2", {}, t("Audiobooks")), h("div", { className: "empty" }, t("No audiobook sources. Add Audiobookshelf in the desktop or phone app.")));
+      return;
     }
-    const cur = bookStack[bookStack.length - 1];
-    const q = cur.parent ? `?parent=${encodeURIComponent(cur.parent)}&limit=500` : "";
-    const res = await api<{ items: Item[] }>("GET", `/sources/${cur.source}/browse${q}`);
-    // A single library: show its books directly.
-    if (!cur.parent && res.items.length === 1 && res.items[0].kind === "folder") {
-      bookStack.push({ source: cur.source, parent: res.items[0].key.split(":")[2], title: res.items[0].title });
-      return show("books");
-    }
-    const head = h("div", { className: "chips" });
-    if (bookStack.length > 1 && !(bookStack.length === 2 && res.items.every((i) => i.kind === "book"))) {
-      head.append(h("button", { className: "chip", onclick: () => (bookStack.pop(), show("books")) }, `← ${t("Back")}`));
-    }
-    head.append(h("h2", { style: "margin:0" }, t("Audiobooks")));
-    main.append(head);
-    const positions = new Map<string, Playback>();
-    try {
-      for (const p of await api<Playback[]>("GET", "/playback?limit=200")) positions.set(p.key, p);
-    } catch { /* offline: no positions */ }
+    const byKey = new Map(data.books.map((b) => [b.key, b]));
+    const offline = new Map<string, Awaited<ReturnType<typeof offlineEntry>>>();
+    for (const b of data.books) offline.set(b.key, await offlineEntry(b.key));
+    const input = h("input", { className: "search", type: "search", placeholder: t("Search title, author, series, narrator"), value: bookQuery, enterKeyHint: "search" }) as HTMLInputElement;
     const box = h("div", { className: "list" });
-    for (const it of res.items) {
-      if (it.kind === "folder") {
-        box.append(h("div", { className: "item tap", onclick: () => (bookStack.push({ source: cur.source, parent: it.key.split(":")[2], title: it.title }), show("books")) },
-          thumb(it), h("div", { className: "tx" }, h("div", { className: "t1" }, it.title))));
-        continue;
-      }
-      const p = positions.get(it.key);
-      const f = p && it.duration_ms && !p.finished ? p.position_ms / it.duration_ms : 0;
-      const off = await offlineEntry(it.key);
-      box.append(h("div", { className: "item tap", onclick: () => openDetails({ ...it, position_ms: p?.position_ms }) }, thumb(it),
-        h("div", { className: "tx" }, h("div", { className: "t1" }, it.title),
-          h("div", { className: "t2" }, [it.subtitle, it.duration_ms ? clock(it.duration_ms) : ""].filter(Boolean).join(" · ")),
+
+    const row = (b: Book, next = false, withAuthor = true) => {
+      const p = b.finished ? 0 : (b.position_ms ?? 0);
+      const f = p && b.duration_ms ? p / b.duration_ms : 0;
+      return h("div", { className: next ? "item tap next" : "item tap", onclick: () => openDetails({ ...b, position_ms: b.position_ms }) }, thumb(b),
+        h("div", { className: "tx" }, h("div", { className: "t1" }, b.title),
+          h("div", { className: "t2" }, [withAuthor ? b.author : "", b.series && b.volume ? t("Vol. {n}", { n: b.volume }) : "", b.year ? `${b.year}` : "",
+            b.duration_ms ? clock(b.duration_ms) : ""].filter(Boolean).join(" · ")),
           f ? h("div", { className: "prog" }, h("i", { style: `width:${f * 100}%` })) : null),
-        offBadge(off) ?? h("button", { className: "big sec", onclick: own((ev) => { (ev.target as HTMLButtonElement).disabled = true; void addOffline([it]); }) }, t("Save offline")),
-        h("button", { className: "big", onclick: own(() => void start([it])) }, f ? t("Resume") : t("Play"))));
-    }
-    main.append(box);
+        next ? h("span", { className: "badge ok" }, t("Up next")) : b.finished ? h("span", { className: "badge" }, t("Heard")) : null,
+        offBadge(offline.get(b.key)) ?? h("button", { className: "big sec", onclick: own((ev) => { (ev.target as HTMLButtonElement).disabled = true; void addOffline([b]); }) }, t("Save offline")),
+        h("button", { className: "big", onclick: own(() => void start([b])) }, f ? t("Resume") : t("Play")));
+    };
+    const section = (s: string) => h("h3", { className: "section" }, s);
+    const back = (title: string, sub: string, go: () => void) =>
+      h("div", { className: "chips" }, h("button", { className: "chip", onclick: go }, `← ${t("Back")}`), h("h2", { style: "margin:0" }, title), h("span", { className: "muted" }, sub));
+    const of = (s: Series) => t("{a} of {b}", { a: s.heard, b: s.total });
+
+    const fill = () => {
+      const q = bookQuery.toLowerCase();
+      const out: (HTMLElement | null)[] = [];
+      if (q) {
+        const hits = data.books.filter((b) => [b.title, b.author, b.series ?? "", b.narrator].some((x) => x.toLowerCase().includes(q)));
+        if (!hits.length) out.push(h("div", { className: "empty" }, t("Nothing found.")));
+        for (const b of hits) out.push(row(b));
+      } else if (bookSeries) {
+        const s = data.series.find((x) => x.name === bookSeries);
+        if (s) {
+          out.push(back(s.name, [s.author, of(s)].filter(Boolean).join(" · "), () => ((bookSeries = null), show("books"))));
+          for (const k of s.books) { const b = byKey.get(k); if (b) out.push(row(b, k === s.next)); }
+        }
+      } else if (bookAuthor) {
+        const mine = data.books.filter((b) => b.author === bookAuthor);
+        out.push(back(bookAuthor, t("{n} books", { n: mine.length }), () => ((bookAuthor = null), show("books"))));
+        let any = false;
+        for (const s of data.series.filter((x) => x.books.some((k) => byKey.get(k)?.author === bookAuthor))) {
+          out.push(section(`${s.name} · ${of(s)}`));
+          any = true;
+          for (const k of s.books) { const b = byKey.get(k); if (b && b.author === bookAuthor) out.push(row(b, k === s.next, false)); }
+        }
+        const loose = mine.filter((b) => !b.series).sort((a, b) => (a.year ?? 9999) - (b.year ?? 9999));
+        if (loose.length && any) out.push(section(t("Without series")));
+        for (const b of loose) out.push(row(b, false, false));
+      } else {
+        const v = bookView();
+        if (v === "series") {
+          for (const s of data.series) {
+            out.push(h("div", { className: "item tap", onclick: () => ((bookSeries = s.name), show("books")) }, thumb({ title: s.name, image: s.image }),
+              h("div", { className: "tx" }, h("div", { className: "t1" }, s.name), h("div", { className: "t2" }, [s.author, of(s)].filter(Boolean).join(" · ")),
+                h("div", { className: "prog" }, h("i", { style: `width:${(s.heard / Math.max(1, s.total)) * 100}%` })))));
+          }
+        } else if (v === "titles" || v === "new") {
+          const l = v === "new" ? [...data.books].sort((a, b) => (b.added ?? 0) - (a.added ?? 0)).slice(0, 100) : data.books;
+          for (const b of l) out.push(row(b));
+        } else {
+          for (const a of data.authors) {
+            out.push(h("div", { className: "item tap", onclick: () => ((bookAuthor = a.name), show("books")) },
+              thumb({ title: a.name }),
+              h("div", { className: "tx" }, h("div", { className: "t1" }, a.name), h("div", { className: "t2" }, t("{n} books", { n: a.books })))));
+          }
+        }
+      }
+      box.replaceChildren(...out.filter((x): x is HTMLElement => x !== null));
+      tabs.style.display = q ? "none" : "";
+    };
+
+    const tab = (v: string, label: string) => h("button", {
+      className: !bookAuthor && !bookSeries && bookView() === v ? "chip on" : "chip",
+      onclick: () => { try { localStorage.setItem(BOOK_VIEW, v); } catch { /* private window */ } bookAuthor = bookSeries = null; show("books"); },
+    }, label);
+    const tabs = h("div", { className: "chips wrap" }, tab("authors", t("Authors")), tab("series", t("Series")), tab("titles", t("Titles")), tab("new", t("Recently added")));
+    input.addEventListener("input", () => ((bookQuery = input.value.trim()), fill()));
+    const libChips = bookLibs && bookLibs.length > 1
+      ? h("div", { className: "chips wrap" }, ...bookLibs.map((l, i) => h("button", { className: i === bookLib ? "chip on" : "chip", onclick: () => ((bookLib = i), (bookAuthor = bookSeries = null), show("books")) }, l.title)))
+      : null;
+    main.append(h("div", { className: "chips searchrow" }, input, h("span", { className: "lens", ariaHidden: "true" }, icon('<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/>'))));
+    if (libChips) main.append(libChips);
+    main.append(tabs, box);
+    fill();
   } catch (e) {
     main.append(failure(e));
   }

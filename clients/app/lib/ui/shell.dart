@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n.dart';
 import '../player.dart';
+import 'books.dart';
 import 'common.dart';
 import 'now_playing.dart';
 import 'settings.dart';
@@ -38,7 +39,7 @@ class _ShellState extends State<Shell> {
       0 => const NowPlayingView(),
       1 => ContinueView(key: const ValueKey('cont'), onPlay: opened),
       2 => PodcastsView(onPlay: opened),
-      3 => BrowseView(key: const ValueKey('abs'), kinds: const ['audiobookshelf'], onPlay: opened),
+      3 => BooksView(key: const ValueKey('abs'), onPlay: opened),
       4 => MusicTab(onPlay: opened),
       5 => const OfflineView(),
       _ => SettingsView(onSignOut: widget.onSignOut),

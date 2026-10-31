@@ -157,3 +157,9 @@ h2 { margin: 0 0 10px; font-size: 21px; }
 .lens svg { width: 26px; height: 26px; }
 .search { flex: 1; min-width: 0; height: 48px; border-radius: 12px; border: 2px solid var(--line); background: var(--panel);
           color: var(--text); font: inherit; font-size: 17px; padding: 0 12px; user-select: text; }
+
+/* Audiobooks: views as chips that may wrap, series headings, the next unheard volume. */
+.chips.wrap { flex-wrap: wrap; }
+.section { margin: 18px 0 6px; font-size: 18px; }
+.muted { color: var(--muted); }
+.item.next { border-color: var(--ok); }

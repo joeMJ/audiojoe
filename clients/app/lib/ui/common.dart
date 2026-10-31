@@ -211,13 +211,17 @@ class ItemRow extends StatelessWidget {
   final double? progress;
   final List<Widget> trailing;
   final VoidCallback? onTap, onLongPress;
+  final bool highlight; // framed in the ok colour, e.g. the next volume of a series
   const ItemRow({super.key, required this.leading, required this.title, this.subtitle = '', this.progress,
-      this.trailing = const [], this.onTap, this.onLongPress});
+      this.trailing = const [], this.onTap, this.onLongPress, this.highlight = false});
 
   @override
   Widget build(BuildContext context) {
     final k = context.tok;
     return Card(
+      shape: highlight
+          ? RoundedRectangleBorder(borderRadius: BorderRadius.circular(SizeTokens.radius), side: BorderSide(color: k.ok, width: 2))
+          : null,
       child: InkWell(
         borderRadius: BorderRadius.circular(SizeTokens.radius),
         onTap: onTap,
