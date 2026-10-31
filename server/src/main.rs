@@ -151,6 +151,8 @@ async fn main() -> Result<()> {
         .route("/api/v1/sonos/{id}", delete(sonos::remove))
         .route("/api/v1/sonos/{id}/play", post(sonos::play))
         .route("/api/v1/sonos/{id}/command", post(sonos::command))
+        .route("/api/v1/sonos/{id}/join", post(sonos::join))
+        .route("/api/v1/sonos/{id}/leave", post(sonos::leave))
         .route("/api/v1/items/{key}", get(media::item))
         .route("/api/v1/stream/{key}", get(media::stream))
         .route("/api/v1/playback", get(playback::list).post(playback::sync))

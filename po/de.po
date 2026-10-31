@@ -343,9 +343,6 @@ msgstr "Tempo"
 msgid "Subscriptions as OPML file, the format other podcast apps read and write."
 msgstr "Abos als OPML-Datei – das Format, das andere Podcast-Apps lesen und schreiben."
 
-msgid "Volume {n}"
-msgstr "Lautstärke {n}"
-
 msgid "{added} added, {existing} already subscribed, {failed} failed"
 msgstr "{added} neu, {existing} schon abonniert, {failed} fehlgeschlagen"
 
@@ -459,3 +456,18 @@ msgstr "(Quelle: {q})"
 
 msgid "(Target: {q})"
 msgstr "(Ziel: {q})"
+
+msgid "Volume"
+msgstr "Lautstärke"
+
+msgid "Group volume"
+msgstr "Lautstärke der Gruppe"
+
+msgid "Rooms ({n})"
+msgstr "Räume ({n})"
+
+msgid "Add to group"
+msgstr "Zur Gruppe hinzufügen"
+
+msgid "Remove from group"
+msgstr "Aus der Gruppe nehmen"

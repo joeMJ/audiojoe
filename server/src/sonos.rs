@@ -42,6 +42,7 @@ const POLL_EVERY: Duration = Duration::from_secs(10);
 const AVT: (&str, &str) = ("/MediaRenderer/AVTransport/Control", "urn:schemas-upnp-org:service:AVTransport:1");
 const RC: (&str, &str) = ("/MediaRenderer/RenderingControl/Control", "urn:schemas-upnp-org:service:RenderingControl:1");
 const ZGT: (&str, &str) = ("/ZoneGroupTopology/Control", "urn:schemas-upnp-org:service:ZoneGroupTopology:1");
+const GRC: (&str, &str) = ("/MediaRenderer/GroupRenderingControl/Control", "urn:schemas-upnp-org:service:GroupRenderingControl:1");
 
 pub fn xml_escape(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;").replace('\'', "&apos;")
@@ -143,30 +144,98 @@ async fn speaker(state: &AppState, id: i64) -> ApiResult<Speaker> {
     speakers(state).await?.into_iter().find(|s| s.id == id).ok_or(ApiError::NotFound)
 }
 
+/// A room in a group. Invisible members (the second speaker of a stereo pair, sub and
+/// surrounds of a home theatre) belong to a visible one and are never grouped on their own.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Member {
+    pub uuid: String,
+    pub name: String,
+    pub ip: String,
+    pub visible: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Group {
+    pub coordinator: String,
+    pub members: Vec<Member>,
+}
+
+impl Group {
+    fn coordinator_ip(&self) -> Option<&str> {
+        self.members.iter().find(|m| m.uuid == self.coordinator).map(|m| m.ip.as_str())
+    }
+
+    /// Visible rooms, the coordinator first.
+    pub fn rooms(&self) -> Vec<&Member> {
+        let mut r: Vec<&Member> = self.members.iter().filter(|m| m.visible).collect();
+        r.sort_by_key(|m| m.uuid != self.coordinator);
+        r
+    }
+}
+
+fn attr(el: &str, name: &str) -> Option<String> {
+    let start = el.find(&format!(" {name}=\""))? + name.len() + 3;
+    Some(el[start..].split('"').next()?.to_string())
+}
+
+/// Groups from a `ZoneGroupState` document (already unescaped).
+pub fn parse_groups(xml: &str) -> Vec<Group> {
+    xml.split("<ZoneGroup ")
+        .skip(1)
+        .map(|g| {
+            let head = format!(" {}", g.split('>').next().unwrap_or_default());
+            let members = g
+                .split('<')
+                .filter(|e| e.starts_with("ZoneGroupMember ") || e.starts_with("Satellite "))
+                .filter_map(|e| {
+                    let e = format!(" {}", e.split_once(' ')?.1);
+                    let ip = attr(&e, "Location")?.trim_start_matches("http://").split(':').next()?.to_string();
+                    Some(Member { uuid: attr(&e, "UUID")?, name: attr(&e, "ZoneName").unwrap_or_default(), ip, visible: attr(&e, "Invisible").as_deref() != Some("1") })
+                })
+                .collect();
+            Group { coordinator: attr(&head, "Coordinator").unwrap_or_default(), members }
+        })
+        .collect()
+}
+
+/// Current groups, asked from the first speaker that answers.
+async fn topology(state: &AppState, list: &[Speaker]) -> Vec<Group> {
+    for sp in list {
+        if let Ok(xml) = soap(&state.http, &sp.ip, ZGT, "GetZoneGroupState", "").await {
+            return parse_groups(&unescape(&tag(&xml, "ZoneGroupState").unwrap_or_default()));
+        }
+    }
+    Vec::new()
+}
+
+fn group_of<'a>(groups: &'a [Group], uuid: &str) -> Option<&'a Group> {
+    groups.iter().find(|g| g.members.iter().any(|m| m.uuid == uuid))
+}
+
 /// Group coordinator of a speaker (playback commands go there), as IP.
 async fn coordinator(state: &AppState, sp: &Speaker) -> ApiResult<String> {
     let xml = soap(&state.http, &sp.ip, ZGT, "GetZoneGroupState", "").await?;
-    let groups = unescape(&tag(&xml, "ZoneGroupState").unwrap_or_default());
-    for g in groups.split("<ZoneGroup ").skip(1) {
-        if g.contains(&sp.uuid) {
-            let coord = g.split("Coordinator=\"").nth(1).and_then(|r| r.split('"').next()).unwrap_or_default();
-            for m in g.split("<ZoneGroupMember ").skip(1) {
-                if m.contains(&format!("UUID=\"{coord}\"")) {
-                    if let Some(ip) = m.split("Location=\"http://").nth(1).and_then(|r| r.split(':').next()) {
-                        return Ok(ip.to_string());
-                    }
-                }
-            }
-        }
-    }
-    Ok(sp.ip.clone())
+    let groups = parse_groups(&unescape(&tag(&xml, "ZoneGroupState").unwrap_or_default()));
+    Ok(group_of(&groups, &sp.uuid).and_then(|g| g.coordinator_ip()).unwrap_or(&sp.ip).to_string())
 }
 
-async fn status_of(state: &AppState, sp: &Speaker) -> Value {
+async fn status_of(state: &AppState, sp: &Speaker, all: &[Speaker], groups: &[Group]) -> Value {
     let mut out = json!({ "id": sp.id, "ip": sp.ip, "name": sp.name, "model": sp.model, "s2": sp.s2, "reachable": false });
-    let Ok(coord) = coordinator(state, sp).await else {
+    let Some(group) = group_of(groups, &sp.uuid) else {
         return out;
     };
+    let Some(coord) = group.coordinator_ip().map(str::to_string) else {
+        return out;
+    };
+    let rooms = group.rooms();
+    let id_of = |uuid: &str| all.iter().find(|s| s.uuid == uuid).map(|s| s.id);
+    let grouped = rooms.len() > 1;
+    let group_volume = if grouped {
+        soap(&state.http, &coord, GRC, "GetGroupVolume", "<InstanceID>0</InstanceID>").await.ok().and_then(|v| tag(&v, "CurrentVolume")).and_then(|v| v.parse::<i64>().ok())
+    } else {
+        None
+    };
+    let visible = group.members.iter().any(|m| m.uuid == sp.uuid && m.visible);
     let transport = soap(&state.http, &coord, AVT, "GetTransportInfo", "<InstanceID>0</InstanceID>").await.ok();
     let pos = soap(&state.http, &coord, AVT, "GetPositionInfo", "<InstanceID>0</InstanceID>").await.ok();
     let volume = soap(&state.http, &sp.ip, RC, "GetVolume", "<InstanceID>0</InstanceID><Channel>Master</Channel>").await.ok();
@@ -175,6 +244,11 @@ async fn status_of(state: &AppState, sp: &Speaker) -> Value {
     let o = out.as_object_mut().unwrap();
     o.insert("reachable".into(), json!(true));
     o.insert("coordinator".into(), json!(coord));
+    o.insert("visible".into(), json!(visible));
+    o.insert("group".into(), json!(group.coordinator));
+    o.insert("group_name".into(), json!(rooms.iter().map(|m| m.name.as_str()).collect::<Vec<_>>().join(" + ")));
+    o.insert("group_rooms".into(), json!(rooms.iter().filter_map(|m| id_of(&m.uuid)).collect::<Vec<_>>()));
+    o.insert("group_volume".into(), json!(group_volume));
     o.insert("state".into(), json!(transport.as_deref().and_then(|t| tag(t, "CurrentTransportState"))));
     o.insert("volume".into(), json!(volume.as_deref().and_then(|v| tag(v, "CurrentVolume")).and_then(|v| v.parse::<i64>().ok())));
     o.insert("position_ms".into(), json!(ours.as_ref().and_then(|c| pos.as_deref().and_then(|p| tag(p, "RelTime")).and_then(|t| parse_time(&t)).map(|ms| ms + c.offset_ms + c.start_ms))));
@@ -250,7 +324,8 @@ async fn lan_stream(State(state): State<AppState>, Path(token): Path<String>, he
 
 pub async fn list(State(state): State<AppState>, _user: CurrentUser) -> ApiResult<Json<Value>> {
     let list = speakers(&state).await?;
-    let futures = list.iter().map(|sp| status_of(&state, sp));
+    let groups = topology(&state, &list).await;
+    let futures = list.iter().map(|sp| status_of(&state, sp, &list, &groups));
     Ok(Json(Value::Array(futures_util::future::join_all(futures).await)))
 }
 
@@ -436,7 +511,47 @@ pub struct Command {
     volume: Option<i64>,
 }
 
-/// pause | resume | stop | volume
+/// A visible room of the speaker's group, or an error for parts of pairs and home theatres.
+async fn room(state: &AppState, sp: &Speaker) -> ApiResult<(Vec<Group>, Group)> {
+    let groups = topology(state, std::slice::from_ref(sp)).await;
+    let g = group_of(&groups, &sp.uuid).cloned().ok_or_else(|| ApiError::BadGateway(format!("speaker {} not reachable", sp.ip)))?;
+    if !g.members.iter().any(|m| m.uuid == sp.uuid && m.visible) {
+        return Err(ApiError::BadRequest("part of a stereo pair or home theatre; group its room instead".into()));
+    }
+    Ok((groups, g))
+}
+
+#[derive(Deserialize)]
+pub struct Join {
+    /// Any speaker of the group to join.
+    to: i64,
+}
+
+/// Adds the speaker's room to another room's group (stereo pairs and home theatres move whole).
+pub async fn join(State(state): State<AppState>, _user: CurrentUser, Path(id): Path<i64>, Json(req): Json<Join>) -> ApiResult<Json<Value>> {
+    let sp = speaker(&state, id).await?;
+    let target = speaker(&state, req.to).await?;
+    room(&state, &sp).await?;
+    let (_, g) = room(&state, &target).await?;
+    if g.members.iter().any(|m| m.uuid == sp.uuid) {
+        return Ok(Json(json!({ "ok": true })));
+    }
+    soap(&state.http, &sp.ip, AVT, "SetAVTransportURI",
+         &format!("<InstanceID>0</InstanceID><CurrentURI>x-rincon:{}</CurrentURI><CurrentURIMetaData></CurrentURIMetaData>", g.coordinator)).await?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+/// Takes the speaker's room out of its group; the others keep playing.
+pub async fn leave(State(state): State<AppState>, _user: CurrentUser, Path(id): Path<i64>) -> ApiResult<Json<Value>> {
+    let sp = speaker(&state, id).await?;
+    let (_, g) = room(&state, &sp).await?;
+    if g.rooms().len() > 1 {
+        soap(&state.http, &sp.ip, AVT, "BecomeCoordinatorOfStandaloneGroup", "<InstanceID>0</InstanceID>").await?;
+    }
+    Ok(Json(json!({ "ok": true })))
+}
+
+/// pause | resume | stop | volume (the whole group) | room_volume (this room only)
 pub async fn command(
     State(state): State<AppState>,
     _user: CurrentUser,
@@ -449,11 +564,18 @@ pub async fn command(
         "pause" => soap(&state.http, &coord, AVT, "Pause", "<InstanceID>0</InstanceID>").await?,
         "resume" => soap(&state.http, &coord, AVT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>").await?,
         "stop" => soap(&state.http, &coord, AVT, "Stop", "<InstanceID>0</InstanceID>").await?,
-        "volume" => {
+        "volume" | "room_volume" => {
             let v = cmd.volume.ok_or_else(|| ApiError::BadRequest("volume 0–100 required".into()))?.clamp(0, 100);
-            soap(&state.http, &sp.ip, RC, "SetVolume", &format!("<InstanceID>0</InstanceID><Channel>Master</Channel><DesiredVolume>{v}</DesiredVolume>")).await?
+            let grouped = cmd.action == "volume" && room(&state, &sp).await.is_ok_and(|(_, g)| g.rooms().len() > 1);
+            if grouped {
+                // Keeps the rooms' ratio, as the Sonos app does.
+                soap(&state.http, &coord, GRC, "SnapshotGroupVolume", "<InstanceID>0</InstanceID>").await?;
+                soap(&state.http, &coord, GRC, "SetGroupVolume", &format!("<InstanceID>0</InstanceID><DesiredVolume>{v}</DesiredVolume>")).await?
+            } else {
+                soap(&state.http, &sp.ip, RC, "SetVolume", &format!("<InstanceID>0</InstanceID><Channel>Master</Channel><DesiredVolume>{v}</DesiredVolume>")).await?
+            }
         }
-        _ => return Err(ApiError::BadRequest("action: pause | resume | stop | volume".into())),
+        _ => return Err(ApiError::BadRequest("action: pause | resume | stop | volume | room_volume".into())),
     };
     Ok(Json(json!({ "ok": true })))
 }
@@ -547,6 +669,20 @@ mod tests {
         assert!(verify(secret, &tampered).is_none());
         let old = Claim { exp: Utc::now().timestamp() - 1, ..c };
         assert!(verify(secret, &sign(secret, &old)).is_none());
+    }
+
+    #[test]
+    fn groups() {
+        let xml = r#"<ZoneGroups><ZoneGroup Coordinator="RINCON_B" ID="RINCON_B:294"><ZoneGroupMember UUID="RINCON_A" Location="http://10.0.0.3:1400/xml/device_description.xml" ZoneName="Buero"/><ZoneGroupMember UUID="RINCON_B" Location="http://10.0.0.2:1400/xml/device_description.xml" ZoneName="Badezimmer"/></ZoneGroup><ZoneGroup Coordinator="RINCON_S" ID="RINCON_S:1"><ZoneGroupMember UUID="RINCON_S" Location="http://10.0.0.4:1400/x" ZoneName="Schlafzimmer" ChannelMapSet="x"/><ZoneGroupMember UUID="RINCON_T" Location="http://10.0.0.5:1400/x" ZoneName="Schlafzimmer" Invisible="1" ChannelMapSet="x"/></ZoneGroup><ZoneGroup Coordinator="RINCON_H" ID="RINCON_H:27"><ZoneGroupMember UUID="RINCON_H" Location="http://10.0.0.6:1400/x" ZoneName="Wohnzimmer" HTSatChanMapSet="x"><Satellite UUID="RINCON_W" Location="http://10.0.0.7:1400/x" ZoneName="Wohnzimmer" Invisible="1"/></ZoneGroupMember></ZoneGroup></ZoneGroups>"#;
+        let g = parse_groups(xml);
+        assert_eq!(g.len(), 3);
+        assert_eq!(g[0].coordinator_ip(), Some("10.0.0.2"));
+        assert_eq!(g[0].rooms().iter().map(|m| m.name.as_str()).collect::<Vec<_>>(), ["Badezimmer", "Buero"]);
+        assert_eq!(g[1].rooms().len(), 1, "stereo pair is one room");
+        assert!(!g[1].members[1].visible);
+        assert_eq!(g[2].members.len(), 2);
+        assert_eq!(g[2].rooms().len(), 1, "home theatre is one room");
+        assert_eq!(group_of(&g, "RINCON_W").map(|x| x.coordinator.as_str()), Some("RINCON_H"));
     }
 
     #[test]

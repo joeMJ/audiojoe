@@ -70,11 +70,7 @@ class _PlaybackTab extends StatelessWidget {
           const SizedBox(height: 12),
           _Toolbar(it),
           if (out != null)
-            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              IconButton(tooltip: t('Quieter'), onPressed: () => sonos.volume(-3), icon: const Icon(Icons.volume_down)),
-              Text(t('Volume {n}', {'n': out.volume ?? '?'})),
-              IconButton(tooltip: t('Louder'), onPressed: () => sonos.volume(3), icon: const Icon(Icons.volume_up)),
-            ])
+            const _Volume()
           else if (player.takenOver != null)
             Padding(
               padding: const EdgeInsets.only(top: 10),
@@ -119,6 +115,84 @@ class _FormatChips extends StatelessWidget {
       for (final c in src.chips) chip(c),
       if (target != null && !target.sameAs(src))
         Text(t('(Target: {q})', {'q': target.chips.join(' ')}), style: TextStyle(color: k.muted, fontSize: 13)),
+    ]);
+  }
+}
+
+/// Sonos volume: − slider + and the value; for a group the whole group, its rooms below.
+class _Volume extends StatelessWidget {
+  const _Volume();
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(listenable: sonos, builder: (context, _) => _build(context));
+
+  Widget _build(BuildContext context) {
+    final out = sonos.output;
+    if (out == null) return const SizedBox.shrink();
+    final members = out.grouped ? sonos.members : const <Room>[];
+    return Column(children: [
+      const SizedBox(height: 8),
+      _VolumeRow(
+        value: sonos.level,
+        label: out.grouped ? t('Group volume') : t('Volume'),
+        onChanged: (v) => sonos.setVolume(v),
+        big: true,
+      ),
+      if (members.length > 1)
+        ExpansionTile(
+          title: Text(t('Rooms ({n})', {'n': members.length})),
+          tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+          children: [
+            for (final r in members)
+              Row(children: [
+                SizedBox(width: 110, child: Text(r.name, overflow: TextOverflow.ellipsis, style: TextStyle(color: context.tok.muted))),
+                Expanded(child: _VolumeRow(value: r.volume ?? 0, label: r.name, onChanged: (v) => sonos.setVolume(v, room: r))),
+              ]),
+          ],
+        ),
+    ]);
+  }
+}
+
+class _VolumeRow extends StatelessWidget {
+  final int value;
+  final String label;
+  final ValueChanged<int> onChanged;
+  final bool big;
+  const _VolumeRow({required this.value, required this.label, required this.onChanged, this.big = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final size = big ? 52.0 : 40.0;
+    Widget step(IconData icon, String tip, int delta) => SizedBox(
+          width: size,
+          height: size,
+          child: IconButton.filledTonal(
+            tooltip: tip,
+            padding: EdgeInsets.zero,
+            iconSize: big ? 28 : 22,
+            onPressed: () => onChanged(value + delta),
+            icon: Icon(icon),
+          ),
+        );
+    return Row(children: [
+      step(Icons.remove, t('Quieter'), -3),
+      Expanded(
+        child: Semantics(
+          label: label,
+          child: Slider(
+            value: value.clamp(0, 100).toDouble(),
+            max: 100,
+            label: '$value',
+            onChanged: (v) => onChanged(v.round()),
+          ),
+        ),
+      ),
+      step(Icons.add, t('Louder'), 3),
+      SizedBox(
+        width: big ? 44 : 36,
+        child: Text('$value', textAlign: TextAlign.right, style: TextStyle(fontSize: big ? 18 : 15, fontWeight: FontWeight.w800)),
+      ),
     ]);
   }
 }
@@ -239,7 +313,7 @@ class _Toolbar extends StatelessWidget {
         tool(Text('${_rate(player.rate)}×', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)), t('Speed'),
             local && !player.live ? () => _rateSheet(context) : null),
         tool(Icon(local ? Icons.smartphone : Icons.speaker, size: 28, color: local ? null : accent),
-            local ? t('This device') : 'Sonos ${out.name}', () => showModalBottomSheet(context: context, builder: (_) => const OutputSheet()),
+            local ? t('This device') : out.label, () => showModalBottomSheet(context: context, builder: (_) => const OutputSheet()),
             tip: t('Output')),
         tool(
           switch (e?.status) {
@@ -375,6 +449,46 @@ class _ChaptersTab extends StatelessWidget {
 
 // ---------------------------------------------------------------- output
 
+/// Ticked: the room plays together with the current output.
+class _GroupBox extends StatefulWidget {
+  final Room room;
+  final VoidCallback reload;
+  const _GroupBox(this.room, this.reload);
+
+  @override
+  State<_GroupBox> createState() => _GroupBoxState();
+}
+
+class _GroupBoxState extends State<_GroupBox> {
+  bool busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = widget.room, o = sonos.output!;
+    final inGroup = r.group != null && r.group == o.group;
+    return SizedBox(
+      width: 32,
+      child: busy
+          ? const Padding(padding: EdgeInsets.all(6), child: CircularProgressIndicator(strokeWidth: 2.5))
+          : Checkbox(
+              value: inGroup,
+              semanticLabel: inGroup ? t('Remove from group') : t('Add to group'),
+              onChanged: (v) async {
+                setState(() => busy = true);
+                final messenger = ScaffoldMessenger.of(context);
+                try {
+                  await sonos.setInGroup(r, v ?? false);
+                } catch (e) {
+                  messenger.showSnackBar(SnackBar(content: Text('${t('Error')}: $e')));
+                }
+                if (mounted) setState(() => busy = false);
+                widget.reload();
+              },
+            ),
+    );
+  }
+}
+
 class OutputSheet extends StatelessWidget {
   const OutputSheet({super.key});
 
@@ -402,10 +516,14 @@ class OutputSheet extends StatelessWidget {
             Flexible(
               child: Loader<List<Room>>(
                 load: sonos.rooms,
-                builder: (context, rooms, _) => ListView(shrinkWrap: true, children: [
+                builder: (context, rooms, reload) => ListView(shrinkWrap: true, children: [
                   for (final r in rooms)
                     ItemRow(
-                      leading: const Icon(Icons.speaker, size: 32),
+                      leading: sonos.output == null || !r.reachable
+                          ? const Icon(Icons.speaker, size: 32)
+                          : r.id == sonos.output!.id
+                              ? Icon(Icons.speaker, size: 32, color: Theme.of(context).colorScheme.primary)
+                              : _GroupBox(r, reload),
                       title: 'Sonos ${r.name}',
                       subtitle: '${r.model} · ${r.s2 ? t('up to 24 bit / 48 kHz') : t('up to 16 bit / 48 kHz')}',
                       trailing: [
