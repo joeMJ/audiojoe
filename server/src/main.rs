@@ -1,14 +1,16 @@
+mod access;
 mod config;
 mod db;
 mod probe;
 mod stream;
 
-use std::{path::PathBuf, sync::Arc};
+use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
 use anyhow::Result;
 use axum::{
     extract::DefaultBodyLimit,
     http::{header, HeaderValue},
+    middleware,
     routing::{get, post},
     Json, Router,
 };
@@ -31,8 +33,9 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "audiojoe_server=info".into()),
+                .unwrap_or_else(|_| "audiojoe_server=info,access=info".into()),
         )
+        .with_ansi(std::io::IsTerminal::is_terminal(&std::io::stderr()))
         .init();
 
     let path = std::env::args()
@@ -58,6 +61,7 @@ async fn main() -> Result<()> {
         .route("/api/v1/probe/stream/{file}", get(probe::stream))
         .fallback_service(web)
         .layer(DefaultBodyLimit::max(64 * 1024))
+        .layer(middleware::from_fn_with_state(state.clone(), access::log))
         .layer(SetResponseHeaderLayer::overriding(
             header::X_CONTENT_TYPE_OPTIONS,
             HeaderValue::from_static("nosniff"),
@@ -70,7 +74,7 @@ async fn main() -> Result<()> {
 
     let listener = tokio::net::TcpListener::bind(state.config.listen).await?;
     tracing::info!("audiojoe-server {VERSION} listening on {}", state.config.listen);
-    axum::serve(listener, app)
+    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
         .with_graceful_shutdown(shutdown())
         .await?;
     Ok(())

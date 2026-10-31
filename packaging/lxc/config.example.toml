@@ -6,6 +6,9 @@ listen = "10.0.0.20:8080"
 database = "/var/lib/audiojoe/audiojoe.db"
 web_root = "/usr/share/audiojoe/web"
 
+# Reverse proxies whose X-Forwarded-For header is trusted for the access log.
+trusted_proxies = ["10.0.0.10"]
+
 # Stage 0 only: browser capability probe. Remove the section to disable it.
 [probe]
 token = "change-me-to-a-long-random-string"

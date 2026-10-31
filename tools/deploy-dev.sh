@@ -21,6 +21,7 @@ cargo build --release --quiet
 id audiojoe &>/dev/null || useradd --system --home-dir /var/lib/audiojoe --shell /usr/sbin/nologin audiojoe
 install -m 755 target/release/audiojoe-server target/release/attrappe /usr/local/bin/
 rm -rf /usr/share/audiojoe/web && mkdir -p /usr/share/audiojoe && cp -r clients/web/dist /usr/share/audiojoe/web
+mkdir -p /etc/systemd/journald.conf.d && install -m 644 packaging/lxc/journald-audiojoe.conf /etc/systemd/journald.conf.d/audiojoe.conf && systemctl restart systemd-journald
 install -m 644 packaging/lxc/audiojoe-server.service packaging/lxc/audiojoe-attrappe.service /etc/systemd/system/
 if [ -f /etc/audiojoe/config.toml ]; then chown root:audiojoe /etc/audiojoe/config.toml; chmod 640 /etc/audiojoe/config.toml; fi
 systemctl daemon-reload

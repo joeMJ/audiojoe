@@ -14,6 +14,9 @@ pub struct Config {
     pub database: PathBuf,
     /// Directory with the built web app (static files).
     pub web_root: PathBuf,
+    /// Reverse proxies whose `X-Forwarded-For` header is trusted for the access log.
+    #[serde(default)]
+    pub trusted_proxies: Vec<std::net::IpAddr>,
     #[serde(default)]
     pub probe: Option<ProbeConfig>,
 }
