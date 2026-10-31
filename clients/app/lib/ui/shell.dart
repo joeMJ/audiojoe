@@ -7,6 +7,7 @@ import '../l10n.dart';
 import '../player.dart';
 import 'books.dart';
 import 'common.dart';
+import 'lists.dart';
 import 'now_playing.dart';
 import 'settings.dart';
 import 'views.dart';
@@ -21,15 +22,16 @@ class Shell extends StatefulWidget {
 class _ShellState extends State<Shell> {
   int index = 0;
 
-  // Wide: 0 now playing, 1 continue, 2 podcasts, 3 audiobooks, 4 music, 5 offline, 6 settings.
-  // Phone: the same without "now playing" (opened from the mini player).
+  // Wide: 0 now playing, 1 continue, 2 podcasts, 3 audiobooks, 4 music, 5 radio, 6 settings.
+  // Phone: the same without "now playing" (opened from the mini player). 7 offline, opened
+  // from the indicator at the top.
   static const _dest = [
     (Icons.play_arrow, 'Now playing'),
     (Icons.history, 'Continue'),
     (Icons.podcasts, 'Podcasts'),
     (Icons.menu_book, 'Audiobooks'),
     (Icons.library_music, 'Music'),
-    (Icons.download_for_offline, 'Offline'),
+    (Icons.radio, 'Radio'),
     (Icons.settings, 'Settings'),
   ];
 
@@ -41,7 +43,8 @@ class _ShellState extends State<Shell> {
       2 => PodcastsView(onPlay: opened),
       3 => BooksView(key: const ValueKey('abs'), onPlay: opened),
       4 => MusicTab(onPlay: opened),
-      5 => const OfflineView(),
+      5 => RadioView(onPlay: opened),
+      7 => const OfflineView(),
       _ => SettingsView(onSignOut: widget.onSignOut),
     };
   }
@@ -70,6 +73,13 @@ class _ShellState extends State<Shell> {
               : Semantics(label: 'audiojoe', child: Image.asset('assets/icon.png', height: 36)),
           actions: [
             Flexible(child: SingleChildScrollView(scrollDirection: Axis.horizontal, reverse: true, child: StatusPills(compact: !wide))),
+            IconButton(
+              tooltip: t('Offline'),
+              isSelected: index == 7,
+              onPressed: () => setState(() => index = 7),
+              icon: const Icon(Icons.download_for_offline_outlined),
+              selectedIcon: const Icon(Icons.download_for_offline),
+            ),
             const AppearanceButton(),
             if (!wide) IconButton(onPressed: () => setState(() => index = 6), icon: const Icon(Icons.settings)),
             const SizedBox(width: 4),
@@ -80,7 +90,7 @@ class _ShellState extends State<Shell> {
             appBar: bar,
             body: Row(children: [
               NavigationRail(
-                selectedIndex: index,
+                selectedIndex: index < _dest.length ? index : null,
                 labelType: NavigationRailLabelType.all,
                 onDestinationSelected: (i) => setState(() => index = i),
                 destinations: [for (final d in _dest) NavigationRailDestination(icon: Icon(d.$1), label: Text(t(d.$2)))],

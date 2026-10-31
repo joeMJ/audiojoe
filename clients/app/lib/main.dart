@@ -14,6 +14,7 @@ import 'player.dart';
 import 'store.dart';
 import 'sync.dart';
 import 'ui/common.dart';
+import 'ui/lists.dart';
 import 'ui/login.dart';
 import 'ui/shell.dart';
 
@@ -52,6 +53,7 @@ class _AudiojoeAppState extends State<AudiojoeApp> {
     started = true;
     sync.start();
     downloads.check();
+    connectLists();
     unawaited(player.cueLast());
   }
 

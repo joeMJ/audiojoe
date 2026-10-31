@@ -59,6 +59,8 @@ const call = (method, path, body) => page.evaluate(async (m, p, b) => {
   return { status: r.status, body: r.headers.get("content-type")?.includes("json") ? await r.json() : null };
 }, method, path, body);
 const clickText = async (label, scope = "main") => {
+  // The offline page opens from the indicator at the top, not from the navigation.
+  if (label === "Offline") return page.evaluate(() => document.getElementById("offsize").click());
   const ok = await page.evaluate((l, s) => {
     const all = [...document.querySelectorAll(`${s} button, nav button`)];
     const txt = (x) => x.innerText.replace(/\u00ad/g, "").trim();
@@ -108,8 +110,9 @@ try {
     `${off.bg} → ${on.bg}, reload ${kept.bg}, back ${back.bg}`);
   check("moon below the top bar, top right", !off.inBar && off.bar === 52 && off.top >= 52 && off.right < 60, `bar ${off.bar}, top ${off.top}, right ${off.right}`);
   // Radio search: magnifier as large as the moon, right-aligned just left of it, no overlap.
-  await clickText("Musik", "nav"); await sleep(1500);
-  await page.evaluate(() => [...document.querySelectorAll("main .item")].find((r) => r.innerText.includes("Internetradio")).click());
+  const navs = await page.evaluate(() => [...document.querySelectorAll("nav button")].map((b) => b.innerText.replace(/\u00ad/g, "").trim()));
+  check("navigation: Radio of its own, Offline at the top", navs.includes("Radio") && !navs.includes("Offline") && (await page.$("#offsize")) !== null, navs.join(", "));
+  await clickText("Radio", "nav"); await sleep(1500);
   await page.waitForSelector(".lens", { timeout: 15000 });
   const rs = await page.evaluate(() => {
     const l = document.querySelector(".lens").getBoundingClientRect(), m = document.querySelector(".shell > .theme").getBoundingClientRect();
@@ -168,6 +171,51 @@ try {
   await waitText("fertig", 300000);
   check("episode saved offline", true);
   await shot("03-offline");
+
+  // ------------------------------------------------------------ continue lists: Next, order, bin, undo
+  const listKeys = async () => (await call("GET", "/lists/podcasts")).body.map((e) => e.key);
+  await clickText("Podcasts", "nav");
+  await clickText("Abonniert");
+  await waitText("Lage der Nation");
+  await page.evaluate(() => document.querySelector("main .item.tap")?.click());
+  await waitText(ep.title.slice(0, 20));
+  const other = eps.find((e) => e.key !== ep.key && e.title);
+  for (const e of [other, ep]) {
+    await page.evaluate((title) => {
+      const row = [...document.querySelectorAll("main .item")].find((r) => r.innerText.includes(title));
+      [...row.querySelectorAll("button")].find((b) => b.innerText === "Next").click();
+    }, e.title);
+    await sleep(700);
+  }
+  let lk = await listKeys();
+  check("Next appends at the end of the podcast list", lk.at(-1) === ep.key && lk.at(-2) === other.key, `${lk.length} entries, last ${lk.at(-1)}`);
+  await clickText("Weiterhören", "nav");
+  await page.waitForFunction(() => [...document.querySelectorAll("main .chips.seg .chip.on")].some((b) => b.innerText === "Podcasts"), { timeout: 15000 });
+  await waitText(ep.title.slice(0, 20));
+  await shot("04a-weiterhoeren-podcasts");
+  const rowBtn = (title, label) => page.evaluate((t, l) => {
+    const row = [...document.querySelectorAll("main .list .item")].find((r) => r.innerText.includes(t));
+    [...row.querySelectorAll("button")].find((b) => b.getAttribute("aria-label") === l).click();
+  }, title, label);
+  await rowBtn(ep.title, "Nach oben");
+  await sleep(1500);
+  lk = await listKeys();
+  check("arrow moves an entry up", lk.at(-1) === other.key && lk.at(-2) === ep.key, `last two ${lk.slice(-2).join(", ")}`);
+  const before = lk;
+  await page.waitForFunction((t) => [...document.querySelectorAll("main .list .item")].some((r) => r.innerText.includes(t)), {}, ep.title.slice(0, 20));
+  await rowBtn(ep.title, "Als gehört markieren");
+  await waitText("Als gehört markiert", 5000);
+  await sleep(2500);
+  const heard = (await call("GET", `/playback/${encodeURIComponent(ep.key)}`)).body;
+  lk = await listKeys();
+  check("bin marks as heard, the entry leaves the list", heard?.finished === true && !lk.includes(ep.key), `finished ${heard?.finished}, in list ${lk.includes(ep.key)}`);
+  await shot("04b-rueckgaengig");
+  await clickText("Rückgängig", "body");
+  await sleep(2500);
+  lk = await listKeys();
+  const back2 = (await call("GET", `/playback/${encodeURIComponent(ep.key)}`)).body;
+  check("undo brings it back at its place, unheard", JSON.stringify(lk) === JSON.stringify(before) && back2?.finished === false, `same order ${JSON.stringify(lk) === JSON.stringify(before)}, finished ${back2?.finished}`);
+  for (const e of [ep, other]) await call("DELETE", `/lists/podcasts/${encodeURIComponent(e.key)}`);
 
   // ------------------------------------------------------------ play, position on the server
   await clickText("Podcasts");

@@ -9,6 +9,9 @@ import { dropPlayed, isOffline, keepCurrent, offlineEntry, partKey } from "./dow
 import { idbAll, idbGet, idbPut } from "./idb";
 import { localPosition, onRemote, savePosition } from "./sync";
 
+/** The continue-list entry being played (an album for music): its successor plays next. */
+export interface Entry { list: "podcasts" | "books" | "music"; key: string }
+
 export interface PlayerState {
   item?: Item;
   queue: Item[];
@@ -22,6 +25,7 @@ export interface PlayerState {
   /** Set when the start position came from another device. */
   takenOver?: { device: string; at: string };
   rate: number;
+  entry?: Entry;
 }
 
 const audio = new Audio();
@@ -73,10 +77,16 @@ async function startPosition(it: Item): Promise<{ ms: number; from?: Playback }>
   return { ms: best.position_ms, from: best.device && best.device !== myDevice ? best : undefined };
 }
 
-export async function play(queue: Item[], index = 0) {
+let nextAfter: ((e: Entry) => Promise<(() => Promise<void>) | null>) | null = null;
+export const setNextAfter = (f: typeof nextAfter) => void (nextAfter = f);
+
+export async function play(queue: Item[], index = 0, entry?: Entry) {
   await persist();
   state.queue = queue;
   state.index = index;
+  const it = queue[index];
+  // Episodes and books are list entries themselves; music only when played as an album entry.
+  state.entry = entry ?? (it.kind === "episode" ? { list: "podcasts", key: it.key } : it.kind === "book" ? { list: "books", key: it.key } : undefined);
   await load(queue[index], true);
 }
 
@@ -165,6 +175,7 @@ export async function cueLast() {
   if (!it || state.item) return;
   state.queue = [it];
   state.index = 0;
+  state.entry = it.kind === "episode" ? { list: "podcasts", key: it.key } : it.kind === "book" ? { list: "books", key: it.key } : undefined;
   await load(it, false, true);
 }
 
@@ -251,9 +262,13 @@ audio.addEventListener("ended", async () => {
     await seekGlobal(parts()[state.part + 1].start_ms, true);
     return;
   }
+  const more = state.index + 1 < state.queue.length;
+  // Asked before saving "finished": that takes the item out of its list.
+  const after = !more && state.entry && nextAfter ? await nextAfter(state.entry).catch(() => null) : null;
   await persist(true);
   void dropPlayed();
-  if (state.index + 1 < state.queue.length) await skip(1);
+  if (more) await skip(1);
+  else if (after) await after();
 });
 audio.addEventListener("timeupdate", () => notify());
 audio.addEventListener("error", () => notify());

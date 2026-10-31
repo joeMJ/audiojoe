@@ -18,6 +18,9 @@ class Sync {
   final pendingCount = ValueNotifier<int>(0);
   final _remote = StreamController<Playback>.broadcast();
   Stream<Playback> get remote => _remote.stream;
+  /// A continue list changed (on any device): the name of the list.
+  final _lists = StreamController<String>.broadcast();
+  Stream<String> get lists => _lists.stream;
 
   StreamSubscription<String>? _events;
   Timer? _probe;
@@ -95,6 +98,8 @@ class Sync {
           final p = Playback.fromJson((jsonDecode(line.substring(5))['state'] as Map).cast<String, dynamic>());
           Stores.positions.put(p.key, p.toJson());
           _remote.add(p);
+        } else if (line.startsWith('data:') && event == 'lists') {
+          _lists.add((jsonDecode(line.substring(5))['list'] ?? '') as String);
         }
       }, onDone: _lost, onError: (_) => _lost(), cancelOnError: true);
     } catch (_) {

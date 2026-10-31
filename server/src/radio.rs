@@ -148,7 +148,7 @@ pub async fn search(State(state): State<AppState>, user: CurrentUser, Query(q): 
 
 pub async fn favorites(State(state): State<AppState>, user: CurrentUser) -> ApiResult<Json<Value>> {
     with_db(&state.db, move |c| {
-        let mut stmt = c.prepare(&format!("{STATION_SELECT} WHERE f.uuid IS NOT NULL ORDER BY s.name COLLATE NOCASE"))?;
+        let mut stmt = c.prepare(&format!("{STATION_SELECT} WHERE f.uuid IS NOT NULL ORDER BY f.position, s.name COLLATE NOCASE"))?;
         let rows = stmt.query_map([user.id], station_json)?.collect::<Result<Vec<_>, _>>()?;
         Ok(Json(Value::Array(rows)))
     })
@@ -160,7 +160,8 @@ pub async fn add_favorite(State(state): State<AppState>, user: CurrentUser, Path
         return Err(ApiError::NotFound);
     }
     with_db(&state.db, move |c| {
-        if c.execute("INSERT OR IGNORE INTO radio_favorite (user_id, uuid) SELECT ?1, uuid FROM radio_station WHERE uuid = ?2", (user.id, &uuid))? == 0
+        if c.execute("INSERT OR IGNORE INTO radio_favorite (user_id, uuid, position)
+             SELECT ?1, uuid, (SELECT COALESCE(MAX(position), 0) + 1 FROM radio_favorite WHERE user_id = ?1) FROM radio_station WHERE uuid = ?2", (user.id, &uuid))? == 0
             && c.query_row("SELECT 1 FROM radio_favorite WHERE user_id = ?1 AND uuid = ?2", (user.id, &uuid), |_| Ok(())).is_err()
         {
             return Err(ApiError::NotFound);
@@ -211,4 +212,21 @@ pub async fn image(state: &AppState, uuid: &str) -> ApiResult<Response> {
     // Only images; a station's "favicon" may point to anything.
     let ok = res.headers().get(header::CONTENT_TYPE).and_then(|v| v.to_str().ok()).is_some_and(|t| t.starts_with("image/"));
     if ok { Ok(res) } else { Err(ApiError::NotFound) }
+}
+
+/// The favourites in the user's order (uuids); applies on all devices.
+pub async fn order_favorites(State(state): State<AppState>, user: CurrentUser, Json(uuids): Json<Vec<String>>) -> ApiResult<Json<Value>> {
+    if uuids.len() > 1000 {
+        return Err(ApiError::BadRequest("too many".into()));
+    }
+    with_db(&state.db, move |c| {
+        let tx = c.transaction()?;
+        tx.execute("UPDATE radio_favorite SET position = position + 100000 WHERE user_id = ?1", [user.id])?;
+        for (i, u) in uuids.iter().enumerate() {
+            tx.execute("UPDATE radio_favorite SET position = ?3 WHERE user_id = ?1 AND uuid = ?2", (user.id, u, i as f64))?;
+        }
+        tx.commit()?;
+        Ok(Json(json!({ "ok": true })))
+    })
+    .await
 }

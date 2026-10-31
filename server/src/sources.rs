@@ -174,7 +174,8 @@ pub async fn delete(State(state): State<AppState>, _user: CurrentUser, Path(id):
         c.execute("DELETE FROM source WHERE id = ?1", [id])?;
         // Positions of its items can no longer be played.
         let prefix = format!("{}:{id}:", if kind == "audiobookshelf" { "abs" } else { kind.as_str() });
-        c.execute("DELETE FROM playback WHERE item_key LIKE ?1 || '%'", [prefix])?;
+        c.execute("DELETE FROM playback WHERE item_key LIKE ?1 || '%'", [&prefix])?;
+        c.execute("DELETE FROM list_entry WHERE item_key LIKE ?1 || '%'", [&prefix])?;
         Ok(())
     })
     .await?;

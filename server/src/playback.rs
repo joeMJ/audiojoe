@@ -82,6 +82,9 @@ fn apply(c: &rusqlite::Connection, user: i64, device: &str, key: &str, u: &Updat
         (user, key, u.position_ms, u.duration_ms, u.finished, u.title.chars().take(300).collect::<String>(),
          u.subtitle.chars().take(300).collect::<String>(), device, when),
     )?;
+    if n > 0 {
+        crate::lists::follow(c, user, key, u.finished, u.position_ms, &u.title, &u.subtitle)?;
+    }
     let row = c.query_row("SELECT * FROM playback WHERE user_id = ?1 AND item_key = ?2", (user, key), row_json)?;
     Ok((n > 0, row))
 }
@@ -184,7 +187,10 @@ pub async fn events(State(state): State<AppState>, user: CurrentUser) -> Sse<imp
     let stream = futures_util::stream::unfold((rx, user.id), |(mut rx, uid)| async move {
         loop {
             match rx.recv().await {
-                Ok((u, v)) if u == uid => return Some((Ok(Event::default().event("playback").data(v.to_string())), (rx, uid))),
+                Ok((u, v)) if u == uid => {
+                    let name = v["type"].as_str().unwrap_or("playback").to_string();
+                    return Some((Ok(Event::default().event(name).data(v.to_string())), (rx, uid)));
+                }
                 Ok(_) => continue,
                 // Missed events: tell the client to reload instead of silently dropping them.
                 Err(broadcast::error::RecvError::Lagged(_)) => {

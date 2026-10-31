@@ -14,6 +14,9 @@ import 'models.dart';
 import 'store.dart';
 import 'sync.dart';
 
+/// The continue-list entry being played (an album for music): its successor plays next.
+typedef Entry = ({String list, String key});
+
 class Player extends ChangeNotifier {
   Player._() {
     audio.playerStateStream.listen(_onState);
@@ -36,6 +39,15 @@ class Player extends ChangeNotifier {
   ({String device, String at})? takenOver;
   double rate = 1;
   Timer? _saveTimer;
+  Entry? entry;
+  /// Set by the UI: what plays after [entry] (asked before the item is saved as finished).
+  Future<Future<void> Function()?> Function(Entry e)? nextAfter;
+
+  static Entry? entryOf(Item it) => it.kind == 'episode'
+      ? (list: 'podcasts', key: it.key)
+      : it.kind == 'book'
+          ? (list: 'books', key: it.key)
+          : null;
 
   // Sleep timer: pause at a time, or at the end of the current chapter or item.
   DateTime? sleepAt;
@@ -75,8 +87,10 @@ class Player extends ChangeNotifier {
     return j == null ? null : Item.fromJson(j);
   }
 
-  Future<void> play(List<Item> items, [int i = 0]) async {
+  Future<void> play(List<Item> items, [int i = 0, Entry? from]) async {
     await _persist();
+    // Episodes and books are list entries themselves; music only when played as an album entry.
+    entry = from ?? entryOf(items[i]);
     final full = await meta(items[i].key);
     queue = [...items];
     if (full != null) queue[i] = full;
@@ -153,6 +167,7 @@ class Player extends ChangeNotifier {
     queue = [it];
     index = 0;
     item = it;
+    entry = entryOf(it);
     fromCache = downloads.isOffline(it.key);
     final start = it.kind == 'radio' ? (ms: 0, from: null) : _startPosition(it);
     takenOver = start.from == null ? null : (device: start.from!.device, at: start.from!.updatedAt);
@@ -271,9 +286,26 @@ class Player extends ChangeNotifier {
     if (s.processingState == ProcessingState.completed) {
       final stopHere = sleepAtEnd != null;
       if (stopHere) setSleep();
-      unawaited(_persist(finished: true).then((_) => !stopHere && index + 1 < queue.length ? skip(1) : null));
+      unawaited(_ended(stopHere));
     }
     notifyListeners();
+  }
+
+  Future<void> _ended(bool stopHere) async {
+    final more = index + 1 < queue.length;
+    Future<void> Function()? after;
+    if (!more && !stopHere && entry != null && nextAfter != null) {
+      try {
+        after = await nextAfter!(entry!);
+      } catch (_) {}
+    }
+    await _persist(finished: true);
+    if (stopHere) return;
+    if (more) {
+      await skip(1);
+    } else if (after != null) {
+      await after();
+    }
   }
 
   /// Another device moved on: follow it while this device is not playing the item.

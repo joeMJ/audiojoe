@@ -102,6 +102,8 @@ function connect() {
     remoteListeners.forEach((l) => l(p));
   });
   es.addEventListener("resync", () => remoteListeners.forEach((l) => l({ key: "" } as Playback)));
+  // A continue list changed on some device: views reload like after a resync.
+  es.addEventListener("lists", () => remoteListeners.forEach((l) => l({ key: "" } as Playback)));
 }
 
 export function stopSync() {

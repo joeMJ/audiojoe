@@ -115,12 +115,14 @@ class AppearanceButton extends StatelessWidget {
   Widget build(BuildContext context) => ValueListenableBuilder(
         valueListenable: appearance,
         builder: (context, mode, _) {
-          final (icon, label) = switch (mode) {
-            ThemeMode.light => (Icons.light_mode, t('Appearance: light')),
-            ThemeMode.dark => (Icons.dark_mode, t('Appearance: dark')),
-            ThemeMode.system => (Icons.brightness_medium, t('Appearance: automatic')),
-          };
-          return IconButton(tooltip: label, onPressed: nextAppearance, icon: Icon(icon));
+          final on = isDark(context);
+          // Filled moon on the accent colour = on, outlined moon = off.
+          return IconButton(
+            tooltip: on ? t('Dark mode: on') : t('Dark mode: off'),
+            onPressed: () => toggleDark(context),
+            style: on ? IconButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Theme.of(context).colorScheme.onPrimary) : null,
+            icon: Icon(on ? Icons.dark_mode : Icons.dark_mode_outlined),
+          );
         },
       );
 }
@@ -172,6 +174,11 @@ class Badge2 extends StatelessWidget {
 }
 
 /// Primary button of a list row; fixed width so rows line up whatever the label.
+/// Play button of a row: phones get a round icon button, so the title keeps its room.
+Widget playButton(BuildContext context, String label, VoidCallback? onPressed) => MediaQuery.sizeOf(context).width >= 720
+    ? rowButton(label, onPressed)
+    : IconButton.filled(tooltip: label, onPressed: onPressed, icon: const Icon(Icons.play_arrow));
+
 Widget rowButton(String label, VoidCallback? onPressed) =>
     SizedBox(width: 124, child: FilledButton(onPressed: onPressed, child: Text(label, maxLines: 1, overflow: TextOverflow.fade, softWrap: false)));
 

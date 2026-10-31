@@ -5,10 +5,12 @@ import { addOffline, dropPlayedOn, offlineEntry, offlineList, removeFromOffline,
 import { ago, bytes, clock, t } from "./i18n";
 import { idbAll } from "./idb";
 import * as player from "./player";
-import { pendingCount } from "./sync";
+import { pendingCount, savePosition } from "./sync";
 import { isDark, onAppearance, toggleDark } from "./theme";
 
-type View = "np" | "cont" | "pod" | "books" | "lib" | "off";
+type View = "np" | "cont" | "pod" | "books" | "lib" | "radio" | "off";
+// Offline is reached from the indicator at the top, not from the navigation.
+const NAV: View[] = ["np", "cont", "pod", "books", "lib", "radio"];
 let view: View = "np";
 let main!: HTMLElement;
 let top!: HTMLElement;
@@ -39,10 +41,10 @@ const ICONS: Record<View, string> = {
   pod: '<circle cx="12" cy="11" r="3"/><path d="M12 14v7M6.3 16.5a8 8 0 1 1 11.4 0"/>',
   books: '<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/>',
   lib: '<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>',
+  radio: '<rect x="3" y="8" width="18" height="12" rx="2"/><path d="M7 8l10-5"/><circle cx="8" cy="14" r="2"/><path d="M14 13h4M14 16h4"/>',
   off: '<path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14"/>',
 };
-const RADIO_ICON = '<rect x="3" y="8" width="18" height="12" rx="2"/><path d="M7 8l10-5"/><circle cx="8" cy="14" r="2"/><path d="M14 13h4M14 16h4"/>';
-const LABELS: Record<View, string> = { np: "Now playing", cont: "Continue", pod: "Podcasts", books: "Audiobooks", lib: "Music", off: "Offline" };
+const LABELS: Record<View, string> = { np: "Now playing", cont: "Continue", pod: "Podcasts", books: "Audiobooks", lib: "Music", radio: "Radio", off: "Offline" };
 
 function initials(s: string) {
   return s.split(/\s+/).filter(Boolean).slice(0, 3).map((w) => w[0]).join("").toUpperCase() || "♫";
@@ -66,12 +68,82 @@ function failure(e: unknown) {
 /** Click handler of a button inside a tappable row: the row must not react as well. */
 const own = (f: (ev: Event) => void) => (ev: Event) => { ev.stopPropagation(); f(ev); };
 
-async function start(items: Item[], index = 0) {
+async function start(items: Item[], index = 0, entry?: player.Entry) {
   const meta = await player.itemMeta(items[index].key);
   const queue = items.slice();
   if (meta) queue[index] = { ...items[index], ...meta };
-  await player.play(queue, index);
+  await player.play(queue, index, entry);
   show("np");
+}
+
+// ---------------------------------------------------------------- continue lists, "Next"
+
+type ListName = player.Entry["list"];
+interface ListEntry { key: string; title: string; subtitle: string; position_ms: number; duration_ms: number | null; device: string; updated_at: string | null }
+
+const listOf = (it: Item): ListName => (it.kind === "episode" ? "podcasts" : it.kind === "book" ? "books" : "music");
+
+/** "Next": appends the item (an album as one entry) at the end of its continue list. */
+function nextButton(it: Item) {
+  const b = h("button", { className: "big sec", title: t("Added to Next") }, t("Add to Next")) as HTMLButtonElement;
+  b.onclick = own(async () => {
+    b.disabled = true;
+    try {
+      await api("POST", `/lists/${listOf(it)}`, { key: it.key, title: it.title, subtitle: it.subtitle ?? it.podcast ?? "" });
+      b.textContent = `✓ ${t("Add to Next")}`;
+    } catch {
+      b.disabled = false;
+    }
+  });
+  return b;
+}
+
+/** Tracks of an album entry ("jellyfin:2:abc" → browse parent abc of source 2). */
+async function albumTracks(key: string): Promise<Item[]> {
+  const [, src, id] = key.split(":");
+  const res = await api<{ items: Item[] }>("GET", `/sources/${src}/browse?parent=${encodeURIComponent(id)}&limit=500`);
+  return res.items.filter((i) => i.kind === "track");
+}
+
+async function playEntry(list: ListName, e: ListEntry) {
+  const entry = { list, key: e.key };
+  if (list === "music") {
+    const tracks = await albumTracks(e.key);
+    if (tracks.length) await start(tracks, 0, entry);
+    return;
+  }
+  await start([{ key: e.key, kind: list === "podcasts" ? "episode" : "book", title: e.title, subtitle: e.subtitle }], 0, entry);
+}
+
+// At the end of an item: the next entry of the same list plays.
+player.setNextAfter(async (entry) => {
+  let list: ListEntry[];
+  try {
+    list = await api<ListEntry[]>("GET", `/lists/${entry.list}`);
+  } catch {
+    return null;
+  }
+  const i = list.findIndex((x) => x.key === entry.key);
+  if (i < 0) return null;
+  if (entry.list === "music") void api("DELETE", `/lists/music/${encodeURIComponent(entry.key)}`).catch(() => undefined);
+  const next = list[i + 1];
+  return next ? () => playEntry(entry.list, next) : null;
+});
+
+/** A short note at the bottom with an undo button. */
+function undoBar(text: string, undo: () => Promise<void>) {
+  document.querySelector(".toast")?.remove();
+  const bar = h("div", { className: "toast" }, h("span", {}, text));
+  const b = h("button", { className: "big sec" }, t("Undo")) as HTMLButtonElement;
+  b.onclick = async () => {
+    b.disabled = true;
+    bar.remove();
+    await undo().catch(() => undefined);
+    show(view);
+  };
+  bar.append(b);
+  document.body.append(bar);
+  setTimeout(() => bar.remove(), 7000);
 }
 
 // ---------------------------------------------------------------- shell
@@ -80,7 +152,7 @@ export function mountShell(root: HTMLElement, logout: () => void) {
   onLogout = logout;
   top = h("header", { className: "top" });
   const nav = h("nav");
-  for (const v of Object.keys(LABELS) as View[]) {
+  for (const v of NAV) {
     nav.append(h("button", { onclick: () => show(v), className: v === view ? "active" : "" }, icon(ICONS[v]), t(LABELS[v])));
     (nav.lastElementChild as HTMLElement).dataset.v = v;
   }
@@ -114,12 +186,13 @@ export function renderTop() {
   const sync = pill("sync", pendingCount ? "warn" : "", [t("Positions synced"), t("{n} waiting to sync", { n: pendingCount }), t("{n} waiting to sync", { n: 99 })],
     pendingCount ? 1 : 0);
   // The offline size keeps its last value until the new one is known (no gap, no jump).
-  const off = h("div", { className: "pill num", id: "offsize", hidden: !usage }, `${t("Offline")} ${usage}`);
+  // Opens the offline page (it has no place in the navigation).
+  const off = h("button", { className: view === "off" ? "pill num tap on" : "pill num tap", id: "offsize", onclick: () => show("off") },
+    usage ? `${t("Offline")} ${usage}` : t("Offline"));
   top.replaceChildren(h("div", { className: "logo" }, h("img", { src: "/icon-192.png", alt: "" }), "audiojoe"), net, sync, off);
   void offlineUsage().then((u) => {
     usage = u || "";
-    off.hidden = !usage;
-    off.textContent = `${t("Offline")} ${usage}`;
+    off.textContent = usage ? `${t("Offline")} ${usage}` : t("Offline");
   });
 }
 
@@ -150,13 +223,14 @@ export function show(v: View) {
   document.querySelectorAll<HTMLElement>("nav button").forEach((b) => b.classList.toggle("active", b.dataset.v === v));
   main.replaceChildren();
   main.scrollTop = 0;
-  ({ np: renderNowPlaying, cont: renderContinue, pod: renderPodcasts, books: renderBooks, lib: renderMusic, off: renderOffline })[v]();
+  ({ np: renderNowPlaying, cont: renderContinue, pod: renderPodcasts, books: renderBooks, lib: renderMusic, radio: renderRadio, off: renderOffline })[v]();
+  renderTop();
 }
 
 /** Re-render the current view when its data changed (except lists the user scrolls in). */
 export function refresh(kind: "player" | "data" | "offline") {
   if (kind === "player" && view === "np") updateNowPlaying();
-  else if (kind === "data" && view === "cont") show("cont");
+  else if (kind === "data" && view === "cont" && !document.querySelector(".toast")) show("cont");
   else if (kind === "offline" && view === "off") show("off");
   else if (kind === "offline" && view === "np" && npRefs) void fillOffTool(npRefs.off);
 }
@@ -317,7 +391,8 @@ function openDetails(base: Item) {
           pos > 0 && !finished && dur ? h("div", { className: "sub" }, `${clock(pos)} / ${clock(dur)}`) : null,
           h("div", { className: "chips", style: "margin-top:12px" },
             h("button", { className: "big", onclick: () => void start([it]) }, pos > 0 && !finished ? t("Resume") : t("Play")),
-            offBadge(off) ?? h("button", { className: "big sec", onclick: (ev: Event) => { (ev.target as HTMLButtonElement).disabled = true; void addOffline([it]); } }, t("Save offline"))))),
+            offBadge(off) ?? h("button", { className: "big sec", onclick: (ev: Event) => { (ev.target as HTMLButtonElement).disabled = true; void addOffline([it]); } }, t("Save offline")),
+            it.kind === "episode" || it.kind === "book" ? nextButton(it) : null))),
       it.notes ? notesView(it.notes) : h("div", { className: "desc" }, it.description || t("No description.")),
       it.chapters?.length ? h("h3", {}, t("Chapters")) : null,
       it.chapters?.length ? h("div", { className: "list" }, ...it.chapters.map((c) =>
@@ -387,33 +462,75 @@ function updateNowPlaying() {
 
 // ---------------------------------------------------------------- continue
 
-async function renderContinue() {
-  main.append(h("h2", {}, t("Continue")));
-  let list: Playback[];
+const CONT = "aj_continue_list";
+let contList: ListName = (() => {
   try {
-    list = online ? await api<Playback[]>("GET", "/playback?unfinished=true&limit=30") : [];
+    return (localStorage.getItem(CONT) as ListName | null) ?? "podcasts";
   } catch {
-    list = [];
+    return "podcasts";
   }
-  if (!online || !list.length) {
-    // Offline: what this device knows.
-    const local = await idbAll<Playback>("positions");
-    if (!list.length) list = local.filter((p) => !p.finished && p.position_ms > 0).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+})();
+
+async function renderContinue() {
+  const mode = (v: ListName, label: string) => h("button", {
+    className: contList === v ? "chip on" : "chip",
+    onclick: () => { contList = v; try { localStorage.setItem(CONT, v); } catch { /* private window */ } show("cont"); },
+  }, label);
+  main.append(h("div", { className: "chips seg" }, mode("podcasts", t("Podcasts")), mode("books", t("Audiobooks")), mode("music", t("Music"))));
+  const list = contList;
+  let entries: ListEntry[] | null = null;
+  if (online) {
+    try {
+      entries = await api<ListEntry[]>("GET", `/lists/${list}`);
+    } catch { /* offline below */ }
   }
-  if (!list.length) return void main.append(h("div", { className: "empty" }, t("Nothing to continue.")));
+  if (!entries) {
+    // Offline: what this device knows (started, unfinished).
+    const prefix = list === "podcasts" ? "episode:" : list === "books" ? "abs:" : "-";
+    entries = (await idbAll<Playback>("positions")).filter((p) => p.key.startsWith(prefix) && !p.finished && p.position_ms > 0)
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at)).map((p) => ({ ...p, duration_ms: p.duration_ms ?? null }));
+  }
+  if (!entries.length) return void main.append(h("div", { className: "empty" }, list === "music" ? t("Nothing here yet. Add albums with Next.") : t("Nothing to continue.")));
+  const all = entries;
+  const keys = all.map((e) => e.key);
+  const move = async (i: number, d: number) => {
+    const k = keys.slice();
+    [k[i], k[i + d]] = [k[i + d], k[i]];
+    await api("PUT", `/lists/${list}`, k).catch(() => undefined);
+    show("cont");
+  };
   const box = h("div", { className: "list" });
-  for (const p of list) {
-    const off = await offlineEntry(p.key);
-    const f = p.duration_ms ? p.position_ms / p.duration_ms : 0;
-    const kind = p.key.startsWith("episode:") ? "episode" : p.key.startsWith("abs:") ? "book" : "track";
-    const item: Item = { key: p.key, kind, title: p.title, subtitle: p.subtitle };
-    const base: Item = { ...item, image: `/api/v1/image/${encodeURIComponent(p.key)}`, duration_ms: p.duration_ms, position_ms: p.position_ms };
-    box.append(h("div", { className: "item tap", onclick: () => openDetails(base) }, thumb({ title: p.subtitle || p.title, image: base.image }),
-      h("div", { className: "tx" }, h("div", { className: "t1" }, p.title || p.key),
-        h("div", { className: "t2" }, `${clock(p.position_ms)}${p.duration_ms ? " / " + clock(p.duration_ms) : ""} · ${p.device ? t("Last on {device} · {ago}", { device: p.device, ago: ago(p.updated_at) }) : ago(p.updated_at)}`),
-        h("div", { className: "prog" }, h("i", { style: `width:${f * 100}%` }))),
-      h("span", { className: off?.status === "done" ? "badge ok" : "badge warn" }, off?.status === "done" ? t("in cache") : t("online only")),
-      h("button", { className: "big", onclick: own(() => void start([item])) }, t("Resume"))));
+  for (const [i, e] of all.entries()) {
+    const kind = list === "podcasts" ? "episode" : list === "books" ? "book" : "album";
+    const off = kind === "album" ? undefined : await offlineEntry(e.key);
+    const f = e.duration_ms && e.position_ms ? e.position_ms / e.duration_ms : 0;
+    const base: Item = { key: e.key, kind, title: e.title, subtitle: e.subtitle, image: `/api/v1/image/${encodeURIComponent(e.key)}`,
+      duration_ms: e.duration_ms ?? undefined, position_ms: e.position_ms };
+    const info = e.position_ms > 0
+      ? `${clock(e.position_ms)}${e.duration_ms ? " / " + clock(e.duration_ms) : ""}${e.updated_at ? " · " + (e.device ? t("Last on {device} · {ago}", { device: e.device, ago: ago(e.updated_at) }) : ago(e.updated_at)) : ""}`
+      : e.subtitle;
+    const row = h("div", { className: "item tap", onclick: () => (kind === "album" ? void playEntry(list, e) : openDetails(base)) },
+      thumb({ title: e.subtitle || e.title, image: base.image }),
+      h("div", { className: "tx" }, h("div", { className: "t1" }, e.title || e.key), h("div", { className: "t2" }, info),
+        f ? h("div", { className: "prog" }, h("i", { style: `width:${f * 100}%` })) : null),
+      kind === "album" ? null : h("span", { className: off?.status === "done" ? "badge ok" : "badge warn" }, off?.status === "done" ? t("in cache") : t("online only")),
+      h("button", { className: "big sec arrow", disabled: i === 0, ariaLabel: t("Move up"), onclick: own(() => void move(i, -1)) }, "▲"),
+      h("button", { className: "big sec arrow", disabled: i === all.length - 1, ariaLabel: t("Move down"), onclick: own(() => void move(i, 1)) }, "▼"),
+      h("button", { className: "big sec arrow", ariaLabel: list === "music" ? t("Remove from the list") : t("Mark as heard"), title: list === "music" ? t("Remove from the list") : t("Mark as heard"),
+        onclick: own(() => void trash(e)) }, icon('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>')),
+      h("button", { className: "big", onclick: own(() => void playEntry(list, e)) }, e.position_ms > 0 ? t("Resume") : t("Play")));
+    const trash = async (x: ListEntry) => {
+      row.remove();
+      const now = () => new Date().toISOString();
+      if (list === "music") await api("DELETE", `/lists/music/${encodeURIComponent(x.key)}`).catch(() => undefined);
+      else await savePosition({ key: x.key, position_ms: x.position_ms, duration_ms: x.duration_ms, finished: true, updated_at: now(), title: x.title, subtitle: x.subtitle });
+      undoBar(list === "music" ? t("Removed from the list") : t("Marked as heard"), async () => {
+        if (list !== "music") await savePosition({ key: x.key, position_ms: x.position_ms, duration_ms: x.duration_ms, finished: false, updated_at: now(), title: x.title, subtitle: x.subtitle });
+        await api("POST", `/lists/${list}`, { key: x.key, title: x.title, subtitle: x.subtitle });
+        await api("PUT", `/lists/${list}`, keys);
+      });
+    };
+    box.append(row);
   }
   main.append(box);
 }
@@ -455,6 +572,7 @@ async function renderPodcasts() {
           h("div", { className: "t2" }, [e.subtitle, e.published?.slice(0, 10), e.duration_ms ? clock(e.duration_ms) : ""].filter(Boolean).join(" · ")),
           f ? h("div", { className: "prog" }, h("i", { style: `width:${f * 100}%` })) : null),
         offBadge(off) ?? h("button", { className: "big sec", onclick: own((ev) => { (ev.target as HTMLButtonElement).disabled = true; void addOffline([e]); }) }, t("Save offline")),
+        nextButton(items[i]),
         h("button", { className: "big", onclick: own(() => void start([items[i]])) }, f ? t("Resume") : t("Play"))));
     }
     main.append(box);
@@ -480,16 +598,14 @@ async function renderMusic() {
     if (!libStack.length) {
       const sources = (await api<{ id: number; name: string; kind: string }[]>("GET", "/sources")).filter((x) => ["jellyfin", "emby", "plex"].includes(x.kind));
       main.append(h("h2", {}, t("Music")));
+      if (!sources.length) return void main.append(h("div", { className: "empty" }, t("No sources yet. Add one in the settings.")));
       main.append(h("div", { className: "list" },
-        h("div", { className: "item tap", onclick: () => ((libStack = [{ source: RADIO, title: t("Internet radio") }]), show("lib")) },
-          h("div", { className: "ic" }, icon(RADIO_ICON)), h("div", { className: "tx" }, h("div", { className: "t1" }, t("Internet radio")), h("div", { className: "t2" }, t("Favourites and search")))),
         ...sources.map((s) =>
         h("div", { className: "item tap", onclick: () => ((libStack = [{ source: s.id, title: s.name }]), show("lib")) },
           thumb({ title: s.name }), h("div", { className: "tx" }, h("div", { className: "t1" }, s.name), h("div", { className: "t2" }, s.kind))))));
       return;
     }
     const cur = libStack[libStack.length - 1];
-    if (cur.source === RADIO) return renderRadio();
     const head = h("div", { className: "chips" });
     head.append(h("button", { className: "chip", onclick: () => (libStack.pop(), show("lib")) }, `← ${t("Back")}`));
     if (!cur.album) head.append(h("h2", { style: "margin:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis" }, cur.title));
@@ -497,7 +613,9 @@ async function renderMusic() {
     const q = cur.parent ? `?parent=${encodeURIComponent(cur.parent)}&limit=300` : "";
     const res = await api<{ items: Item[] }>("GET", `/sources/${cur.source}/browse${q}`);
     const tracks = res.items.filter((i) => i.kind === "track");
-    const buttons = tracks.length ? [h("button", { className: "big", onclick: () => void start(tracks, 0) }, cur.album ? t("Play album") : t("Play all")),
+    const album = cur.album;
+    const buttons = tracks.length ? [h("button", { className: "big", onclick: () => void start(tracks, 0, album ? { list: "music", key: album.key } : undefined) }, album ? t("Play album") : t("Play all")),
+      ...(album ? [nextButton(album)] : []),
       h("button", { className: "big sec", onclick: (ev: Event) => { (ev.target as HTMLButtonElement).disabled = true; void addOffline(tracks); } }, t("Save offline"))] : [];
     if (cur.album) main.append(albumHead(cur.album, tracks, buttons));
     else head.append(...buttons);
@@ -514,7 +632,8 @@ async function renderMusic() {
         const id = it.key.split(":")[2];
         box.append(h("div", { className: "item tap", onclick: () => (libStack.push({ source: cur.source, parent: id, title: it.title, album: it.kind === "album" ? it : undefined }), show("lib")) },
           thumb(it), h("div", { className: "tx" }, h("div", { className: "t1" }, it.title),
-            h("div", { className: "t2" }, [it.subtitle, it.year].filter(Boolean).join(" · ")))));
+            h("div", { className: "t2" }, [it.subtitle, it.year].filter(Boolean).join(" · "))),
+          it.kind === "album" ? nextButton(it) : null));
       }
     }
     main.append(box);
@@ -523,18 +642,17 @@ async function renderMusic() {
   }
 }
 
-// ---------------------------------------------------------------- internet radio
+// ---------------------------------------------------------------- radio
 
-const RADIO = -1;
 let radioQuery = "";
 
 async function renderRadio() {
   const input = h("input", { className: "search", value: radioQuery, placeholder: t("Search stations"), enterKeyHint: "search" }) as HTMLInputElement;
-  const go = () => ((radioQuery = input.value.trim()), show("lib"));
+  const go = () => ((radioQuery = input.value.trim()), show("radio"));
   input.addEventListener("keydown", (e) => (e as KeyboardEvent).key === "Enter" && go());
   // Magnifier as large as the moon, right-aligned just left of it.
   main.append(h("div", { className: "chips searchrow" },
-    h("button", { className: "chip", onclick: () => ((libStack = []), (radioQuery = ""), show("lib")) }, `← ${t("Back")}`),
+    radioQuery ? h("button", { className: "chip", onclick: () => ((radioQuery = ""), show("radio")) }, `← ${t("Back")}`) : null,
     input, h("button", { className: "lens", onclick: go, ariaLabel: t("Search"), title: t("Search") },
       icon('<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/>'))));
   try {
@@ -544,7 +662,14 @@ async function renderRadio() {
     main.append(h("h2", {}, radioQuery ? t("Results") : t("Favourites")));
     if (!list.length) return void main.append(h("div", { className: "empty" }, radioQuery ? t("No stations found.") : t("No favourites yet. Search for a station.")));
     const box = h("div", { className: "list" });
-    for (const st of list) {
+    // Favourites in the user's order, moved with large arrows (no dragging while driving).
+    const move = async (i: number, d: number) => {
+      const ids = list.map((x) => x.key.slice(6));
+      [ids[i], ids[i + d]] = [ids[i + d], ids[i]];
+      await api("PUT", "/radio/favorites", ids).catch(() => undefined);
+      show("radio");
+    };
+    for (const [i, st] of list.entries()) {
       const star = h("button", { className: st.favorite ? "big" : "big sec", style: "min-width:64px", ariaLabel: t("Favourite") }, st.favorite ? "★" : "☆");
       star.onclick = async () => {
         await api(st.favorite ? "DELETE" : "PUT", `/radio/favorites/${st.key.slice(6)}`);
@@ -554,7 +679,10 @@ async function renderRadio() {
       };
       box.append(h("div", { className: "item" }, thumb(st),
         h("div", { className: "tx" }, h("div", { className: "t1" }, st.title), h("div", { className: "t2" }, st.subtitle)),
-        h("span", { className: "badge" }, qualityBadge(st.quality)), star,
+        h("span", { className: "badge" }, qualityBadge(st.quality)),
+        radioQuery ? null : h("button", { className: "big sec arrow", disabled: i === 0, ariaLabel: t("Move up"), onclick: () => void move(i, -1) }, "▲"),
+        radioQuery ? null : h("button", { className: "big sec arrow", disabled: i === list.length - 1, ariaLabel: t("Move down"), onclick: () => void move(i, 1) }, "▼"),
+        star,
         h("button", { className: "big", onclick: () => void start([st]) }, t("Play"))));
     }
     main.append(box);
@@ -621,6 +749,7 @@ async function renderBooks() {
           f ? h("div", { className: "prog" }, h("i", { style: `width:${f * 100}%` })) : null),
         next ? h("span", { className: "badge ok" }, t("Up next")) : b.finished ? h("span", { className: "badge" }, t("Heard")) : null,
         offBadge(offline.get(b.key)) ?? h("button", { className: "big sec", onclick: own((ev) => { (ev.target as HTMLButtonElement).disabled = true; void addOffline([b]); }) }, t("Save offline")),
+        nextButton(b),
         h("button", { className: "big", onclick: own(() => void start([b])) }, f ? t("Resume") : t("Play")));
     };
     const section = (s: string) => h("h3", { className: "section" }, s);

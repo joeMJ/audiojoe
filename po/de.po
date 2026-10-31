@@ -230,12 +230,6 @@ msgstr "{n} warten auf Abgleich"
 msgid "Live"
 msgstr "Live"
 
-msgid "Internet radio"
-msgstr "Internetradio"
-
-msgid "Favourites and search"
-msgstr "Favoriten und Suche"
-
 msgid "Search stations"
 msgstr "Sender suchen"
 
@@ -256,9 +250,6 @@ msgstr "Noch keine Favoriten. Nach einem Sender suchen."
 
 msgid "Favourite"
 msgstr "Favorit"
-
-msgid "Library"
-msgstr "Bibliothek"
 
 msgid "This device"
 msgstr "Dieses Gerät"
@@ -376,14 +367,8 @@ msgstr "{n} Kapitel"
 msgid "{n} min"
 msgstr "{n} min"
 
-msgid "Appearance: automatic"
-msgstr "Darstellung: automatisch"
 
-msgid "Appearance: light"
-msgstr "Darstellung: hell"
 
-msgid "Appearance: dark"
-msgstr "Darstellung: dunkel"
 
 msgid "{n} titles"
 msgstr "{n} Titel"
@@ -441,3 +426,39 @@ msgstr "Gehört"
 
 msgid "Remove played media from the cache"
 msgstr "Gespielte Medien aus dem Cache entfernen"
+
+msgid "Add to Next"
+msgstr "Next"
+
+msgid "Added to Next"
+msgstr "Ans Ende von Weiterhören stellen"
+
+msgid "Radio"
+msgstr "Radio"
+
+msgid "Undo"
+msgstr "Rückgängig"
+
+msgid "Move up"
+msgstr "Nach oben"
+
+msgid "Move down"
+msgstr "Nach unten"
+
+msgid "Marked as heard"
+msgstr "Als gehört markiert"
+
+msgid "Removed from the list"
+msgstr "Aus der Liste genommen"
+
+msgid "Mark as heard"
+msgstr "Als gehört markieren"
+
+msgid "Remove from the list"
+msgstr "Aus der Liste nehmen"
+
+msgid "Nothing here yet. Add albums with Next."
+msgstr "Noch leer. Alben mit „Next“ hinzufügen."
+
+msgid "Move"
+msgstr "Verschieben"

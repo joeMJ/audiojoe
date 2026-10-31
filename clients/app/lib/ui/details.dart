@@ -10,6 +10,7 @@ import '../l10n.dart';
 import '../models.dart';
 import '../store.dart';
 import 'common.dart';
+import 'lists.dart';
 import 'notes.dart';
 import 'views.dart';
 
@@ -84,6 +85,7 @@ class DetailsPage extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           saveOfflineButton(it),
+          if (it.kind == 'episode' || it.kind == 'book') NextButton(it),
         ]),
         const SizedBox(height: 20),
         Text(t('Description'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),

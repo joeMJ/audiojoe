@@ -15,6 +15,9 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0005_settings.sql"),
     include_str!("../migrations/0006_descriptions.sql"),
     include_str!("../migrations/0007_notes.sql"),
+    include_str!("../migrations/0008_lists.sql"),
+    include_str!("../migrations/0009_lists_cleanup.sql"),
+    include_str!("../migrations/0010_lists_unsubscribed.sql"),
 ];
 
 pub type Db = Arc<Mutex<Connection>>;
@@ -30,6 +33,15 @@ pub fn open(path: &Path) -> Result<Db> {
     conn.pragma_update(None, "foreign_keys", "ON")?;
     migrate(&mut conn)?;
     Ok(Arc::new(Mutex::new(conn)))
+}
+
+/// An empty database with all migrations, for tests.
+#[cfg(test)]
+pub fn open_memory() -> Result<Connection> {
+    let mut conn = Connection::open_in_memory()?;
+    conn.pragma_update(None, "foreign_keys", "ON")?;
+    migrate(&mut conn)?;
+    Ok(conn)
 }
 
 fn migrate(conn: &mut Connection) -> Result<()> {

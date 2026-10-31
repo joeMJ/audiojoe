@@ -9,6 +9,7 @@ import '../models.dart';
 import '../store.dart';
 import 'common.dart';
 import 'details.dart';
+import 'lists.dart';
 import 'views.dart';
 
 class Book {
@@ -242,7 +243,8 @@ class _BooksViewState extends State<BooksView> {
       trailing: [
         if (done) Icon(Icons.check_circle, color: context.tok.muted, semanticLabel: t('Heard')),
         saveOfflineButton(it),
-        rowButton(t('Play'), () => startPlayback(context, [it], 0, widget.onPlay)),
+        NextButton(it),
+        playButton(context, t('Play'), () => startPlayback(context, [it], 0, widget.onPlay)),
       ],
     );
   }
