@@ -6,6 +6,7 @@ import { checkOffline, onOfflineChange } from "./downloads";
 import { t } from "./i18n";
 import { onPlayer, setDevice } from "./player";
 import { onRemote, onSyncState, startSync, stopSync } from "./sync";
+import { isDark, onAppearance } from "./theme";
 import { mountShell, refresh, renderTop } from "./ui";
 import "./app.css";
 
@@ -15,7 +16,7 @@ const SIGNED_IN = "aj_signed_in"; // device name; lets the app start offline
 function applyTokens() {
   const dark = matchMedia("(prefers-color-scheme: dark)");
   const set = () => {
-    const c = dark.matches ? tokens.color.dark : tokens.color.light;
+    const c = isDark(dark.matches) ? tokens.color.dark : tokens.color.light;
     const s = document.documentElement.style;
     for (const [k, v] of Object.entries(c)) s.setProperty(`--${k}`, v);
     s.setProperty("--radius", `${tokens.size.radius}px`);
@@ -23,6 +24,7 @@ function applyTokens() {
   };
   set();
   dark.addEventListener("change", set);
+  onAppearance(set);
 }
 
 const remembered = () => {

@@ -377,3 +377,12 @@ msgstr "{n} Kapitel"
 
 msgid "{n} min"
 msgstr "{n} min"
+
+msgid "Appearance: automatic"
+msgstr "Darstellung: automatisch"
+
+msgid "Appearance: light"
+msgstr "Darstellung: hell"
+
+msgid "Appearance: dark"
+msgstr "Darstellung: dunkel"

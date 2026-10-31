@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 
 import '../api.dart';
+import '../appearance.dart';
 import '../downloads.dart';
 import '../l10n.dart';
 import '../models.dart';
@@ -63,9 +64,11 @@ ThemeData buildTheme(Brightness b) {
   );
 }
 
-/// Server reachable / offline, and positions waiting for sync.
+/// Server reachable / offline, and positions waiting for sync. `compact` (phones): the
+/// "synced" state shrinks to a check mark, so the bar keeps room for the icon and buttons.
 class StatusPills extends StatelessWidget {
-  const StatusPills({super.key});
+  final bool compact;
+  const StatusPills({super.key, this.compact = false});
 
   @override
   Widget build(BuildContext context) {
@@ -87,11 +90,39 @@ class StatusPills extends StatelessWidget {
             : pill(t('Offline · cache'), k.warn, k.warnBg, dot: true),
         if (sync.pendingCount.value > 0)
           pill(t('{n} waiting to sync', {'n': sync.pendingCount.value}), k.warn, k.warnBg)
+        else if (compact)
+          Tooltip(
+            message: t('Positions synced'),
+            child: Container(
+              margin: const EdgeInsets.only(left: 6),
+              padding: const EdgeInsets.all(5),
+              decoration: BoxDecoration(color: k.panel2, shape: BoxShape.circle),
+              child: Icon(Icons.done_all, size: 18, color: k.muted, semanticLabel: t('Positions synced')),
+            ),
+          )
         else
           pill(t('Positions synced'), k.muted, k.panel2),
       ]),
     );
   }
+}
+
+/// Moon button: automatic (half circle) → light (sun) → dark (moon), remembered per device.
+class AppearanceButton extends StatelessWidget {
+  const AppearanceButton({super.key});
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder(
+        valueListenable: appearance,
+        builder: (context, mode, _) {
+          final (icon, label) = switch (mode) {
+            ThemeMode.light => (Icons.light_mode, t('Appearance: light')),
+            ThemeMode.dark => (Icons.dark_mode, t('Appearance: dark')),
+            ThemeMode.system => (Icons.brightness_medium, t('Appearance: automatic')),
+          };
+          return IconButton(tooltip: label, onPressed: nextAppearance, icon: Icon(icon));
+        },
+      );
 }
 
 /// Server path of an item's cover (404 when it has none: the thumb then shows initials).

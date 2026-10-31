@@ -7,6 +7,7 @@ import 'package:just_audio_background/just_audio_background.dart';
 import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 
 import 'api.dart';
+import 'appearance.dart';
 import 'downloads.dart';
 import 'player.dart';
 import 'store.dart';
@@ -65,12 +66,16 @@ class _AudiojoeAppState extends State<AudiojoeApp> {
   @override
   Widget build(BuildContext context) {
     if (signedIn) _start();
-    return MaterialApp(
-      title: 'audiojoe',
-      debugShowCheckedModeBanner: false,
-      theme: buildTheme(Brightness.light),
-      darkTheme: buildTheme(Brightness.dark),
-      home: signedIn ? Shell(onSignOut: _signOut) : LoginView(onDone: () => setState(() => signedIn = true)),
+    return ValueListenableBuilder(
+      valueListenable: appearance,
+      builder: (context, mode, _) => MaterialApp(
+        title: 'audiojoe',
+        debugShowCheckedModeBanner: false,
+        theme: buildTheme(Brightness.light),
+        darkTheme: buildTheme(Brightness.dark),
+        themeMode: mode,
+        home: signedIn ? Shell(onSignOut: _signOut) : LoginView(onDone: () => setState(() => signedIn = true)),
+      ),
     );
   }
 }

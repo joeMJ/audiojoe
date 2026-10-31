@@ -3,6 +3,7 @@
 //   positions – last known position per item (works offline)
 //   offline   – metadata and status of offline titles
 //   items     – item metadata for offline use
+//   device    – settings of this device (appearance); kept on sign-out
 
 import 'dart:async';
 import 'dart:convert';
@@ -60,12 +61,13 @@ class Stores {
   static final positions = Store('positions');
   static final offline = Store('offline');
   static final items = Store('items');
+  static final device = Store('device');
   static late Directory dir;
 
   static Future<void> open() async {
     dir = Directory('${(await getApplicationSupportDirectory()).path}/audiojoe');
     await dir.create(recursive: true);
-    for (final s in [pending, positions, offline, items]) {
+    for (final s in [pending, positions, offline, items, device]) {
       await s.open(dir);
     }
   }

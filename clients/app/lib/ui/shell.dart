@@ -67,7 +67,12 @@ class _ShellState extends State<Shell> {
           title: wide
               ? const Text('audiojoe', style: TextStyle(fontWeight: FontWeight.w800))
               : Semantics(label: 'audiojoe', child: Image.asset('assets/icon.png', height: 36)),
-          actions: [const StatusPills(), if (!wide) IconButton(onPressed: () => setState(() => index = 6), icon: const Icon(Icons.settings)), const SizedBox(width: 8)],
+          actions: [
+            Flexible(child: SingleChildScrollView(scrollDirection: Axis.horizontal, reverse: true, child: StatusPills(compact: !wide))),
+            const AppearanceButton(),
+            if (!wide) IconButton(onPressed: () => setState(() => index = 6), icon: const Icon(Icons.settings)),
+            const SizedBox(width: 4),
+          ],
         );
         if (wide) {
           return Scaffold(

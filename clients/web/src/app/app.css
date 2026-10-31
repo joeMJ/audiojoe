@@ -17,6 +17,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .pill .dot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
 .pill.ok { color: var(--ok); background: var(--okBg); }
 .pill.warn { color: var(--warn); background: var(--warnBg); }
+.top .theme { width: 48px; height: 48px; flex: none; display: flex; align-items: center; justify-content: center;
+              border: 2px solid var(--line); border-radius: 12px; background: var(--panel2); }
+.top .theme svg { width: 26px; height: 26px; }
 
 nav { background: var(--panel); border-right: 2px solid var(--line); display: flex; flex-direction: column;
       gap: 6px; padding: 8px 6px; overflow: hidden; }

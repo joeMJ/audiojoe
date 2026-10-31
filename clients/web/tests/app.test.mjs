@@ -88,6 +88,22 @@ try {
   const cookie = (await page.cookies()).find((c) => c.name === "aj_session");
   check("session cookie HttpOnly + Secure", cookie?.httpOnly && cookie?.secure);
 
+  // Appearance: moon button cycles automatic → light → dark, survives a reload, back to automatic.
+  await page.emulateMediaFeatures([{ name: "prefers-color-scheme", value: "light" }]);
+  const look = () => page.evaluate(() => ({ label: document.querySelector(".top .theme")?.ariaLabel,
+    bg: getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() }));
+  const auto = await look();
+  await page.click(".top .theme"); const light = await look();
+  await page.click(".top .theme"); const dark = await look();
+  await page.reload({ waitUntil: "domcontentloaded" }); await page.waitForSelector(".top .theme"); await sleep(1000);
+  const kept = await look();
+  await shot("00-dunkel");
+  await page.click(".top .theme"); const back = await look();
+  check("moon button: automatic → light → dark, kept after reload",
+    /automatisch/.test(auto.label) && /hell/.test(light.label) && /dunkel/.test(dark.label) && light.bg !== dark.bg
+      && kept.bg === dark.bg && /automatisch/.test(back.label) && back.bg === light.bg,
+    `${auto.bg} → ${light.bg} → ${dark.bg}, reload ${kept.bg}, back ${back.bg}`);
+
   // ------------------------------------------------------------ podcast + offline
   const sub = await call("POST", "/podcasts", { feed_url: FEED });
   check("podcast subscribed", sub.status === 200, `${sub.body?.episodes} Folgen`);
