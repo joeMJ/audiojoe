@@ -263,8 +263,6 @@ msgstr "Bibliothek"
 msgid "This device"
 msgstr "Dieses Gerät"
 
-msgid "Playing on {name}"
-msgstr "Läuft auf {name}"
 
 msgid "Output"
 msgstr "Ausgabe"
@@ -295,3 +293,87 @@ msgstr "bis 16 Bit / 48 kHz"
 
 msgid "available"
 msgstr "bereit"
+
+msgid "Back {n} s"
+msgstr "{n} s zurück"
+
+msgid "Chapters"
+msgstr "Kapitel"
+
+msgid "Close"
+msgstr "Schließen"
+
+msgid "Description"
+msgstr "Beschreibung"
+
+msgid "Details"
+msgstr "Details"
+
+msgid "End of chapter"
+msgstr "Ende des Kapitels"
+
+msgid "End of item"
+msgstr "Ende des Titels"
+
+msgid "Export OPML"
+msgstr "OPML exportieren"
+
+msgid "Format"
+msgstr "Format"
+
+msgid "Forward {n} s"
+msgstr "{n} s vor"
+
+msgid "Import OPML"
+msgstr "OPML importieren"
+
+msgid "Importing …"
+msgstr "Importiere …"
+
+msgid "Louder"
+msgstr "Lauter"
+
+msgid "Next"
+msgstr "Weiter zum nächsten"
+
+msgid "No description."
+msgstr "Keine Beschreibung."
+
+msgid "Off"
+msgstr "Aus"
+
+msgid "Pause"
+msgstr "Pause"
+
+msgid "Playback"
+msgstr "Wiedergabe"
+
+msgid "Previous"
+msgstr "Zurück zum vorigen"
+
+msgid "Quieter"
+msgstr "Leiser"
+
+msgid "Saved: {path}"
+msgstr "Gespeichert: {path}"
+
+msgid "Sleep timer"
+msgstr "Schlaf-Timer"
+
+msgid "Speed"
+msgstr "Tempo"
+
+msgid "Subscriptions as OPML file, the format other podcast apps read and write."
+msgstr "Abos als OPML-Datei – das Format, das andere Podcast-Apps lesen und schreiben."
+
+msgid "Volume {n}"
+msgstr "Lautstärke {n}"
+
+msgid "{added} added, {existing} already subscribed, {failed} failed"
+msgstr "{added} neu, {existing} schon abonniert, {failed} fehlgeschlagen"
+
+msgid "{n} chapters"
+msgstr "{n} Kapitel"
+
+msgid "{n} min"
+msgstr "{n} min"

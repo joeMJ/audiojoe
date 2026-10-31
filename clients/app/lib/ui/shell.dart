@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../l10n.dart';
 import '../player.dart';
 import 'common.dart';
+import 'now_playing.dart';
 import 'settings.dart';
 import 'views.dart';
 
@@ -50,7 +51,10 @@ class _ShellState extends State<Shell> {
         builder: (_) => Scaffold(
               // No text input here: never shrink for a keyboard left over from a search field.
               resizeToAvoidBottomInset: false,
-              appBar: AppBar(actions: const [StatusPills(), SizedBox(width: 8)]),
+              appBar: AppBar(
+                leading: IconButton(tooltip: t('Close'), onPressed: () => Navigator.pop(context), icon: const Icon(Icons.keyboard_arrow_down, size: 32)),
+                actions: const [StatusPills(), SizedBox(width: 8)],
+              ),
               body: const NowPlayingView(),
             )));
   }

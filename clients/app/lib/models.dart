@@ -18,13 +18,42 @@ class Quality {
       {'codec': codec, 'sample_rate': sampleRate, 'bit_depth': bitDepth, 'bitrate': bitrate, 'channels': channels};
 
   String get _codec => codec.startsWith('pcm_') ? 'PCM' : codec.toUpperCase();
+  bool get _lossless => codec == 'flac' || codec == 'alac' || codec.startsWith('pcm_');
+
+  String get _rate => '${(sampleRate! / 1000).toStringAsFixed(sampleRate! % 1000 == 0 ? 0 : 1)} kHz';
+
+  /// Separate facts for chips: ["FLAC", "24 bit", "96 kHz", "Stereo"].
+  List<String> get chips {
+    if (codec.isEmpty) return const [];
+    return [
+      _codec,
+      if (bitDepth != null) '$bitDepth bit',
+      if (sampleRate != null) _rate,
+      if (bitrate != null && !_lossless) '${(bitrate! / 1000).round()} kbit/s',
+      if (channels == 1) 'Mono' else if (channels == 2) 'Stereo' else if (channels != null) '$channels ch',
+    ];
+  }
+
+  /// What a Sonos speaker receives (the server's rules in media::conversion).
+  Quality forSonos(bool s2) {
+    final rate = sampleRate ?? 0, depth = bitDepth ?? 16;
+    if (s2 && codec == 'flac' && rate > 48000) {
+      return Quality(codec: 'flac', sampleRate: 48000, bitDepth: depth > 24 ? 24 : depth, channels: channels);
+    }
+    if (!s2 && _lossless && (rate > 48000 || depth > 16)) {
+      return Quality(codec: 'flac', sampleRate: rate > 48000 ? 48000 : rate, bitDepth: 16, channels: channels);
+    }
+    return this;
+  }
+
+  bool sameAs(Quality o) => codec == o.codec && sampleRate == o.sampleRate && bitDepth == o.bitDepth;
 
   /// "FLAC · 24 bit · 96 kHz · 3450 kbit/s"
   String get text {
     if (codec.isEmpty) return '–';
     final p = [_codec];
     if (bitDepth != null) p.add('$bitDepth bit');
-    if (sampleRate != null) p.add('${(sampleRate! / 1000).toStringAsFixed(sampleRate! % 1000 == 0 ? 0 : 1)} kHz');
+    if (sampleRate != null) p.add(_rate);
     if (bitrate != null) p.add('${(bitrate! / 1000).round()} kbit/s');
     return p.join(' · ');
   }
@@ -56,7 +85,7 @@ class Chapter {
 class Item {
   final String key, kind, title, subtitle;
   final int? durationMs, track, year;
-  final String? image, published;
+  final String? image, published, description;
   final Quality? quality;
   final List<Part> parts;
   final List<Chapter> chapters;
@@ -74,6 +103,7 @@ class Item {
     this.year,
     this.image,
     this.published,
+    this.description,
     this.quality,
     this.parts = const [],
     this.chapters = const [],
@@ -92,7 +122,8 @@ class Item {
         track: j['track'] as int?,
         year: j['year'] as int?,
         image: j['image'] as String?,
-        published: j['published'] as String?,
+        published: j['published']?.toString(),
+        description: j['description'] as String?,
         quality: Quality.fromJson(j['quality']),
         parts: (j['parts'] as List? ?? []).map(Part.fromJson).toList(),
         chapters: (j['chapters'] as List? ?? []).map(Chapter.fromJson).toList(),
@@ -112,6 +143,7 @@ class Item {
         'year': year,
         'image': image,
         'published': published,
+        'description': description,
         'quality': quality?.toJson(),
         'parts': parts.map((p) => p.toJson()).toList(),
         'chapters': chapters.map((c) => c.toJson()).toList(),

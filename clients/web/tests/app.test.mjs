@@ -121,11 +121,24 @@ try {
   await waitText("Jetzt läuft");
   await page.waitForFunction(() => document.querySelector(".ctrl .play")?.innerText === "❚❚", { timeout: 15000 });
   await sleep(6000);
-  await clickText("+30");
+  await page.evaluate(() => document.querySelectorAll(".ctrl .skip")[1].click()); // +30
   await sleep(1000);
   await shot("04-jetzt-laeuft");
-  const here = await page.evaluate(() => document.querySelector(".quality .row:last-child .val")?.innerText);
-  check("plays from cache, quality shown", /aus dem Cache/.test(here ?? ""), here);
+  const here = await page.evaluate(() => document.querySelector(".fmt .row:last-child")?.innerText.replace(/\s+/g, " "));
+  check("plays from cache, format chips shown", /MP3/.test(here ?? "") && /aus dem Cache/.test(here ?? ""), here);
+  const sizes = await page.evaluate(() => [...document.querySelectorAll(".ctrl button, .tools button")].map((b) => Math.min(b.offsetWidth, b.offsetHeight)));
+  check("controls large enough for driving (≥ 64 px)", sizes.length >= 4 && Math.min(...sizes) >= 64, sizes.join(", "));
+  const fits = await page.evaluate(() => document.querySelector("main").scrollHeight <= document.querySelector("main").clientHeight + 2);
+  check("player fits the car screen without scrolling", fits);
+  await clickText("☾ Schlaf-Timer");
+  check("sleep timer set", /15 min/.test(await page.evaluate(() => document.querySelector(".tools .big")?.innerText)));
+  await clickText("☾ 15 min"); await clickText("☾ 30 min"); await clickText("☾ 60 min"); await clickText("☾ Ende des Titels");
+  check("sleep timer cycles back to off", /Schlaf-Timer/.test(await page.evaluate(() => document.querySelector(".tools .big")?.innerText)));
+  await clickText("Details");
+  const desc = await page.evaluate(() => document.querySelector(".desc")?.innerText ?? "");
+  check("details tab shows the episode description", desc.length > 40 && !/Keine Beschreibung/.test(desc), `${desc.length} chars`);
+  await shot("04b-details");
+  await clickText("Wiedergabe");
   await page.evaluate(() => document.querySelector(".ctrl .play").click()); // pause → saves position
   await sleep(1500);
   const pb = (await call("GET", `/playback/${encodeURIComponent(ep.key)}`)).body;

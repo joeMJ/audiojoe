@@ -1,5 +1,9 @@
-// Settings: sources (Jellyfin, Audiobookshelf), signed-in devices, sign out.
+// Settings: sources (Jellyfin, Audiobookshelf), podcast import/export (OPML), signed-in
+// devices, sign out.
 
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../api.dart';
@@ -79,8 +83,46 @@ class _SettingsViewState extends State<SettingsView> {
           ]),
         ),
         const SizedBox(height: 20),
+        Text(t('Podcasts'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 4),
+        Text(t('Subscriptions as OPML file, the format other podcast apps read and write.'), style: TextStyle(color: context.tok.muted)),
+        const SizedBox(height: 8),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          OutlinedButton.icon(icon: const Icon(Icons.file_upload_outlined), label: Text(t('Import OPML')), onPressed: _import),
+          OutlinedButton.icon(icon: const Icon(Icons.file_download_outlined), label: Text(t('Export OPML')), onPressed: _export),
+        ]),
+        const SizedBox(height: 20),
         OutlinedButton.icon(icon: const Icon(Icons.logout), label: Text(t('Sign out this device')), onPressed: widget.onSignOut),
       ]);
+
+  void _say(String s) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s)));
+
+  Future<void> _import() async {
+    final picked = await FilePicker.pickFiles(dialogTitle: t('Import OPML'));
+    if (picked.isEmpty) return;
+    final bytes = await picked.first.xFile.readAsBytes();
+    _say(t('Importing …'));
+    try {
+      final r = await api.call('POST', '/podcasts/opml', text: utf8.decode(bytes, allowMalformed: true), timeout: const Duration(minutes: 10)) as Map;
+      final failed = (r['failed'] as List).length;
+      _say(t('{added} added, {existing} already subscribed, {failed} failed',
+          {'added': r['added'], 'existing': r['existing'], 'failed': failed}));
+    } catch (e) {
+      _say('${t('Error')}: $e');
+    }
+  }
+
+  Future<void> _export() async {
+    try {
+      final bytes = utf8.encode(await api.call('GET', '/podcasts/opml') as String);
+      final where = await FilePicker.saveFile(
+          dialogTitle: t('Export OPML'), fileName: 'audiojoe.opml', mimeType: 'text/x-opml', bytes: bytes);
+      if (where == null) return;
+      _say(t('Saved: {path}', {'path': where.scheme == 'file' ? where.toFilePath() : 'audiojoe.opml'}));
+    } catch (e) {
+      _say('${t('Error')}: $e');
+    }
+  }
 }
 
 class AddSourceDialog extends StatefulWidget {

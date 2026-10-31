@@ -18,6 +18,7 @@ export interface Item {
   quality?: Quality | null;
   podcast?: string;
   published?: string | null;
+  description?: string | null;
   favorite?: boolean;
   track?: number | null;
   year?: number | null;
@@ -93,6 +94,20 @@ export function qualityText(q?: Quality | null): string {
   if (q.sample_rate) parts.push(`${(q.sample_rate / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })} kHz`);
   if (q.bitrate) parts.push(`${Math.round(q.bitrate / 1000)} kbit/s`);
   return parts.join(" · ");
+}
+
+/// Separate facts for chips: ["FLAC", "24 bit", "96 kHz", "Stereo"].
+export function qualityChips(q?: Quality | null): string[] {
+  if (!q || !q.codec) return [];
+  const lossless = /^(flac|alac|pcm_)/.test(q.codec);
+  const out = [q.codec.replace(/^pcm_.*/, "PCM").toUpperCase()];
+  if (q.bit_depth) out.push(`${q.bit_depth} bit`);
+  if (q.sample_rate) out.push(`${(q.sample_rate / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })} kHz`);
+  if (q.bitrate && !lossless) out.push(`${Math.round(q.bitrate / 1000)} kbit/s`);
+  if (q.channels === 1) out.push("Mono");
+  else if (q.channels === 2) out.push("Stereo");
+  else if (q.channels) out.push(`${q.channels} ch`);
+  return out;
 }
 
 /// Short badge, e.g. "FLAC 24/96".

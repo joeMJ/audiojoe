@@ -17,7 +17,10 @@ import 'sync.dart';
 class Player extends ChangeNotifier {
   Player._() {
     audio.playerStateStream.listen(_onState);
-    audio.positionStream.listen((_) => notifyListeners());
+    audio.positionStream.listen((_) {
+      _checkSleep();
+      notifyListeners();
+    });
     audio.currentIndexStream.listen((_) => notifyListeners());
     sync.remote.listen(_onRemote);
   }
@@ -33,6 +36,11 @@ class Player extends ChangeNotifier {
   ({String device, String at})? takenOver;
   double rate = 1;
   Timer? _saveTimer;
+
+  // Sleep timer: pause at a time, or at the end of the current chapter or item.
+  DateTime? sleepAt;
+  String? sleepAtEnd; // 'chapter' | 'item'
+  String _sleepChapter = '';
 
   List<Part> get _parts => item?.multiPart == true ? item!.parts : const [];
   int get _part => _parts.isEmpty ? 0 : (audio.currentIndex ?? 0);
@@ -128,11 +136,29 @@ class Player extends ChangeNotifier {
 
   void toggle() => audio.playing ? audio.pause() : audio.play();
 
-  Future<void> nextRate() async {
-    const rates = [1.0, 1.2, 1.5, 2.0];
-    rate = rates[(rates.indexOf(rate) + 1) % rates.length];
+  Future<void> setRate(double r) async {
+    rate = r;
     await audio.setSpeed(rate);
     notifyListeners();
+  }
+
+  bool get sleeping => sleepAt != null || sleepAtEnd != null;
+
+  void setSleep({Duration? after, String? atEnd}) {
+    sleepAt = after == null ? null : DateTime.now().add(after);
+    sleepAtEnd = atEnd;
+    _sleepChapter = chapter;
+    notifyListeners();
+  }
+
+  void _checkSleep() {
+    if (!audio.playing) return;
+    final timeUp = sleepAt != null && DateTime.now().isAfter(sleepAt!);
+    final chapterOver = sleepAtEnd == 'chapter' && chapter != _sleepChapter;
+    if (timeUp || chapterOver) {
+      setSleep();
+      audio.pause();
+    }
   }
 
   Future<void> skip(int d) async {
@@ -174,7 +200,9 @@ class Player extends ChangeNotifier {
       }
     }
     if (s.processingState == ProcessingState.completed) {
-      unawaited(_persist(finished: true).then((_) => index + 1 < queue.length ? skip(1) : null));
+      final stopHere = sleepAtEnd != null;
+      if (stopHere) setSleep();
+      unawaited(_persist(finished: true).then((_) => !stopHere && index + 1 < queue.length ? skip(1) : null));
     }
     notifyListeners();
   }

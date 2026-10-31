@@ -1,6 +1,6 @@
 // Screens of the web app. Plain DOM; each view renders itself into <main>.
 
-import { api, online, qualityBadge, qualityText, type Item, type Playback } from "./api";
+import { api, online, qualityBadge, qualityChips, qualityText, type Item, type Playback } from "./api";
 import { addOffline, offlineEntry, offlineList, removeFromOffline, retryFailed, type OfflineEntry } from "./downloads";
 import { ago, bytes, clock, t } from "./i18n";
 import { idbAll } from "./idb";
@@ -47,9 +47,14 @@ function initials(s: string) {
   return s.split(/\s+/).filter(Boolean).slice(0, 3).map((w) => w[0]).join("").toUpperCase() || "♫";
 }
 
+/** Cover over the initials; a missing cover (404, offline) leaves the initials. */
 function thumb(it: { image?: string | null; title: string }) {
-  const d = h("div", { className: "ic" }, it.image ? "" : initials(it.title));
-  if (it.image) d.style.backgroundImage = `url("${it.image}")`;
+  const d = h("div", { className: "ic" }, initials(it.title));
+  if (it.image) {
+    const img = h("img", { src: it.image, alt: "" });
+    img.addEventListener("error", () => img.remove());
+    d.append(img);
+  }
   return d;
 }
 
@@ -115,8 +120,20 @@ export function refresh(kind: "player" | "data" | "offline") {
 
 // ---------------------------------------------------------------- now playing
 
-let npRefs: { bar: HTMLElement; fill: HTMLElement; knob: HTMLElement; pos: HTMLElement; rest: HTMLElement;
-              play: HTMLElement; from: HTMLElement; rate: HTMLElement; here: HTMLElement; sub: HTMLElement } | null = null;
+// Large touch targets throughout: this is used while driving.
+let npTab: "play" | "details" | "chapters" = "play";
+let npKey = "";
+let npRefs: { bar: HTMLElement; fill: HTMLElement; knob: HTMLElement; pos: HTMLElement; rest: HTMLElement; play: HTMLElement;
+              from: HTMLElement; rate: HTMLElement; here: HTMLElement; sub: HTMLElement; sleep: HTMLElement } | null = null;
+
+const skipIcon = (n: number, back: boolean) => icon(
+  (back ? '<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M5 3.5v4h4"/>' : '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19 3.5v4h-4"/>') +
+  `<text x="12" y="15.2" font-size="8" font-weight="800" text-anchor="middle" fill="currentColor" stroke="none">${n}</text>`);
+
+function chipRow(label: string, chips: string[], note = "") {
+  return h("div", { className: "row" }, h("span", { className: "lbl" }, label),
+    h("span", { className: "fchips" }, ...chips.map((c) => h("span", { className: "fchip" }, c)), note ? h("span", { className: "fnote" }, note) : null));
+}
 
 function renderNowPlaying() {
   const s = player.state;
@@ -126,6 +143,15 @@ function renderNowPlaying() {
     return;
   }
   const it = s.item;
+  npKey = it.key;
+  if (npTab === "chapters" && !it.chapters?.length) npTab = "play";
+  const tab = (v: typeof npTab, label: string) =>
+    h("button", { className: npTab === v ? "chip on" : "chip", onclick: () => ((npTab = v), show("np")) }, label);
+  main.append(h("div", { className: "chips" }, tab("play", t("Playback")), tab("details", t("Details")),
+    it.chapters?.length ? tab("chapters", t("Chapters")) : null));
+  if (npTab === "details") return renderDetails(it);
+  if (npTab === "chapters") return renderChapters(it);
+
   const cover = h("div", { className: "cover" }, it.image ? "" : it.subtitle || it.title);
   if (it.image) cover.style.backgroundImage = `url("${it.image}")`;
   const fill = h("i"), knob = h("b");
@@ -137,34 +163,66 @@ function renderNowPlaying() {
   bar.addEventListener("pointerdown", seek);
   const pos = h("span"), rest = h("span");
   const play = h("button", { className: "play", onclick: () => player.toggle() });
-  const rate = h("button", { className: "rate", onclick: () => player.nextRate() });
-  const here = h("span", { className: "val" });
+  const rate = h("button", { className: "big sec", onclick: () => player.nextRate() });
+  const sleep = h("button", { className: "big sec", onclick: () => player.nextSleep() });
+  const here = h("div");
   const from = h("div", { className: "from" });
   const kind = it.kind === "episode" ? `Podcast · ${it.subtitle ?? ""}` : it.subtitle ?? "";
   const sub = h("div", { className: "sub" }, it.kind === "episode" ? it.published?.slice(0, 10) ?? "" : it.kind === "book" ? "" : it.subtitle ?? "");
+  const tools = h("div", { className: "tools" }, sleep, rate);
+  void offlineEntry(it.key).then((off) => {
+    if (player.isLive()) return;
+    tools.append(offBadge(off) ?? h("button", { className: "big sec", onclick: (ev: Event) => {
+      (ev.target as HTMLButtonElement).disabled = true;
+      void addOffline([it]);
+    } }, t("Save offline")));
+  });
   main.append(
     h("div", { className: "np" }, cover, h("div", {},
       h("div", { className: "kind" }, kind),
       h("div", { className: "title" }, it.title),
       sub,
-      h("div", { className: "quality" },
-        h("div", { className: "row" }, h("span", { className: "lbl" }, t("Source")), h("span", { className: "val" }, qualityText(it.quality))),
-        h("div", { className: "row" }, h("span", { className: "lbl" }, t("Here")), here)),
+      h("div", { className: "fmt" }, chipRow(t("Source"), qualityChips(it.quality)), here),
       bar, h("div", { className: "times" }, pos, rest),
       h("div", { className: "ctrl" },
-        s.queue.length > 1 ? h("button", { onclick: () => void player.skip(-1), ariaLabel: "previous" }, icon('<path d="M6 5v14M18 6l-9 6 9 6z" fill="currentColor"/>')) : null,
-        h("button", { onclick: () => player.seekBy(-30000) }, "−30"), play,
-        h("button", { onclick: () => player.seekBy(30000) }, "+30"),
-        s.queue.length > 1 ? h("button", { onclick: () => void player.skip(1), ariaLabel: "next" }, icon('<path d="M18 5v14M6 6l9 6-9 6z" fill="currentColor"/>')) : rate),
+        s.queue.length > 1 ? h("button", { onclick: () => void player.skip(-1), ariaLabel: t("Previous") }, icon('<path d="M6 5v14M18 6l-9 6 9 6z" fill="currentColor"/>')) : null,
+        player.isLive() ? null : h("button", { className: "skip", onclick: () => player.seekBy(-15000), ariaLabel: t("Back {n} s", { n: 15 }) }, skipIcon(15, true)),
+        play,
+        player.isLive() ? null : h("button", { className: "skip", onclick: () => player.seekBy(30000), ariaLabel: t("Forward {n} s", { n: 30 }) }, skipIcon(30, false)),
+        s.queue.length > 1 ? h("button", { onclick: () => void player.skip(1), ariaLabel: t("Next") }, icon('<path d="M18 5v14M6 6l9 6-9 6z" fill="currentColor"/>')) : null),
+      player.isLive() ? null : tools,
       from)),
   );
-  npRefs = { bar, fill, knob, pos, rest, play, from, rate, here, sub };
+  npRefs = { bar, fill, knob, pos, rest, play, from, rate, here, sub, sleep };
   updateNowPlaying();
 }
 
+function renderDetails(it: Item) {
+  const facts = [it.published?.slice(0, 10), it.year, player.duration() && !player.isLive() ? clock(player.duration()) : "",
+    it.chapters?.length ? t("{n} chapters", { n: it.chapters.length }) : ""].filter(Boolean) as string[];
+  main.append(h("div", { className: "details" },
+    h("div", { className: "head" }, thumb({ title: it.subtitle || it.title, image: it.image }),
+      h("div", {}, h("div", { className: "title" }, it.title), h("div", { className: "sub" }, it.subtitle ?? ""),
+        h("div", { className: "facts" }, ...facts.map((f) => h("span", { className: "badge" }, String(f)))))),
+    h("div", { className: "desc" }, it.description || t("No description.")),
+    it.quality?.codec ? h("div", { className: "note" }, `${t("Format")}: ${qualityText(it.quality)}`) : null));
+}
+
+function renderChapters(it: Item) {
+  const now = player.position();
+  main.append(h("div", { className: "list" }, ...(it.chapters ?? []).map((c) =>
+    h("div", { className: now >= c.start_ms && now < c.end_ms ? "item tap on" : "item tap", onclick: () => {
+      player.seekTo(c.start_ms / (player.duration() || 1));
+      npTab = "play";
+      show("np");
+    } }, h("div", { className: "tx" }, h("div", { className: "t1" }, c.title)), h("span", { className: "badge" }, clock(c.start_ms))))));
+}
+
 function updateNowPlaying() {
-  if (!npRefs) return renderNowPlaying();
   const s = player.state;
+  if (s.item?.key !== npKey) return renderNowPlaying();
+  if (npTab !== "play") return;
+  if (!npRefs) return renderNowPlaying();
   const p = player.position(), d = player.duration();
   const f = d ? Math.min(1, p / d) : 0;
   npRefs.fill.style.width = `${f * 100}%`;
@@ -173,9 +231,16 @@ function updateNowPlaying() {
   npRefs.rest.textContent = player.isLive() ? "" : d ? `−${clock(d - p)}` : "";
   npRefs.bar.style.visibility = player.isLive() ? "hidden" : "";
   npRefs.play.textContent = s.playing ? "❚❚" : "▶";
-  npRefs.rate.textContent = `${s.rate.toLocaleString()}×`;
+  npRefs.rate.textContent = `${t("Speed")} ${s.rate.toLocaleString()}×`;
+  const left = s.sleepAt ? Math.ceil((s.sleepAt - Date.now()) / 60000) : 0;
+  npRefs.sleep.textContent = s.sleepAtEnd ? `☾ ${t("End of item")}` : s.sleepAt ? `☾ ${t("{n} min", { n: left })}` : `☾ ${t("Sleep timer")}`;
+  npRefs.sleep.className = s.sleepAt || s.sleepAtEnd ? "big" : "big sec";
   const suffix = s.transcoded ? t("converted") : s.fromCache ? t("from cache") : t("unchanged");
-  npRefs.here.textContent = `${qualityText(s.delivered)} · ${suffix}`;
+  const here = JSON.stringify([s.delivered, suffix]);
+  if (npRefs.here.dataset.v !== here) {
+    npRefs.here.dataset.v = here;
+    npRefs.here.replaceChildren(chipRow(t("Here"), qualityChips(s.delivered), suffix));
+  }
   if (s.item?.chapters?.length) {
     const c = player.chapter();
     if (npRefs.sub.textContent !== c) npRefs.sub.textContent = c;
@@ -205,7 +270,7 @@ async function renderContinue() {
     const f = p.duration_ms ? p.position_ms / p.duration_ms : 0;
     const kind = p.key.startsWith("episode:") ? "episode" : p.key.startsWith("abs:") ? "book" : "track";
     const item: Item = { key: p.key, kind, title: p.title, subtitle: p.subtitle };
-    box.append(h("div", { className: "item" }, thumb({ title: p.subtitle || p.title }),
+    box.append(h("div", { className: "item" }, thumb({ title: p.subtitle || p.title, image: `/api/v1/image/${encodeURIComponent(p.key)}` }),
       h("div", { className: "tx" }, h("div", { className: "t1" }, p.title || p.key),
         h("div", { className: "t2" }, `${clock(p.position_ms)}${p.duration_ms ? " / " + clock(p.duration_ms) : ""} · ${p.device ? t("Last on {device} · {ago}", { device: p.device, ago: ago(p.updated_at) }) : ago(p.updated_at)}`),
         h("div", { className: "prog" }, h("i", { style: `width:${f * 100}%` }))),
@@ -228,10 +293,10 @@ async function renderPodcasts() {
   main.append(chips);
   try {
     if (podTab === "subs") {
-      const pods = await api<{ id: number; title: string; author: string; image_url: string; episodes: number }[]>("GET", "/podcasts");
+      const pods = await api<{ id: number; title: string; author: string; image: string | null; episodes: number }[]>("GET", "/podcasts");
       if (!pods.length) return void main.append(h("div", { className: "empty" }, t("No podcasts subscribed. Add them in the desktop or phone app.")));
       main.append(h("div", { className: "list" }, ...pods.map((p) =>
-        h("div", { className: "item tap", onclick: () => ((podTab = p.id), show("pod")) }, thumb({ title: p.title, image: p.image_url }),
+        h("div", { className: "item tap", onclick: () => ((podTab = p.id), show("pod")) }, thumb({ title: p.title, image: p.image }),
           h("div", { className: "tx" }, h("div", { className: "t1" }, p.title), h("div", { className: "t2" }, `${p.author} · ${p.episodes}`))))));
       return;
     }
@@ -247,7 +312,7 @@ async function renderPodcasts() {
     for (const [i, e] of items.entries()) {
       const off = await offlineEntry(e.key);
       const f = e.position_ms && e.duration_ms ? e.position_ms / e.duration_ms : 0;
-      box.append(h("div", { className: "item" }, thumb({ title: e.subtitle }),
+      box.append(h("div", { className: "item" }, thumb({ title: e.subtitle, image: e.image }),
         h("div", { className: "tx" }, h("div", { className: "t1" }, e.title),
           h("div", { className: "t2" }, [e.subtitle, e.published?.slice(0, 10), e.duration_ms ? clock(e.duration_ms) : ""].filter(Boolean).join(" · ")),
           f ? h("div", { className: "prog" }, h("i", { style: `width:${f * 100}%` })) : null),

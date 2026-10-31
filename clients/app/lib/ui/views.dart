@@ -1,4 +1,4 @@
-// The main screens: now playing, continue, podcasts, audiobooks, music, offline.
+// The main screens: continue, podcasts, audiobooks, music, offline.
 
 import 'package:flutter/material.dart';
 
@@ -7,7 +7,6 @@ import '../downloads.dart';
 import '../l10n.dart';
 import '../models.dart';
 import '../player.dart';
-import '../sonos.dart';
 import '../store.dart';
 import 'common.dart';
 
@@ -26,156 +25,6 @@ Widget saveOfflineButton(Item it, [List<Item>? all]) => ListenableBuilder(
       listenable: downloads,
       builder: (context, _) => offlineIcon(context, it.key, onSave: () => downloads.add(all ?? [it])),
     );
-
-// ---------------------------------------------------------------- now playing
-
-class NowPlayingView extends StatelessWidget {
-  const NowPlayingView({super.key});
-
-  @override
-  Widget build(BuildContext context) => ListenableBuilder(
-        listenable: Listenable.merge([player, sonos]),
-        builder: (context, _) {
-          final it = player.item;
-          if (it == null) return emptyText(context, t('Nothing is playing.'));
-          final k = context.tok;
-          final wide = MediaQuery.sizeOf(context).width >= 720;
-          final pos = player.position, dur = player.duration;
-          final suffix = player.fromCache ? t('from cache') : t('unchanged');
-          final cover = CoverThumb(image: it.image, label: it.subtitle.isEmpty ? it.title : it.subtitle, size: wide ? 220 : 280);
-          final info = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(it.kind == 'episode' ? 'Podcast · ${it.subtitle}' : it.subtitle,
-                style: TextStyle(color: k.muted, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 4),
-            Text(it.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
-            if (player.chapter.isNotEmpty) Text(player.chapter, style: TextStyle(fontSize: 16, color: k.muted)),
-            const SizedBox(height: 10),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: Table(defaultColumnWidth: const IntrinsicColumnWidth(), children: [
-                  TableRow(children: [Text(t('Source'), style: TextStyle(color: k.muted)), const SizedBox(width: 10),
-                    Text(it.quality?.text ?? '–', style: const TextStyle(fontWeight: FontWeight.w700))]),
-                  TableRow(children: [Text(t('Here'), style: TextStyle(color: k.muted)), const SizedBox(width: 10),
-                    Text('${it.quality?.text ?? '–'} · $suffix', style: const TextStyle(fontWeight: FontWeight.w700))]),
-                ]),
-              ),
-            ),
-            if (player.live)
-              Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: Badge2(t('Live'), kind: 'ok'))
-            else ...[
-              Slider(
-                value: dur > 0 ? (pos / dur).clamp(0.0, 1.0) : 0,
-                onChanged: dur > 0 ? (v) => player.seekTo((v * dur).round()) : null,
-              ),
-              Row(children: [Text(clock(pos)), const Spacer(), Text(dur > 0 ? '−${clock(dur - pos)}' : '')]),
-            ],
-            const SizedBox(height: 8),
-            Wrap(spacing: 12, crossAxisAlignment: WrapCrossAlignment.center, children: [
-              if (player.queue.length > 1) IconButton.outlined(iconSize: 30, onPressed: () => player.skip(-1), icon: const Icon(Icons.skip_previous)),
-              if (!player.live) IconButton.outlined(iconSize: 30, onPressed: () => player.seekBy(-30000), icon: const Icon(Icons.replay_30)),
-              IconButton.filled(
-                  iconSize: 48,
-                  onPressed: () => sonos.output != null ? sonos.toggle() : player.toggle(),
-                  icon: Icon((sonos.output?.playing ?? player.playing) ? Icons.pause : Icons.play_arrow)),
-              if (!player.live) IconButton.outlined(iconSize: 30, onPressed: () => player.seekBy(30000), icon: const Icon(Icons.forward_30)),
-              if (player.live)
-                const SizedBox.shrink()
-              else if (player.queue.length > 1)
-                IconButton.outlined(iconSize: 30, onPressed: () => player.skip(1), icon: const Icon(Icons.skip_next))
-              else
-                OutlinedButton(onPressed: player.nextRate, child: Text('${player.rate}×')),
-            ]),
-            const SizedBox(height: 8),
-            Wrap(spacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-              ActionChip(
-                avatar: const Icon(Icons.speaker),
-                label: Text(sonos.output == null ? t('This device') : 'Sonos ${sonos.output!.name}'),
-                onPressed: () => showModalBottomSheet(context: context, builder: (_) => const OutputSheet()),
-              ),
-              if (sonos.output != null) ...[
-                IconButton(onPressed: () => sonos.volume(-3), icon: const Icon(Icons.volume_down)),
-                Text('${sonos.output!.volume ?? '?'}'),
-                IconButton(onPressed: () => sonos.volume(3), icon: const Icon(Icons.volume_up)),
-              ],
-            ]),
-            if (sonos.output != null)
-              Text(t('Playing on {name}', {'name': 'Sonos ${sonos.output!.name}'}), style: TextStyle(color: k.muted))
-            else if (player.takenOver != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 10),
-                child: Text(t('Taken over from {device} · {ago}', {'device': player.takenOver!.device, 'ago': ago(player.takenOver!.at)}),
-                    style: TextStyle(color: k.muted)),
-              ),
-          ]);
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: wide
-                ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [cover, const SizedBox(width: 20), Expanded(child: info)])
-                : Column(children: [Center(child: cover), const SizedBox(height: 16), info]),
-          );
-        },
-      );
-}
-
-class OutputSheet extends StatelessWidget {
-  const OutputSheet({super.key});
-
-  @override
-  Widget build(BuildContext context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Text(t('Output'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 8),
-            ItemRow(
-              leading: const Icon(Icons.smartphone, size: 32),
-              title: t('This device'),
-              subtitle: t('from cache or stream'),
-              trailing: [
-                FilledButton(
-                  onPressed: sonos.output == null ? null : () {
-                    Navigator.pop(context);
-                    sonos.backToDevice();
-                  },
-                  child: Text(sonos.output == null ? t('active') : t('Switch here')),
-                ),
-              ],
-            ),
-            Flexible(
-              child: Loader<List<Room>>(
-                load: sonos.rooms,
-                builder: (context, rooms, _) => ListView(shrinkWrap: true, children: [
-                  for (final r in rooms)
-                    ItemRow(
-                      leading: const Icon(Icons.speaker, size: 32),
-                      title: 'Sonos ${r.name}',
-                      subtitle: '${r.model} · ${r.s2 ? t('up to 24 bit / 48 kHz') : t('up to 16 bit / 48 kHz')}',
-                      trailing: [
-                        Badge2(!r.reachable ? t('switched off') : r.playing ? t('playing') : t('available'),
-                            kind: !r.reachable ? 'bad' : r.playing ? 'warn' : 'ok'),
-                        FilledButton(
-                          // Close the sheet at once; an error shows on the player view below.
-                          onPressed: !r.reachable ? null : () async {
-                            final messenger = ScaffoldMessenger.of(context);
-                            Navigator.pop(context);
-                            try {
-                              await sonos.playOn(r);
-                            } catch (e) {
-                              messenger.showSnackBar(SnackBar(content: Text('${t('Error')}: $e')));
-                            }
-                          },
-                          child: Text(t('Play here')),
-                        ),
-                      ],
-                    ),
-                ]),
-              ),
-            ),
-          ]),
-        ),
-      );
-}
 
 // ---------------------------------------------------------------- continue
 
@@ -205,7 +54,7 @@ class ContinueView extends StatelessWidget {
           return ListView(padding: const EdgeInsets.all(12), children: [
             for (final p in list)
               ItemRow(
-                leading: CoverThumb(label: p.subtitle.isEmpty ? p.title : p.subtitle),
+                leading: CoverThumb(image: coverOf(p.key), label: p.subtitle.isEmpty ? p.title : p.subtitle),
                 title: p.title.isEmpty ? p.key : p.title,
                 subtitle: '${clock(p.positionMs)}${p.durationMs != null ? ' / ${clock(p.durationMs!)}' : ''} · '
                     '${p.device.isEmpty ? ago(p.updatedAt) : t('Last on {device} · {ago}', {'device': p.device, 'ago': ago(p.updatedAt)})}',
@@ -214,7 +63,7 @@ class ContinueView extends StatelessWidget {
                   ListenableBuilder(listenable: downloads, builder: (context, _) => offlineIcon(context, p.key, showOnlineOnly: true)),
                   rowButton(t('Resume'), () => startPlayback(context, [
                         Item(key: p.key, kind: p.key.startsWith('episode:') ? 'episode' : p.key.startsWith('abs:') ? 'book' : 'track',
-                            title: p.title, subtitle: p.subtitle)
+                            title: p.title, subtitle: p.subtitle, image: coverOf(p.key))
                       ], 0, onPlay)),
                 ],
               ),
@@ -261,7 +110,7 @@ class _PodcastsViewState extends State<PodcastsView> {
             : ListView(padding: const EdgeInsets.all(12), children: [
                 for (final p in pods.cast<Map>())
                   ItemRow(
-                    leading: CoverThumb(image: null, label: p['title'] as String),
+                    leading: CoverThumb(image: p['image'] as String?, label: p['title'] as String),
                     title: p['title'] as String,
                     subtitle: '${p['author']} · ${p['episodes']}',
                     onTap: () => setState(() => podcast = p.cast<String, dynamic>()),
@@ -285,10 +134,12 @@ class _PodcastsViewState extends State<PodcastsView> {
             ? await api.call('GET', '/episodes/latest', query: {'limit': '40'})
             : await api.call('GET', '/podcasts/${podcast!['id']}/episodes', query: {'limit': '100'})),
         builder: (context, eps, _) => ListView(padding: const EdgeInsets.all(12), children: [
+          if (podcast != null) PodcastHeader(podcast!),
           for (final e in eps.map((e) => Item(key: e.key, kind: 'episode', title: e.title, subtitle: e.subtitle, durationMs: e.durationMs,
-              published: e.published, positionMs: e.positionMs, finished: e.finished)))
+              published: e.published, positionMs: e.positionMs, finished: e.finished, image: e.image, description: e.description)))
             ItemRow(
-              leading: CoverThumb(label: e.subtitle),
+              leading: CoverThumb(image: e.image, label: e.subtitle),
+              onTap: () => showEpisode(context, e, () => startPlayback(context, [e], 0, widget.onPlay)),
               title: e.title,
               subtitle: [e.subtitle, e.published?.substring(0, 10), if (e.durationMs != null) clock(e.durationMs!)].whereType<String>().join(' · '),
               progress: e.positionMs != null && e.durationMs != null && !e.finished ? e.positionMs! / e.durationMs! : null,
@@ -303,6 +154,83 @@ class _PodcastsViewState extends State<PodcastsView> {
     return Column(children: [chips, Expanded(child: body)]);
   }
 }
+
+/// Cover, author and description of a subscribed podcast above its episodes.
+class PodcastHeader extends StatefulWidget {
+  final Map<String, dynamic> podcast;
+  const PodcastHeader(this.podcast, {super.key});
+  @override
+  State<PodcastHeader> createState() => _PodcastHeaderState();
+}
+
+class _PodcastHeaderState extends State<PodcastHeader> {
+  bool open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.podcast, k = context.tok;
+    final desc = (p['description'] ?? '') as String;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        CoverThumb(image: p['image'] as String?, label: '${p['title']}', size: 96),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('${p['title']}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+            if ('${p['author'] ?? ''}'.isNotEmpty) Text('${p['author']}', style: TextStyle(color: k.muted, fontWeight: FontWeight.w600)),
+            if (desc.isNotEmpty)
+              InkWell(
+                onTap: () => setState(() => open = !open),
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(desc, maxLines: open ? null : 3, overflow: open ? null : TextOverflow.ellipsis, style: const TextStyle(height: 1.4)),
+                ),
+              ),
+          ]),
+        ),
+      ]),
+    );
+  }
+}
+
+/// Episode details: cover, date, duration and the show notes, with a play button.
+void showEpisode(BuildContext context, Item e, VoidCallback onPlay) => showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        maxChildSize: 0.95,
+        builder: (ctx, scroll) => ListView(controller: scroll, padding: const EdgeInsets.all(16), children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            CoverThumb(image: e.image, label: e.subtitle, size: 88),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(e.title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                Text([e.subtitle, e.published?.substring(0, 10), if (e.durationMs != null) clock(e.durationMs!)].whereType<String>().join(' · '),
+                    style: TextStyle(color: ctx.tok.muted)),
+              ]),
+            ),
+          ]),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton.icon(
+              icon: const Icon(Icons.play_arrow),
+              label: Text((e.positionMs ?? 0) > 0 ? t('Resume') : t('Play')),
+              onPressed: () {
+                Navigator.pop(ctx);
+                onPlay();
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+          SelectableText((e.description ?? '').isEmpty ? t('No description.') : e.description!, style: const TextStyle(fontSize: 15, height: 1.45)),
+        ]),
+      ),
+    );
 
 class AddPodcastDialog extends StatefulWidget {
   const AddPodcastDialog({super.key});
@@ -546,7 +474,7 @@ class OfflineView extends StatelessWidget {
             if (list.isEmpty) emptyText(context, t('Nothing saved offline yet.')),
             for (final e in list)
               ItemRow(
-                leading: CoverThumb(label: e.title),
+                leading: CoverThumb(image: coverOf(e.key), label: e.title),
                 title: e.title,
                 subtitle: [e.subtitle, if (e.bytes > 0) bytes(e.bytes), e.quality?.badge ?? ''].where((s) => s.isNotEmpty).join(' · '),
                 progress: e.status == 'loading' ? e.progress : null,

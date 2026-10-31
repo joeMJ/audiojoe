@@ -94,6 +94,9 @@ class StatusPills extends StatelessWidget {
   }
 }
 
+/// Server path of an item's cover (404 when it has none: the thumb then shows initials).
+String coverOf(String key) => '/api/v1/image/${Uri.encodeComponent(key)}';
+
 class CoverThumb extends StatelessWidget {
   final String? image;
   final String label;

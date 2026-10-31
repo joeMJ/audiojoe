@@ -30,15 +30,21 @@ class Api {
 
   Uri uri(String path, [Map<String, String>? query]) => Uri.parse('$base/api/v1$path').replace(queryParameters: query);
 
-  Future<dynamic> call(String method, String path, {Object? body, Map<String, String>? query}) async {
+  /// JSON request; `text` sends a plain body instead (e.g. an OPML file). Non-JSON answers
+  /// come back as text.
+  Future<dynamic> call(String method, String path,
+      {Object? body, String? text, Map<String, String>? query, Duration timeout = const Duration(seconds: 30)}) async {
     final req = http.Request(method, uri(path, query))..headers.addAll(authHeaders);
     if (body != null) {
       req.headers['content-type'] = 'application/json';
       req.body = jsonEncode(body);
+    } else if (text != null) {
+      req.headers['content-type'] = 'text/plain; charset=utf-8';
+      req.body = text;
     }
     http.Response res;
     try {
-      res = await http.Response.fromStream(await client.send(req).timeout(const Duration(seconds: 30)));
+      res = await http.Response.fromStream(await client.send(req).timeout(timeout));
     } catch (e) {
       online.value = false;
       throw ApiError(0, '$e');
@@ -49,7 +55,8 @@ class Api {
       throw ApiError(0, 'server unavailable (${res.statusCode})');
     }
     online.value = true;
-    final data = res.body.isNotEmpty && (res.headers['content-type'] ?? '').contains('json') ? jsonDecode(res.body) : null;
+    final json = (res.headers['content-type'] ?? '').contains('json');
+    final data = res.body.isEmpty ? null : json ? jsonDecode(res.body) : res.body;
     if (res.statusCode >= 400) {
       throw ApiError(res.statusCode, data is Map ? '${data['error']}' : res.reasonPhrase ?? '${res.statusCode}');
     }
