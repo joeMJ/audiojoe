@@ -46,6 +46,22 @@ pub async fn browse(
     }
 }
 
+/// `/api/v1/sources/{id}/books?parent=<library>`: the audiobook library with authors and series.
+pub async fn books(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<i64>,
+    Query(q): Query<Browse>,
+) -> ApiResult<Json<Value>> {
+    match kind(&state, id).await?.as_str() {
+        "audiobookshelf" => {
+            let lib = q.parent.ok_or_else(|| ApiError::BadRequest("parent (library) required".into()))?;
+            audiobookshelf::library(&state, user.id, id, &lib).await.map(Json)
+        }
+        _ => Err(ApiError::NotFound),
+    }
+}
+
 /// `/api/v1/image/{key}` for `jellyfin:<src>:<item>` and `abs:<src>:<item>`.
 pub async fn image(State(state): State<AppState>, user: CurrentUser, Path(key): Path<String>) -> ApiResult<Response> {
     if let Some(uuid) = key.strip_prefix("radio:") {

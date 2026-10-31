@@ -110,6 +110,130 @@ fn book_json(src: i64, v: &Value) -> Value {
     })
 }
 
+/// Order of strings with numbers compared by value ("GA9" before "GA10", "Band 2" before
+/// "Band 10"), letters case-insensitive.
+pub fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+    fn chunks(s: &str) -> Vec<(bool, String)> {
+        let mut out: Vec<(bool, String)> = Vec::new();
+        for ch in s.to_lowercase().chars() {
+            let d = ch.is_ascii_digit();
+            match out.last_mut() {
+                Some((was, cur)) if *was == d => cur.push(ch),
+                _ => out.push((d, ch.to_string())),
+            }
+        }
+        out
+    }
+    let (x, y) = (chunks(a), chunks(b));
+    for (p, q) in x.iter().zip(y.iter()) {
+        let o = match (p.0, q.0) {
+            (true, true) => {
+                let (m, n) = (p.1.trim_start_matches('0'), q.1.trim_start_matches('0'));
+                m.len().cmp(&n.len()).then_with(|| m.cmp(n))
+            }
+            _ => p.1.cmp(&q.1),
+        };
+        if o != std::cmp::Ordering::Equal {
+            return o;
+        }
+    }
+    x.len().cmp(&y.len())
+}
+
+/// "Name #3, Other #1.5" (minified listing) → [(name, sequence)].
+fn series_of(s: &str) -> Vec<(String, Option<String>)> {
+    s.split(", ")
+        .filter(|p| !p.trim().is_empty())
+        .map(|p| match p.rsplit_once(" #") {
+            Some((n, q)) if !q.is_empty() && q.chars().all(|c| c.is_ascii_digit() || c == '.') => (n.trim().to_string(), Some(q.to_string())),
+            _ => (p.trim().to_string(), None),
+        })
+        .collect()
+}
+
+/// The whole book library for the audiobook views (authors, series, titles, recently added):
+/// every book with author, narrator, series and its place in it, plus the user's progress;
+/// authors sorted by last name, series with "heard x of y" and the next unheard volume.
+pub async fn library(state: &AppState, user: i64, src: i64, lib: &str) -> ApiResult<Value> {
+    if !valid_id(lib) {
+        return Err(ApiError::BadRequest("invalid library".into()));
+    }
+    let abs = source(state, src).await?;
+    let res = abs.get(&state.http, &format!("/api/libraries/{lib}/items"), &[("minified", "1".into())]).await?;
+    let prefix = format!("abs:{src}:");
+    let progress: std::collections::HashMap<String, (i64, bool)> = with_db(&state.db, move |c| {
+        let mut st = c.prepare("SELECT item_key, position_ms, finished FROM playback WHERE user_id = ?1 AND item_key LIKE ?2 || '%'")?;
+        let rows = st.query_map((user, &prefix), |r| Ok((r.get::<_, String>(0)?, (r.get::<_, i64>(1)?, r.get::<_, bool>(2)?))))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    })
+    .await?;
+
+    struct B { v: Value, author: String, author_lf: String, series: Vec<(String, Option<String>)>, title: String }
+    let books: Vec<B> = res["results"]
+        .as_array()
+        .map(|a| a.iter().map(|v| {
+            let m = &v["media"]["metadata"];
+            let author = m["authorName"].as_str().unwrap_or("").trim().to_string();
+            let mut b = book_json(src, v);
+            let (pos, fin) = progress.get(b["key"].as_str().unwrap_or("")).copied().unwrap_or((0, false));
+            let series = series_of(m["seriesName"].as_str().unwrap_or(""));
+            b["author"] = json!(author);
+            b["narrator"] = json!(m["narratorName"].as_str().unwrap_or(""));
+            b["series"] = json!(series.first().map(|s| &s.0));
+            b["sequence"] = json!(series.first().and_then(|s| s.1.clone()));
+            b["added"] = json!(v["addedAt"].as_i64());
+            b["position_ms"] = json!(pos);
+            b["finished"] = json!(fin);
+            B { title: m["title"].as_str().unwrap_or("").to_string(), author_lf: m["authorNameLF"].as_str().unwrap_or(&author).to_string(),
+                author, series, v: b }
+        }).collect())
+        .unwrap_or_default();
+
+    // Series: volumes by the sequence ABS knows, else by title (numbers by value).
+    let mut series: std::collections::BTreeMap<String, Vec<usize>> = Default::default();
+    for (i, b) in books.iter().enumerate() {
+        for (name, _) in &b.series {
+            series.entry(name.clone()).or_default().push(i);
+        }
+    }
+    let seq_of = |b: &B, name: &str| b.series.iter().find(|s| s.0 == name).and_then(|s| s.1.as_ref()).and_then(|q| q.parse::<f64>().ok());
+    let mut volume = vec![Value::Null; books.len()];
+    let mut series_out = Vec::new();
+    for (name, mut idx) in series {
+        idx.sort_by(|&a, &b| match (seq_of(&books[a], &name), seq_of(&books[b], &name)) {
+            (Some(x), Some(y)) => x.partial_cmp(&y).unwrap_or(std::cmp::Ordering::Equal),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            _ => natural_cmp(&books[a].title, &books[b].title),
+        });
+        for (n, &i) in idx.iter().enumerate() {
+            if books[i].series.first().map(|s| &s.0) == Some(&name) {
+                volume[i] = json!(n + 1);
+            }
+        }
+        let heard = idx.iter().filter(|&&i| books[i].v["finished"] == true).count();
+        let next = idx.iter().find(|&&i| books[i].v["finished"] != true).map(|&i| books[i].v["key"].clone());
+        let mut authors: Vec<&str> = idx.iter().map(|&i| books[i].author.as_str()).filter(|a| !a.is_empty()).collect();
+        authors.dedup();
+        series_out.push(json!({
+            "name": name, "author": authors.first().copied().unwrap_or(""), "total": idx.len(), "heard": heard,
+            "next": next, "books": idx.iter().map(|&i| books[i].v["key"].clone()).collect::<Vec<_>>(),
+            "image": books[idx[0]].v["image"],
+        }));
+    }
+    series_out.sort_by(|a, b| natural_cmp(a["name"].as_str().unwrap_or(""), b["name"].as_str().unwrap_or("")));
+
+    let mut authors: std::collections::BTreeMap<String, (String, usize)> = Default::default();
+    for b in books.iter().filter(|b| !b.author.is_empty()) {
+        authors.entry(b.author_lf.to_lowercase()).or_insert_with(|| (b.author.clone(), 0)).1 += 1;
+    }
+    let authors: Vec<Value> = authors.into_values().map(|(name, n)| json!({ "name": name, "books": n })).collect();
+
+    let mut out: Vec<Value> = books.into_iter().zip(volume).map(|(mut b, vol)| { b.v["volume"] = vol; b.v }).collect();
+    out.sort_by(|a, b| natural_cmp(a["title"].as_str().unwrap_or(""), b["title"].as_str().unwrap_or("")));
+    Ok(json!({ "books": out, "authors": authors, "series": series_out }))
+}
+
 pub async fn browse(state: &AppState, src: i64, q: &Browse) -> ApiResult<Value> {
     let abs = source(state, src).await?;
     let Some(lib) = q.parent.clone() else {
@@ -374,5 +498,27 @@ pub async fn sync_loop(state: AppState) {
         for id in ids {
             sync_source(&state, id).await;
         }
+    }
+}
+
+#[cfg(test)]
+mod library_tests {
+    use super::{natural_cmp, series_of};
+    use std::cmp::Ordering::*;
+
+    #[test]
+    fn numbers_compare_by_value() {
+        assert_eq!(natural_cmp("GA9 - Der Engel", "GA10 - Die Spur"), Less);
+        assert_eq!(natural_cmp("Band 02", "Band 10"), Less);
+        assert_eq!(natural_cmp("John Dempsey 02 - X", "john dempsey 1 - Y"), Greater);
+        assert_eq!(natural_cmp("Atlas", "atlas"), Equal);
+    }
+
+    #[test]
+    fn series_with_and_without_sequence() {
+        assert_eq!(series_of("Gabriel Allon #3, Spionage #1.5"),
+                   vec![("Gabriel Allon".to_string(), Some("3".to_string())), ("Spionage".to_string(), Some("1.5".to_string()))]);
+        assert_eq!(series_of("John Dempsey"), vec![("John Dempsey".to_string(), None)]);
+        assert!(series_of("").is_empty());
     }
 }

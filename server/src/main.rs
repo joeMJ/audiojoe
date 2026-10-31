@@ -132,6 +132,7 @@ async fn main() -> Result<()> {
         .route("/api/v1/sources", get(sources::list).post(sources::add))
         .route("/api/v1/sources/{id}", delete(sources::delete))
         .route("/api/v1/sources/{id}/browse", get(sources::browse))
+        .route("/api/v1/sources/{id}/books", get(sources::books))
         .route("/api/v1/image/{key}", get(sources::image))
         .route("/api/v1/podcasts", get(podcasts::list).post(podcasts::subscribe))
         .route("/api/v1/podcasts/opml", get(opml::export).post(opml::import))
