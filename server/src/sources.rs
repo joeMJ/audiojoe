@@ -15,10 +15,10 @@ use crate::{
     audiobookshelf,
     auth::CurrentUser,
     error::{with_db, ApiError, ApiResult},
-    jellyfin, AppState,
+    jellyfin, plex, AppState,
 };
 
-const KINDS: &[&str] = &["jellyfin", "audiobookshelf"];
+const KINDS: &[&str] = &["jellyfin", "emby", "plex", "audiobookshelf"];
 
 #[derive(Deserialize, Default)]
 pub struct Browse {
@@ -39,7 +39,8 @@ pub async fn browse(
     Query(q): Query<Browse>,
 ) -> ApiResult<Json<Value>> {
     match kind(&state, id).await?.as_str() {
-        "jellyfin" => jellyfin::browse(&state, id, &q).await.map(Json),
+        "jellyfin" | "emby" => jellyfin::browse(&state, id, &q).await.map(Json),
+        "plex" => plex::browse(&state, id, &q).await.map(Json),
         "audiobookshelf" => audiobookshelf::browse(&state, id, &q).await.map(Json),
         _ => Err(ApiError::NotFound),
     }
@@ -47,13 +48,17 @@ pub async fn browse(
 
 /// `/api/v1/image/{key}` for `jellyfin:<src>:<item>` and `abs:<src>:<item>`.
 pub async fn image(State(state): State<AppState>, _user: CurrentUser, Path(key): Path<String>) -> ApiResult<Response> {
+    if let Some(uuid) = key.strip_prefix("radio:") {
+        return crate::radio::image(&state, uuid).await;
+    }
     let mut parts = key.splitn(3, ':');
     let (Some(k), Some(src), Some(item)) = (parts.next(), parts.next(), parts.next()) else {
         return Err(ApiError::NotFound);
     };
     let src: i64 = src.parse().map_err(|_| ApiError::NotFound)?;
     match k {
-        "jellyfin" => jellyfin::image(&state, src, item).await,
+        "jellyfin" | "emby" => jellyfin::image(&state, src, item).await,
+        "plex" => plex::image(&state, src, item).await,
         "abs" => audiobookshelf::image(&state, src, item).await,
         _ => Err(ApiError::NotFound),
     }
@@ -116,7 +121,8 @@ pub async fn add(State(state): State<AppState>, user: CurrentUser, Json(req): Js
     let key = req.api_key.trim().to_string();
     // Check the connection and the key before storing anything.
     let info = match req.kind.as_str() {
-        "jellyfin" => jellyfin::check(&state, &url, &key).await?,
+        "jellyfin" | "emby" => jellyfin::check(&state, &req.kind, &url, &key).await?,
+        "plex" => plex::check(&state, &url, &key).await?,
         _ => audiobookshelf::check(&state, &url, &key).await?,
     };
     let kind = req.kind.clone();

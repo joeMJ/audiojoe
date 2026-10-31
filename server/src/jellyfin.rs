@@ -12,19 +12,30 @@ use crate::{
     AppState,
 };
 
+/// Jellyfin and Emby (Jellyfin is a fork of Emby; the API is largely the same).
+/// Emby support is untested against a real server so far.
 #[derive(Clone)]
 pub struct Jellyfin {
     pub source_id: i64,
     pub base: String,
     key: String,
+    /// "jellyfin" or "emby" – also the prefix of item keys.
+    pub kind: String,
 }
 
 impl Jellyfin {
-    pub fn auth_header(&self) -> String {
-        format!(
-            "MediaBrowser Client=\"audiojoe\", Device=\"audiojoe-server\", DeviceId=\"audiojoe-server\", Version=\"{}\", Token=\"{}\"",
-            env!("CARGO_PKG_VERSION"),
-            self.key
+    /// Request header carrying the API key.
+    pub fn auth(&self) -> (header::HeaderName, String) {
+        if self.kind == "emby" {
+            return (header::HeaderName::from_static("x-emby-token"), self.key.clone());
+        }
+        (
+            header::AUTHORIZATION,
+            format!(
+                "MediaBrowser Client=\"audiojoe\", Device=\"audiojoe-server\", DeviceId=\"audiojoe-server\", Version=\"{}\", Token=\"{}\"",
+                env!("CARGO_PKG_VERSION"),
+                self.key
+            ),
         )
     }
 
@@ -32,11 +43,11 @@ impl Jellyfin {
         let res = http
             .get(format!("{}{path}", self.base))
             .query(query)
-            .header(header::AUTHORIZATION, self.auth_header())
+            .header(self.auth().0, self.auth().1)
             .timeout(Duration::from_secs(20))
             .send()
             .await
-            .map_err(|e| ApiError::BadGateway(format!("jellyfin unreachable: {e}")))?;
+            .map_err(|e| ApiError::BadGateway(format!("{} unreachable: {}", self.kind, e.without_url())))?;
         if res.status() == reqwest::StatusCode::NOT_FOUND {
             return Err(ApiError::NotFound);
         }
@@ -73,17 +84,17 @@ impl Jellyfin {
         let v = self
             .get(&state.http, &format!("/Users/{uid}/Items/{item}"), &[("Fields", "MediaSources,MediaStreams".into())])
             .await?;
-        Ok(normalize(self.source_id, &v))
+        Ok(normalize(&self.kind, self.source_id, &v))
     }
 }
 
-/// Loads a Jellyfin source.
+/// Loads a Jellyfin or Emby source.
 pub async fn source(state: &AppState, id: i64) -> ApiResult<Jellyfin> {
     with_db(&state.db, move |c| {
         Ok(c.query_row(
-            "SELECT url, secret FROM source WHERE id = ?1 AND kind = 'jellyfin'",
+            "SELECT url, secret, kind FROM source WHERE id = ?1 AND kind IN ('jellyfin', 'emby')",
             [id],
-            |r| Ok(Jellyfin { source_id: id, base: r.get(0)?, key: r.get(1)? }),
+            |r| Ok(Jellyfin { source_id: id, base: r.get(0)?, key: r.get(1)?, kind: r.get(2)? }),
         )?)
     })
     .await
@@ -108,7 +119,7 @@ fn quality(v: &Value) -> Value {
     }
 }
 
-fn normalize(source: i64, v: &Value) -> Value {
+fn normalize(prefix: &str, source: i64, v: &Value) -> Value {
     let id = v["Id"].as_str().unwrap_or_default();
     let typ = v["Type"].as_str().unwrap_or_default();
     let kind = match typ {
@@ -127,7 +138,7 @@ fn normalize(source: i64, v: &Value) -> Value {
         _ => artists,
     };
     json!({
-        "key": format!("jellyfin:{source}:{id}"),
+        "key": format!("{prefix}:{source}:{id}"),
         "kind": kind,
         "title": v["Name"].as_str().unwrap_or(""),
         "subtitle": subtitle,
@@ -135,7 +146,7 @@ fn normalize(source: i64, v: &Value) -> Value {
         "track": v["IndexNumber"].as_i64(),
         "disc": v["ParentIndexNumber"].as_i64(),
         "duration_ms": v["RunTimeTicks"].as_i64().map(|t| t / 10_000),
-        "image": v["ImageTags"]["Primary"].as_str().map(|_| format!("/api/v1/image/jellyfin:{source}:{id}")),
+        "image": v["ImageTags"]["Primary"].as_str().map(|_| format!("/api/v1/image/{prefix}:{source}:{id}")),
         "quality": if kind == "track" { quality(v) } else { Value::Null },
     })
 }
@@ -204,7 +215,7 @@ pub async fn browse(state: &AppState, source_id: i64, q: &Browse) -> ApiResult<V
         json!({ "Items": items, "TotalRecordCount": items.len() })
     };
 
-    let list: Vec<Value> = items["Items"].as_array().map(|a| a.iter().map(|v| normalize(source_id, v)).collect()).unwrap_or_default();
+    let list: Vec<Value> = items["Items"].as_array().map(|a| a.iter().map(|v| normalize(&jf.kind, source_id, v)).collect()).unwrap_or_default();
     Ok(json!({ "items": list, "total": items["TotalRecordCount"] }))
 }
 
@@ -218,13 +229,13 @@ pub async fn image(state: &AppState, src: i64, item: &str) -> ApiResult<Response
         .http
         .get(format!("{}/Items/{item}/Images/Primary", jf.base))
         .query(&[("maxHeight", "400"), ("quality", "85")])
-        .header(header::AUTHORIZATION, jf.auth_header());
+        .header(jf.auth().0, jf.auth().1);
     crate::sources::relay_image(req).await
 }
 
 /// Checks URL and key; returns server name and version.
-pub async fn check(state: &AppState, url: &str, key: &str) -> ApiResult<Value> {
-    let probe = Jellyfin { source_id: 0, base: url.to_string(), key: key.to_string() };
+pub async fn check(state: &AppState, kind: &str, url: &str, key: &str) -> ApiResult<Value> {
+    let probe = Jellyfin { source_id: 0, base: url.to_string(), key: key.to_string(), kind: kind.to_string() };
     let info = probe.get(&state.http, "/System/Info", &[]).await?;
     Ok(json!({ "server": info["ServerName"], "version": info["Version"] }))
 }

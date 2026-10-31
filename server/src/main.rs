@@ -8,8 +8,11 @@ mod error;
 mod jellyfin;
 mod media;
 mod playback;
+mod plex;
 mod podcasts;
 mod probe;
+mod radio;
+mod sonos;
 mod sources;
 mod stream;
 
@@ -44,6 +47,8 @@ pub struct AppState {
     pub events: playback::Events,
     /// Jellyfin user id per source, looked up once.
     pub jellyfin_users: Arc<Mutex<HashMap<i64, String>>>,
+    /// Key that signs the stream URLs given to Sonos speakers (kept across restarts).
+    pub sonos_secret: Arc<Vec<u8>>,
 }
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -77,8 +82,16 @@ async fn main() -> Result<()> {
         Some(_) => return cli::run(&config::Config::load(&path)?, &args),
     }
     let config = config::Config::load(&path)?;
+    let db = db::open(&config.database)?;
+    let sonos_secret = {
+        let c = db.lock().unwrap();
+        let existing: Option<String> = c.query_row("SELECT value FROM setting WHERE name = 'sonos_secret'", [], |r| r.get(0)).ok();
+        let secret = existing.unwrap_or_else(auth::random_token);
+        c.execute("INSERT OR IGNORE INTO setting (name, value) VALUES ('sonos_secret', ?1)", [&secret])?;
+        Arc::new(secret.into_bytes())
+    };
     let state = AppState {
-        db: db::open(&config.database)?,
+        db,
         http: reqwest::Client::builder()
             .user_agent(concat!("audiojoe/", env!("CARGO_PKG_VERSION")))
             .connect_timeout(std::time::Duration::from_secs(5))
@@ -88,9 +101,19 @@ async fn main() -> Result<()> {
         dummy_hash: Arc::new(auth::hash_password(&auth::random_token())?),
         events: tokio::sync::broadcast::channel(256).0,
         jellyfin_users: Default::default(),
+        sonos_secret,
     };
     tokio::spawn(podcasts::refresh_loop(state.clone()));
     tokio::spawn(audiobookshelf::sync_loop(state.clone()));
+    if let Some(addr) = sonos::lan_addr(&state) {
+        let lan = tokio::net::TcpListener::bind(addr).await?;
+        tracing::info!("Sonos stream port on {addr} (LAN only)");
+        let router = sonos::lan_router(state.clone()).layer(middleware::from_fn_with_state(state.clone(), access::log));
+        tokio::spawn(async move {
+            let _ = axum::serve(lan, router.into_make_service_with_connect_info::<SocketAddr>()).await;
+        });
+        tokio::spawn(sonos::poll_loop(state.clone()));
+    }
 
     let web = ServeDir::new(&state.config.web_root)
         .fallback(ServeFile::new(state.config.web_root.join("index.html")));
@@ -113,6 +136,14 @@ async fn main() -> Result<()> {
         .route("/api/v1/podcasts/{id}/episodes", get(podcasts::episodes))
         .route("/api/v1/podcasts/{id}/refresh", post(podcasts::refresh))
         .route("/api/v1/episodes/latest", get(podcasts::latest))
+        .route("/api/v1/radio/search", get(radio::search))
+        .route("/api/v1/radio/favorites", get(radio::favorites))
+        .route("/api/v1/radio/favorites/{uuid}", axum::routing::put(radio::add_favorite).delete(radio::remove_favorite))
+        .route("/api/v1/sonos", get(sonos::list).post(sonos::add))
+        .route("/api/v1/sonos/scan", post(sonos::scan))
+        .route("/api/v1/sonos/{id}", delete(sonos::remove))
+        .route("/api/v1/sonos/{id}/play", post(sonos::play))
+        .route("/api/v1/sonos/{id}/command", post(sonos::command))
         .route("/api/v1/items/{key}", get(media::item))
         .route("/api/v1/stream/{key}", get(media::stream))
         .route("/api/v1/playback", get(playback::list).post(playback::sync))

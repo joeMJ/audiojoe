@@ -18,6 +18,7 @@ export interface Item {
   quality?: Quality | null;
   podcast?: string;
   published?: string | null;
+  favorite?: boolean;
   track?: number | null;
   year?: number | null;
   /** Audio files of a book; positions are positions in the whole item. */

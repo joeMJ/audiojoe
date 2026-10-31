@@ -61,7 +61,7 @@ class Item {
   final List<Part> parts;
   final List<Chapter> chapters;
   final int? positionMs;
-  final bool finished;
+  final bool finished, favorite;
   final Playback? playback;
 
   const Item({
@@ -79,6 +79,7 @@ class Item {
     this.chapters = const [],
     this.positionMs,
     this.finished = false,
+    this.favorite = false,
     this.playback,
   });
 
@@ -97,6 +98,7 @@ class Item {
         chapters: (j['chapters'] as List? ?? []).map(Chapter.fromJson).toList(),
         positionMs: j['position_ms'] as int?,
         finished: (j['finished'] ?? false) as bool,
+        favorite: (j['favorite'] ?? false) as bool,
         playback: j['playback'] is Map ? Playback.fromJson(j['playback'] as Map<String, dynamic>, key: j['key'] as String) : null,
       );
 

@@ -164,6 +164,64 @@ check("continue listening: unfinished only", eps[1]["key"] in keys and ep["key"]
 s, b, _ = call("GET", f"/api/v1/podcasts/{pid}/episodes?limit=3", token=A)
 check("episode list shows position", s == 200 and b[0]["position_ms"] == 900000)
 
+# ------------------------------------------------------------------ internet radio
+s, st, _ = call("GET", "/api/v1/radio/search?q=deutschlandfunk", token=A)
+check("radio search", s == 200 and len(st) > 0, f"{len(st)} stations, first: {st[0]['title'] if st else ''}")
+if st:
+    r0 = st[0]
+    s, _, _ = call("PUT", f"/api/v1/radio/favorites/{r0['key'][6:]}", token=A)
+    s2, fav, _ = call("GET", "/api/v1/radio/favorites", token=B)
+    check("radio favourite", s == 200 and any(f["key"] == r0["key"] and f["favorite"] for f in fav))
+    s, meta, _ = call("GET", f"/api/v1/items/{r0['key']}", token=A)
+    check("radio item with quality", s == 200 and meta["kind"] == "radio", json.dumps(meta.get("quality")))
+    req = urllib.request.Request(BASE + f"/api/v1/stream/{r0['key']}", headers={"authorization": "Bearer " + A})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            chunk = r.read(32768)
+            check("live radio stream relayed", r.status == 200 and len(chunk) == 32768, f"{r.headers.get('content-type')}, {len(chunk)} B")
+    except Exception as e:
+        check("live radio stream relayed", False, str(e))
+    s, _, _ = call("GET", f"/api/v1/stream/{r0['key']}?profile=tesla-offline", token=A)
+    check("radio cannot be saved offline", s == 400, str(s))
+    s, _, _ = call("GET", f"/api/v1/image/{r0['key']}", token=A, raw=True)
+    check("station logo relayed (or none)", s in (200, 404), str(s))
+    call("DELETE", f"/api/v1/radio/favorites/{r0['key'][6:]}", token=A)
+
+# ------------------------------------------------------------------ sonos (silent: nothing is played)
+if os.environ.get("SONOS_DB"):
+    import sqlite3
+    s, found, _ = call("POST", "/api/v1/sonos/scan", token=A)
+    check("sonos scan (configured range, unicast)", s == 200, ", ".join(f"{x['name']} {x['ip']} {'S2' if x['s2'] else 'S1'}" for x in found) if s == 200 else str(found))
+    s, sps, _ = call("GET", "/api/v1/sonos", token=A)
+    check("sonos status read", s == 200 and any(x["reachable"] for x in sps),
+          "; ".join(f"{x['name']}: {x.get('state')} vol {x.get('volume')}" for x in sps if x["reachable"]))
+    # Signed LAN stream URL, as a speaker would fetch it.
+    secret = sqlite3.connect(os.environ["SONOS_DB"]).execute("SELECT value FROM setting WHERE name='sonos_secret'").fetchone()[0].encode()
+    b64 = lambda b: base64.urlsafe_b64encode(b).rstrip(b"=").decode()
+    claim = {"user": 1, "key": ep["key"], "part": None, "offset_ms": 0, "profile": "sonos-s2", "exp": int(time.time()) + 60, "room": "Test"}
+    me = call("GET", "/api/v1/me", token=A)[1]
+    uid = sqlite3.connect(os.environ["SONOS_DB"]).execute("SELECT id FROM user WHERE name=?", (me["user"],)).fetchone()[0]
+    claim["user"] = uid
+    payload = b64(json.dumps(claim).encode())
+    token = payload + "." + b64(hmac.new(secret, payload.encode(), hashlib.sha256).digest())
+    lan = os.environ.get("SONOS_LAN", "http://127.0.0.1:8081")
+    req = urllib.request.Request(f"{lan}/sonos/{token}", headers={"range": "bytes=0-4095"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            check("LAN stream with signed URL (Range)", r.status == 206 and len(r.read()) == 4096, str(r.status))
+    except Exception as e:
+        check("LAN stream with signed URL (Range)", False, str(e))
+    try:
+        urllib.request.urlopen(f"{lan}/sonos/{payload}.{b64(b'x' * 32)}", timeout=10)
+        check("LAN stream rejects a forged signature", False)
+    except urllib.error.HTTPError as e:
+        check("LAN stream rejects a forged signature", e.code == 403, str(e.code))
+    try:
+        urllib.request.urlopen(f"{lan}/api/v1/health", timeout=10)
+        check("LAN port serves no API", False)
+    except urllib.error.HTTPError as e:
+        check("LAN port serves no API", e.code == 404, str(e.code))
+
 # ------------------------------------------------------------------ jellyfin
 if os.environ.get("JELLYFIN_URL"):
     s, b, _ = call("POST", "/api/v1/sources", {"kind": "jellyfin", "name": "Jellyfin (e2e)",

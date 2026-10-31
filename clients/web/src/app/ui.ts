@@ -5,6 +5,7 @@ import { addOffline, offlineEntry, offlineList, removeFromOffline, retryFailed, 
 import { ago, bytes, clock, t } from "./i18n";
 import { idbAll } from "./idb";
 import * as player from "./player";
+import * as sonos from "./sonos";
 import { pendingCount } from "./sync";
 
 type View = "np" | "cont" | "pod" | "books" | "lib" | "off";
@@ -40,6 +41,9 @@ const ICONS: Record<View, string> = {
   lib: '<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>',
   off: '<path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14"/>',
 };
+const PHONE = '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>';
+const SPEAKER = '<rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="14" r="4"/><path d="M12 6h.01"/>';
+const RADIO_ICON = '<rect x="3" y="8" width="18" height="12" rx="2"/><path d="M7 8l10-5"/><circle cx="8" cy="14" r="2"/><path d="M14 13h4M14 16h4"/>';
 const LABELS: Record<View, string> = { np: "Now playing", cont: "Continue", pod: "Podcasts", books: "Audiobooks", lib: "Music", off: "Offline" };
 
 function initials(s: string) {
@@ -115,11 +119,13 @@ export function refresh(kind: "player" | "data" | "offline") {
 // ---------------------------------------------------------------- now playing
 
 let npRefs: { bar: HTMLElement; fill: HTMLElement; knob: HTMLElement; pos: HTMLElement; rest: HTMLElement;
-              play: HTMLElement; from: HTMLElement; rate: HTMLElement; here: HTMLElement; sub: HTMLElement } | null = null;
+              play: HTMLElement; from: HTMLElement; rate: HTMLElement; here: HTMLElement; sub: HTMLElement; out: HTMLElement } | null = null;
+let showOutputs = false;
 
 function renderNowPlaying() {
   const s = player.state;
   npRefs = null;
+  if (showOutputs) return void renderOutputs();
   if (!s.item) {
     main.append(h("div", { className: "empty" }, t("Nothing is playing.")));
     return;
@@ -135,10 +141,11 @@ function renderNowPlaying() {
   };
   bar.addEventListener("pointerdown", seek);
   const pos = h("span"), rest = h("span");
-  const play = h("button", { className: "play", onclick: () => player.toggle() });
+  const play = h("button", { className: "play", onclick: () => (sonos.output ? void sonos.toggle() : player.toggle()) });
   const rate = h("button", { className: "rate", onclick: () => player.nextRate() });
   const here = h("span", { className: "val" });
   const from = h("div", { className: "from" });
+  const out = h("div", { className: "chips", style: "margin-top:12px" });
   const kind = it.kind === "episode" ? `Podcast · ${it.subtitle ?? ""}` : it.subtitle ?? "";
   const sub = h("div", { className: "sub" }, it.kind === "episode" ? it.published?.slice(0, 10) ?? "" : it.kind === "book" ? "" : it.subtitle ?? "");
   main.append(
@@ -155,9 +162,9 @@ function renderNowPlaying() {
         h("button", { onclick: () => player.seekBy(-30000) }, "−30"), play,
         h("button", { onclick: () => player.seekBy(30000) }, "+30"),
         s.queue.length > 1 ? h("button", { onclick: () => void player.skip(1), ariaLabel: "next" }, icon('<path d="M18 5v14M6 6l9 6-9 6z" fill="currentColor"/>')) : rate),
-      from)),
+      out, from)),
   );
-  npRefs = { bar, fill, knob, pos, rest, play, from, rate, here, sub };
+  npRefs = { bar, fill, knob, pos, rest, play, from, rate, here, sub, out };
   updateNowPlaying();
 }
 
@@ -168,9 +175,21 @@ function updateNowPlaying() {
   const f = d ? Math.min(1, p / d) : 0;
   npRefs.fill.style.width = `${f * 100}%`;
   npRefs.knob.style.left = `${f * 100}%`;
-  npRefs.pos.textContent = clock(p);
-  npRefs.rest.textContent = d ? `−${clock(d - p)}` : "";
-  npRefs.play.textContent = s.playing ? "❚❚" : "▶";
+  npRefs.pos.textContent = player.isLive() ? t("Live") : clock(p);
+  npRefs.rest.textContent = player.isLive() ? "" : d ? `−${clock(d - p)}` : "";
+  npRefs.bar.style.visibility = player.isLive() ? "hidden" : "";
+  const playing = sonos.output ? sonos.playing() : s.playing;
+  npRefs.play.textContent = playing ? "❚❚" : "▶";
+  const o = sonos.output;
+  const outKey = o ? `${o.id}:${o.volume}` : "local";
+  if (npRefs.out.dataset.k !== outKey) {
+    npRefs.out.dataset.k = outKey;
+    npRefs.out.replaceChildren(
+      h("button", { className: "chip", onclick: () => ((showOutputs = true), show("np")) }, `${o ? `Sonos ${o.name}` : t("This device")} ▾`),
+      ...(o ? [h("button", { className: "chip", onclick: () => void sonos.volume(-3) }, "−"),
+               h("span", { className: "badge" }, `${o.volume ?? "?"}`),
+               h("button", { className: "chip", onclick: () => void sonos.volume(3) }, "+")] : []));
+  }
   npRefs.rate.textContent = `${s.rate.toLocaleString()}×`;
   const suffix = s.transcoded ? t("converted") : s.fromCache ? t("from cache") : t("unchanged");
   npRefs.here.textContent = `${qualityText(s.delivered)} · ${suffix}`;
@@ -178,7 +197,43 @@ function updateNowPlaying() {
     const c = player.chapter();
     if (npRefs.sub.textContent !== c) npRefs.sub.textContent = c;
   }
+  if (o) {
+    npRefs.from.textContent = t("Playing on {name}", { name: `Sonos ${o.name}` });
+    return;
+  }
   npRefs.from.textContent = s.takenOver ? t("Taken over from {device} · {ago}", { device: s.takenOver.device, ago: ago(s.takenOver.at) }) : "";
+}
+
+async function renderOutputs() {
+  main.append(h("div", { className: "chips" },
+    h("button", { className: "chip", onclick: () => ((showOutputs = false), show("np")) }, `← ${t("Back")}`),
+    h("h2", { style: "margin:0" }, t("Output"))));
+  const box = h("div", { className: "list" });
+  box.append(h("div", { className: "item" }, h("div", { className: "ic" }, icon(PHONE)),
+    h("div", { className: "tx" }, h("div", { className: "t1" }, t("This device")), h("div", { className: "t2" }, t("from cache or stream"))),
+    h("button", { className: sonos.output ? "big" : "big sec", onclick: async () => { await sonos.backToDevice(); showOutputs = false; show("np"); } },
+      sonos.output ? t("Switch here") : t("active"))));
+  main.append(box);
+  try {
+    for (const r of await sonos.rooms()) {
+      const status = !r.reachable ? t("switched off") : r.state === "PLAYING" ? t("playing") : t("available");
+      const limit = r.s2 ? t("up to 24 bit / 48 kHz") : t("up to 16 bit / 48 kHz");
+      box.append(h("div", { className: "item" }, h("div", { className: "ic" }, icon(SPEAKER)),
+        h("div", { className: "tx" }, h("div", { className: "t1" }, `Sonos ${r.name}`), h("div", { className: "t2" }, `${r.model} · ${limit}`)),
+        h("span", { className: !r.reachable ? "badge bad" : r.state === "PLAYING" ? "badge warn" : "badge ok" }, status),
+        h("button", { className: "big", disabled: !r.reachable, onclick: async () => {
+          try {
+            await sonos.playOn(r);
+            showOutputs = false;
+            show("np");
+          } catch (e) {
+            box.append(failure(e));
+          }
+        } }, t("Play here"))));
+    }
+  } catch (e) {
+    main.append(failure(e));
+  }
 }
 
 // ---------------------------------------------------------------- continue
@@ -272,21 +327,20 @@ let libStack: { source: number; parent?: string; title: string }[] = [];
 async function renderMusic() {
   try {
     if (!libStack.length) {
-      const sources = (await api<{ id: number; name: string; kind: string }[]>("GET", "/sources")).filter((x) => x.kind === "jellyfin");
+      const sources = (await api<{ id: number; name: string; kind: string }[]>("GET", "/sources")).filter((x) => ["jellyfin", "emby", "plex"].includes(x.kind));
       main.append(h("h2", {}, t("Music")));
-      if (!sources.length) return void main.append(h("div", { className: "empty" }, t("No sources. Add them in the desktop or phone app.")));
-      if (sources.length === 1) {
-        libStack = [{ source: sources[0].id, title: sources[0].name }];
-        return show("lib");
-      }
-      main.append(h("div", { className: "list" }, ...sources.map((s) =>
+      main.append(h("div", { className: "list" },
+        h("div", { className: "item tap", onclick: () => ((libStack = [{ source: RADIO, title: t("Internet radio") }]), show("lib")) },
+          h("div", { className: "ic" }, icon(RADIO_ICON)), h("div", { className: "tx" }, h("div", { className: "t1" }, t("Internet radio")), h("div", { className: "t2" }, t("Favourites and search")))),
+        ...sources.map((s) =>
         h("div", { className: "item tap", onclick: () => ((libStack = [{ source: s.id, title: s.name }]), show("lib")) },
           thumb({ title: s.name }), h("div", { className: "tx" }, h("div", { className: "t1" }, s.name), h("div", { className: "t2" }, s.kind))))));
       return;
     }
     const cur = libStack[libStack.length - 1];
+    if (cur.source === RADIO) return renderRadio();
     const head = h("div", { className: "chips" });
-    if (libStack.length > 1) head.append(h("button", { className: "chip", onclick: () => (libStack.pop(), show("lib")) }, `← ${t("Back")}`));
+    head.append(h("button", { className: "chip", onclick: () => (libStack.pop(), show("lib")) }, `← ${t("Back")}`));
     head.append(h("h2", { style: "margin:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis" }, cur.title));
     main.append(head);
     const q = cur.parent ? `?parent=${encodeURIComponent(cur.parent)}&limit=300` : "";
@@ -311,6 +365,44 @@ async function renderMusic() {
           thumb(it), h("div", { className: "tx" }, h("div", { className: "t1" }, it.title),
             h("div", { className: "t2" }, [it.subtitle, it.year].filter(Boolean).join(" · ")))));
       }
+    }
+    main.append(box);
+  } catch (e) {
+    main.append(failure(e));
+  }
+}
+
+// ---------------------------------------------------------------- internet radio
+
+const RADIO = -1;
+let radioQuery = "";
+
+async function renderRadio() {
+  const input = h("input", { className: "search", value: radioQuery, placeholder: t("Search stations"), enterKeyHint: "search" }) as HTMLInputElement;
+  const go = () => ((radioQuery = input.value.trim()), show("lib"));
+  input.addEventListener("keydown", (e) => (e as KeyboardEvent).key === "Enter" && go());
+  main.append(h("div", { className: "chips" },
+    h("button", { className: "chip", onclick: () => ((libStack = []), (radioQuery = ""), show("lib")) }, `← ${t("Back")}`),
+    input, h("button", { className: "big", onclick: go }, t("Search"))));
+  try {
+    const list = radioQuery
+      ? await api<Item[]>("GET", `/radio/search?q=${encodeURIComponent(radioQuery)}`)
+      : await api<Item[]>("GET", "/radio/favorites");
+    main.append(h("h2", {}, radioQuery ? t("Results") : t("Favourites")));
+    if (!list.length) return void main.append(h("div", { className: "empty" }, radioQuery ? t("No stations found.") : t("No favourites yet. Search for a station.")));
+    const box = h("div", { className: "list" });
+    for (const st of list) {
+      const star = h("button", { className: st.favorite ? "big" : "big sec", style: "min-width:64px", ariaLabel: t("Favourite") }, st.favorite ? "★" : "☆");
+      star.onclick = async () => {
+        await api(st.favorite ? "DELETE" : "PUT", `/radio/favorites/${st.key.slice(6)}`);
+        st.favorite = !st.favorite;
+        star.textContent = st.favorite ? "★" : "☆";
+        star.className = st.favorite ? "big" : "big sec";
+      };
+      box.append(h("div", { className: "item" }, thumb(st),
+        h("div", { className: "tx" }, h("div", { className: "t1" }, st.title), h("div", { className: "t2" }, st.subtitle)),
+        h("span", { className: "badge" }, qualityBadge(st.quality)), star,
+        h("button", { className: "big", onclick: () => void start([st]) }, t("Play"))));
     }
     main.append(box);
   } catch (e) {

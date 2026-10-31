@@ -19,6 +19,18 @@ pub struct Config {
     pub trusted_proxies: Vec<std::net::IpAddr>,
     #[serde(default)]
     pub probe: Option<ProbeConfig>,
+    #[serde(default)]
+    pub sonos: Option<SonosConfig>,
+}
+
+/// Sonos speakers fetch streams from a second, LAN-only HTTP port.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SonosConfig {
+    /// LAN address of the stream port, e.g. "10.0.0.20:8081". Must be reachable by the speakers.
+    pub listen: Option<std::net::SocketAddr>,
+    /// Address range probed by "scan", e.g. "10.0.0.230-10.0.0.240".
+    pub scan: Option<String>,
 }
 
 /// Browser capability probe (stage 0): collects measurements from the in-car browser.

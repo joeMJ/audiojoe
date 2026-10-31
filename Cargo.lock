@@ -80,6 +80,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "futures-util",
+ "hmac",
  "rand 0.8.8",
  "reqwest",
  "rss",

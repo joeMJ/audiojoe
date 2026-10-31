@@ -38,6 +38,7 @@ class Player extends ChangeNotifier {
   int get position => (_parts.isEmpty ? 0 : _parts[_part].startMs) + audio.position.inMilliseconds;
   int get duration => _parts.isNotEmpty ? (item?.durationMs ?? 0) : (audio.duration?.inMilliseconds ?? item?.durationMs ?? 0);
   bool get playing => audio.playing;
+  bool get live => item?.kind == 'radio';
 
   String get chapter {
     final ms = position;
@@ -86,7 +87,7 @@ class Player extends ChangeNotifier {
   Future<void> _load(Item it) async {
     item = it;
     fromCache = downloads.isOffline(it.key);
-    final start = _startPosition(it);
+    final start = it.kind == 'radio' ? (ms: 0, from: null) : _startPosition(it);
     takenOver = start.from == null ? null : (device: start.from!.device, at: start.from!.updatedAt);
     final parts = it.multiPart ? it.parts : const <Part>[];
     final (part, local) = _locate(start.ms, parts);
@@ -145,7 +146,8 @@ class Player extends ChangeNotifier {
 
   Future<void> _persist({bool finished = false}) async {
     final it = item;
-    if (it == null || (!finished && position < 1000)) return;
+    // Live radio has no position to continue from.
+    if (it == null || it.kind == 'radio' || (!finished && position < 1000)) return;
     sync.savePosition(Playback(
       key: it.key,
       positionMs: position,

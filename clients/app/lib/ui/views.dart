@@ -7,6 +7,7 @@ import '../downloads.dart';
 import '../l10n.dart';
 import '../models.dart';
 import '../player.dart';
+import '../sonos.dart';
 import '../store.dart';
 import 'common.dart';
 
@@ -32,7 +33,7 @@ class NowPlayingView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-        listenable: player,
+        listenable: Listenable.merge([player, sonos]),
         builder: (context, _) {
           final it = player.item;
           if (it == null) return emptyText(context, t('Nothing is playing.'));
@@ -59,23 +60,47 @@ class NowPlayingView extends StatelessWidget {
                 ]),
               ),
             ),
-            Slider(
-              value: dur > 0 ? (pos / dur).clamp(0.0, 1.0) : 0,
-              onChanged: dur > 0 ? (v) => player.seekTo((v * dur).round()) : null,
-            ),
-            Row(children: [Text(clock(pos)), const Spacer(), Text(dur > 0 ? '−${clock(dur - pos)}' : '')]),
+            if (player.live)
+              Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: Badge2(t('Live'), kind: 'ok'))
+            else ...[
+              Slider(
+                value: dur > 0 ? (pos / dur).clamp(0.0, 1.0) : 0,
+                onChanged: dur > 0 ? (v) => player.seekTo((v * dur).round()) : null,
+              ),
+              Row(children: [Text(clock(pos)), const Spacer(), Text(dur > 0 ? '−${clock(dur - pos)}' : '')]),
+            ],
             const SizedBox(height: 8),
             Wrap(spacing: 12, crossAxisAlignment: WrapCrossAlignment.center, children: [
               if (player.queue.length > 1) IconButton.outlined(iconSize: 30, onPressed: () => player.skip(-1), icon: const Icon(Icons.skip_previous)),
-              IconButton.outlined(iconSize: 30, onPressed: () => player.seekBy(-30000), icon: const Icon(Icons.replay_30)),
-              IconButton.filled(iconSize: 48, onPressed: player.toggle, icon: Icon(player.playing ? Icons.pause : Icons.play_arrow)),
-              IconButton.outlined(iconSize: 30, onPressed: () => player.seekBy(30000), icon: const Icon(Icons.forward_30)),
-              if (player.queue.length > 1)
+              if (!player.live) IconButton.outlined(iconSize: 30, onPressed: () => player.seekBy(-30000), icon: const Icon(Icons.replay_30)),
+              IconButton.filled(
+                  iconSize: 48,
+                  onPressed: () => sonos.output != null ? sonos.toggle() : player.toggle(),
+                  icon: Icon((sonos.output?.playing ?? player.playing) ? Icons.pause : Icons.play_arrow)),
+              if (!player.live) IconButton.outlined(iconSize: 30, onPressed: () => player.seekBy(30000), icon: const Icon(Icons.forward_30)),
+              if (player.live)
+                const SizedBox.shrink()
+              else if (player.queue.length > 1)
                 IconButton.outlined(iconSize: 30, onPressed: () => player.skip(1), icon: const Icon(Icons.skip_next))
               else
                 OutlinedButton(onPressed: player.nextRate, child: Text('${player.rate}×')),
             ]),
-            if (player.takenOver != null)
+            const SizedBox(height: 8),
+            Wrap(spacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+              ActionChip(
+                avatar: const Icon(Icons.speaker),
+                label: Text(sonos.output == null ? t('This device') : 'Sonos ${sonos.output!.name}'),
+                onPressed: () => showModalBottomSheet(context: context, builder: (_) => const OutputSheet()),
+              ),
+              if (sonos.output != null) ...[
+                IconButton(onPressed: () => sonos.volume(-3), icon: const Icon(Icons.volume_down)),
+                Text('${sonos.output!.volume ?? '?'}'),
+                IconButton(onPressed: () => sonos.volume(3), icon: const Icon(Icons.volume_up)),
+              ],
+            ]),
+            if (sonos.output != null)
+              Text(t('Playing on {name}', {'name': 'Sonos ${sonos.output!.name}'}), style: TextStyle(color: k.muted))
+            else if (player.takenOver != null)
               Padding(
                 padding: const EdgeInsets.only(top: 10),
                 child: Text(t('Taken over from {device} · {ago}', {'device': player.takenOver!.device, 'ago': ago(player.takenOver!.at)}),
@@ -89,6 +114,63 @@ class NowPlayingView extends StatelessWidget {
                 : Column(children: [Center(child: cover), const SizedBox(height: 16), info]),
           );
         },
+      );
+}
+
+class OutputSheet extends StatelessWidget {
+  const OutputSheet({super.key});
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Text(t('Output'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            ItemRow(
+              leading: const Icon(Icons.smartphone, size: 32),
+              title: t('This device'),
+              subtitle: t('from cache or stream'),
+              trailing: [
+                FilledButton(
+                  onPressed: sonos.output == null ? null : () async {
+                    await sonos.backToDevice();
+                    if (context.mounted) Navigator.pop(context);
+                  },
+                  child: Text(sonos.output == null ? t('active') : t('Switch here')),
+                ),
+              ],
+            ),
+            Flexible(
+              child: Loader<List<Room>>(
+                load: sonos.rooms,
+                builder: (context, rooms, _) => ListView(shrinkWrap: true, children: [
+                  for (final r in rooms)
+                    ItemRow(
+                      leading: const Icon(Icons.speaker, size: 32),
+                      title: 'Sonos ${r.name}',
+                      subtitle: '${r.model} · ${r.s2 ? t('up to 24 bit / 48 kHz') : t('up to 16 bit / 48 kHz')}',
+                      trailing: [
+                        Badge2(!r.reachable ? t('switched off') : r.playing ? t('playing') : t('available'),
+                            kind: !r.reachable ? 'bad' : r.playing ? 'warn' : 'ok'),
+                        FilledButton(
+                          onPressed: !r.reachable ? null : () async {
+                            try {
+                              await sonos.playOn(r);
+                              if (context.mounted) Navigator.pop(context);
+                            } catch (e) {
+                              if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${t('Error')}: $e')));
+                            }
+                          },
+                          child: Text(t('Play here')),
+                        ),
+                      ],
+                    ),
+                ]),
+              ),
+            ),
+          ]),
+        ),
       );
 }
 
@@ -286,9 +368,9 @@ class _AddPodcastDialogState extends State<AddPodcastDialog> {
 // ---------------------------------------------------------------- audiobooks and music (browse a source)
 
 class BrowseView extends StatefulWidget {
-  final String kind; // audiobookshelf | jellyfin
+  final List<String> kinds; // [audiobookshelf] or [jellyfin, emby, plex]
   final VoidCallback onPlay;
-  const BrowseView({super.key, required this.kind, required this.onPlay});
+  const BrowseView({super.key, required this.kinds, required this.onPlay});
   @override
   State<BrowseView> createState() => _BrowseViewState();
 }
@@ -298,7 +380,7 @@ class _BrowseViewState extends State<BrowseView> {
 
   Future<List<Item>> _load() async {
     if (stack.isEmpty) {
-      final sources = (await api.call('GET', '/sources') as List).cast<Map>().where((s) => s['kind'] == widget.kind).toList();
+      final sources = (await api.call('GET', '/sources') as List).cast<Map>().where((s) => widget.kinds.contains(s['kind'])).toList();
       if (sources.isEmpty) return [];
       stack.add((source: sources.first['id'] as int, parent: null, title: sources.first['name'] as String));
     }
@@ -359,6 +441,92 @@ class _BrowseViewState extends State<BrowseView> {
           ]);
         },
       );
+}
+
+// ---------------------------------------------------------------- music: library or internet radio
+
+class MusicTab extends StatefulWidget {
+  final VoidCallback onPlay;
+  const MusicTab({super.key, required this.onPlay});
+  @override
+  State<MusicTab> createState() => _MusicTabState();
+}
+
+class _MusicTabState extends State<MusicTab> {
+  bool radio = false;
+
+  @override
+  Widget build(BuildContext context) => Column(children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          child: SegmentedButton<bool>(
+            segments: [ButtonSegment(value: false, label: Text(t('Library'))), ButtonSegment(value: true, label: Text(t('Internet radio')))],
+            selected: {radio},
+            onSelectionChanged: (s) => setState(() => radio = s.first),
+          ),
+        ),
+        Expanded(child: radio ? RadioView(onPlay: widget.onPlay) : BrowseView(key: const ValueKey('jf'), kinds: const ['jellyfin', 'emby', 'plex'], onPlay: widget.onPlay)),
+      ]);
+}
+
+class RadioView extends StatefulWidget {
+  final VoidCallback onPlay;
+  const RadioView({super.key, required this.onPlay});
+  @override
+  State<RadioView> createState() => _RadioViewState();
+}
+
+class _RadioViewState extends State<RadioView> {
+  final q = TextEditingController();
+  String query = '';
+
+  @override
+  Widget build(BuildContext context) => Column(children: [
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: TextField(
+            controller: q,
+            textInputAction: TextInputAction.search,
+            onSubmitted: (v) => setState(() => query = v.trim()),
+            decoration: InputDecoration(
+              labelText: t('Search stations'),
+              suffixIcon: query.isEmpty
+                  ? IconButton(icon: const Icon(Icons.search), onPressed: () => setState(() => query = q.text.trim()))
+                  : IconButton(icon: const Icon(Icons.close), onPressed: () { q.clear(); setState(() => query = ''); }),
+            ),
+          ),
+        ),
+        Expanded(
+          child: Loader<List<Item>>(
+            key: ValueKey(query),
+            load: () async => itemsOf(query.isEmpty
+                ? await api.call('GET', '/radio/favorites')
+                : await api.call('GET', '/radio/search', query: {'q': query})),
+            builder: (context, list, reload) => list.isEmpty
+                ? emptyText(context, query.isEmpty ? t('No favourites yet. Search for a station.') : t('No stations found.'))
+                : ListView(padding: const EdgeInsets.symmetric(horizontal: 12), children: [
+                    for (final st in list)
+                      ItemRow(
+                        leading: CoverThumb(image: st.image, label: st.title),
+                        title: st.title,
+                        subtitle: st.subtitle,
+                        onTap: () => startPlayback(context, [st], 0, widget.onPlay),
+                        trailing: [
+                          if (st.quality?.badge.isNotEmpty == true) Badge2(st.quality!.badge),
+                          IconButton(
+                            tooltip: t('Favourite'),
+                            icon: Icon(st.favorite ? Icons.star : Icons.star_border),
+                            onPressed: () async {
+                              await api.call(st.favorite ? 'DELETE' : 'PUT', '/radio/favorites/${st.key.substring(6)}');
+                              reload();
+                            },
+                          ),
+                        ],
+                      ),
+                  ]),
+          ),
+        ),
+      ]);
 }
 
 // ---------------------------------------------------------------- offline

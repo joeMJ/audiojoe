@@ -98,9 +98,6 @@ msgstr "Keine Podcasts abonniert. Hinzufügen in der Desktop- oder Telefon-App."
 msgid "No sources yet. Add one in the settings."
 msgstr "Noch keine Quellen. In den Einstellungen hinzufügen."
 
-msgid "No sources. Add them in the desktop or phone app."
-msgstr "Keine Quellen. Hinzufügen in der Desktop- oder Telefon-App."
-
 msgid "Nothing is playing."
 msgstr "Es läuft nichts."
 
@@ -229,3 +226,72 @@ msgstr "vor {n} Min."
 
 msgid "{n} waiting to sync"
 msgstr "{n} warten auf Abgleich"
+
+msgid "Live"
+msgstr "Live"
+
+msgid "Internet radio"
+msgstr "Internetradio"
+
+msgid "Favourites and search"
+msgstr "Favoriten und Suche"
+
+msgid "Search stations"
+msgstr "Sender suchen"
+
+msgid "Search"
+msgstr "Suchen"
+
+msgid "Results"
+msgstr "Treffer"
+
+msgid "Favourites"
+msgstr "Favoriten"
+
+msgid "No stations found."
+msgstr "Keine Sender gefunden."
+
+msgid "No favourites yet. Search for a station."
+msgstr "Noch keine Favoriten. Nach einem Sender suchen."
+
+msgid "Favourite"
+msgstr "Favorit"
+
+msgid "Library"
+msgstr "Bibliothek"
+
+msgid "This device"
+msgstr "Dieses Gerät"
+
+msgid "Playing on {name}"
+msgstr "Läuft auf {name}"
+
+msgid "Output"
+msgstr "Ausgabe"
+
+msgid "from cache or stream"
+msgstr "aus dem Cache oder als Strom"
+
+msgid "Switch here"
+msgstr "Hierher wechseln"
+
+msgid "active"
+msgstr "aktiv"
+
+msgid "switched off"
+msgstr "ausgeschaltet"
+
+msgid "playing"
+msgstr "spielt"
+
+msgid "Play here"
+msgstr "Hier abspielen"
+
+msgid "up to 24 bit / 48 kHz"
+msgstr "bis 24 Bit / 48 kHz"
+
+msgid "up to 16 bit / 48 kHz"
+msgstr "bis 16 Bit / 48 kHz"
+
+msgid "available"
+msgstr "bereit"

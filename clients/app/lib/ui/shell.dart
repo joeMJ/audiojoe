@@ -37,8 +37,8 @@ class _ShellState extends State<Shell> {
       0 => const NowPlayingView(),
       1 => ContinueView(key: const ValueKey('cont'), onPlay: opened),
       2 => PodcastsView(onPlay: opened),
-      3 => BrowseView(key: const ValueKey('abs'), kind: 'audiobookshelf', onPlay: opened),
-      4 => BrowseView(key: const ValueKey('jf'), kind: 'jellyfin', onPlay: opened),
+      3 => BrowseView(key: const ValueKey('abs'), kinds: const ['audiobookshelf'], onPlay: opened),
+      4 => MusicTab(onPlay: opened),
       5 => const OfflineView(),
       _ => SettingsView(onSignOut: widget.onSignOut),
     };

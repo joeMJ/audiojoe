@@ -67,6 +67,7 @@ h2 { margin: 0 0 10px; font-size: 21px; }
             display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; color: var(--muted); }
 .item .tx { flex: 1; min-width: 0; }
 .item.tap { cursor: pointer; }
+.item .ic svg { width: 26px; height: 26px; }
 .t1 { font-size: 17px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .t2 { font-size: 13px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .prog { height: 6px; border-radius: 3px; background: var(--panel2); margin-top: 6px; position: relative; overflow: hidden; }
@@ -96,3 +97,6 @@ h2 { margin: 0 0 10px; font-size: 21px; }
 .login input:focus { outline: 3px solid var(--accent); border-color: var(--accent); }
 .login .big { width: 100%; margin-top: 20px; font-size: 18px; }
 .login .err { color: var(--bad); font-weight: 700; margin-top: 12px; min-height: 1.3em; }
+
+.search { flex: 1; min-width: 0; height: 48px; border-radius: 12px; border: 2px solid var(--line); background: var(--panel);
+          color: var(--text); font: inherit; font-size: 17px; padding: 0 12px; user-select: text; }

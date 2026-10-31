@@ -36,6 +36,7 @@ const parts = () => state.item?.parts ?? [];
 const partStart = () => parts()[state.part]?.start_ms ?? 0;
 
 export const position = () => partStart() + audio.currentTime * 1000;
+export const isLive = () => state.item?.kind === "radio";
 export const duration = () =>
   parts().length ? state.item?.duration_ms ?? 0 : Number.isFinite(audio.duration) ? audio.duration * 1000 : state.item?.duration_ms ?? 0;
 
@@ -116,7 +117,7 @@ async function load(it: Item, autoplay: boolean) {
   const off = cached ? await offlineEntry(it.key) : undefined;
   state.delivered = cached ? off?.delivered ?? it.quality : it.quality;
   state.transcoded = cached ? !!off?.transcoded : false;
-  const start = await startPosition(it);
+  const start = it.kind === "radio" ? { ms: 0 } : await startPosition(it);
   state.takenOver = start.from ? { device: start.from.device, at: start.from.updated_at } : undefined;
   mediaSession(it);
   await seekGlobal(start.ms, autoplay);
@@ -153,7 +154,8 @@ export async function skip(d: 1 | -1) {
 
 async function persist(finished = false) {
   const it = state.item;
-  if (!it || !audio.src || (!finished && position() < 1000)) return;
+  // Live radio has no position to continue from.
+  if (!it || it.kind === "radio" || !audio.src || (!finished && position() < 1000)) return;
   await savePosition({
     key: it.key,
     position_ms: Math.round(position()),

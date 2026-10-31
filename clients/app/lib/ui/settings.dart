@@ -107,6 +107,8 @@ class _AddSourceDialogState extends State<AddSourceDialog> {
               items: const [
                 DropdownMenuItem(value: 'jellyfin', child: Text('Jellyfin')),
                 DropdownMenuItem(value: 'audiobookshelf', child: Text('Audiobookshelf')),
+                DropdownMenuItem(value: 'emby', child: Text('Emby')),
+                DropdownMenuItem(value: 'plex', child: Text('Plex')),
               ],
               onChanged: (v) => setState(() => kind = v!),
             ),
@@ -115,7 +117,7 @@ class _AddSourceDialogState extends State<AddSourceDialog> {
             const SizedBox(height: 10),
             TextField(controller: url, decoration: InputDecoration(labelText: t('Address'), hintText: 'https://media.example.org')),
             const SizedBox(height: 10),
-            TextField(controller: key, obscureText: true, decoration: InputDecoration(labelText: t('API key'))),
+            TextField(controller: key, obscureText: true, decoration: InputDecoration(labelText: kind == 'plex' ? 'X-Plex-Token' : t('API key'))),
             if (busy) const Padding(padding: EdgeInsets.only(top: 10), child: LinearProgressIndicator()),
             if (error.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 10), child: Text(error, style: TextStyle(color: context.tok.bad))),
           ]),
