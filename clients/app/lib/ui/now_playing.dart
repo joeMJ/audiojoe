@@ -1,5 +1,6 @@
-// Now playing: large cover, format chips right above the controls, −15 / play / +30, a
-// toolbar (sleep timer, speed, output, offline); tabs for details and chapters.
+// Now playing: large cover, format chips right above the controls, −15 / play / +30; at the
+// bottom the volume and a fixed footer (sleep timer, speed, output, offline); tabs for
+// details and chapters.
 
 import 'package:flutter/material.dart';
 
@@ -8,6 +9,7 @@ import '../l10n.dart';
 import '../models.dart';
 import '../player.dart';
 import '../sonos.dart';
+import '../volume.dart';
 import 'common.dart';
 import 'notes.dart';
 
@@ -67,27 +69,36 @@ class _PlaybackTab extends StatelessWidget {
           else
             _Progress(),
           _Controls(),
-          const SizedBox(height: 12),
-          _Toolbar(it),
-          if (out != null)
-            const _Volume()
-          else if (player.takenOver != null)
+          if (out == null && player.takenOver != null)
             Padding(
               padding: const EdgeInsets.only(top: 10),
               child: Text(t('Taken over from {device} · {ago}', {'device': player.takenOver!.device, 'ago': ago(player.takenOver!.at)}),
                   textAlign: TextAlign.center, style: TextStyle(color: k.muted)),
             ),
         ]);
-        return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-          child: wide
-              ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  cover,
-                  const SizedBox(width: 24),
-                  Expanded(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 560), child: controls)),
-                ])
-              : Column(children: [cover, const SizedBox(height: 16), controls]),
-        );
+        return Column(children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: wide
+                  ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      cover,
+                      const SizedBox(width: 24),
+                      Expanded(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 560), child: controls)),
+                    ])
+                  : Column(children: [cover, const SizedBox(height: 16), controls]),
+            ),
+          ),
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [const _Volume(), const SizedBox(height: 8), _Toolbar(it)]),
+              ),
+            ),
+          ),
+        ]);
       });
 }
 
@@ -119,78 +130,100 @@ class _FormatChips extends StatelessWidget {
   }
 }
 
-/// Sonos volume: − slider + and the value; for a group the whole group, its rooms below.
-class _Volume extends StatelessWidget {
+/// Volume above the footer: this device's media volume, or the Sonos output's; for a group the
+/// whole group, its rooms open upwards above it.
+class _Volume extends StatefulWidget {
   const _Volume();
 
   @override
-  Widget build(BuildContext context) => ListenableBuilder(listenable: sonos, builder: (context, _) => _build(context));
+  State<_Volume> createState() => _VolumeState();
+}
+
+class _VolumeState extends State<_Volume> {
+  bool open = false;
+
+  @override
+  void initState() {
+    super.initState();
+    localVolume.start();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      ListenableBuilder(listenable: Listenable.merge([sonos, localVolume]), builder: (context, _) => _build(context));
 
   Widget _build(BuildContext context) {
     final out = sonos.output;
-    if (out == null) return const SizedBox.shrink();
+    if (out == null) {
+      // Phones have about 15 steps; a smaller step would often not change anything.
+      return _VolumeRow(value: localVolume.level, label: t('Volume'), onChanged: localVolume.set, step: 7, big: true);
+    }
     final members = out.grouped ? sonos.members : const <Room>[];
-    return Column(children: [
-      const SizedBox(height: 8),
-      _VolumeRow(
-        value: sonos.level,
-        label: out.grouped ? t('Group volume') : t('Volume'),
-        onChanged: (v) => sonos.setVolume(v),
-        big: true,
-      ),
-      if (members.length > 1)
-        ExpansionTile(
-          title: Text(t('Rooms ({n})', {'n': members.length})),
-          tilePadding: const EdgeInsets.symmetric(horizontal: 4),
-          children: [
-            for (final r in members)
-              Row(children: [
-                SizedBox(width: 110, child: Text(r.name, overflow: TextOverflow.ellipsis, style: TextStyle(color: context.tok.muted))),
-                Expanded(child: _VolumeRow(value: r.volume ?? 0, label: r.name, onChanged: (v) => sonos.setVolume(v, room: r))),
-              ]),
-          ],
+    final k = context.tok;
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      if (members.length > 1) ...[
+        InkWell(
+          onTap: () => setState(() => open = !open),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+            child: Row(children: [
+              Text(t('Rooms ({n})', {'n': members.length}), style: TextStyle(color: k.muted, fontWeight: FontWeight.w600)),
+              const Spacer(),
+              Icon(open ? Icons.expand_more : Icons.expand_less, color: k.muted),
+            ]),
+          ),
         ),
+        if (open)
+          for (final r in members)
+            Row(children: [
+              SizedBox(width: 100, child: Text(r.name, overflow: TextOverflow.ellipsis, style: TextStyle(color: k.muted))),
+              Expanded(child: _VolumeRow(value: r.volume ?? 0, label: r.name, onChanged: (v) => sonos.setVolume(v, room: r))),
+            ]),
+      ],
+      _VolumeRow(value: sonos.level, label: out.grouped ? t('Group volume') : t('Volume'), onChanged: (v) => sonos.setVolume(v), big: true),
     ]);
   }
 }
 
+/// − slider + value. Buttons and value keep the same width in every size, so rows end flush.
 class _VolumeRow extends StatelessWidget {
-  final int value;
+  final int value, step;
   final String label;
   final ValueChanged<int> onChanged;
   final bool big;
-  const _VolumeRow({required this.value, required this.label, required this.onChanged, this.big = false});
+  const _VolumeRow({required this.value, required this.label, required this.onChanged, this.step = 3, this.big = false});
 
   @override
   Widget build(BuildContext context) {
     final size = big ? 52.0 : 40.0;
-    Widget step(IconData icon, String tip, int delta) => SizedBox(
-          width: size,
+    Widget btn(IconData icon, String tip, int delta) => SizedBox(
+          width: 52,
           height: size,
-          child: IconButton.filledTonal(
-            tooltip: tip,
-            padding: EdgeInsets.zero,
-            iconSize: big ? 28 : 22,
-            onPressed: () => onChanged(value + delta),
-            icon: Icon(icon),
+          child: Center(
+            child: SizedBox(
+              width: size,
+              height: size,
+              child: IconButton.filledTonal(
+                tooltip: tip,
+                padding: EdgeInsets.zero,
+                iconSize: big ? 28 : 22,
+                onPressed: () => onChanged(value + delta),
+                icon: Icon(icon),
+              ),
+            ),
           ),
         );
     return Row(children: [
-      step(Icons.remove, t('Quieter'), -3),
+      btn(Icons.remove, t('Quieter'), -step),
       Expanded(
         child: Semantics(
           label: label,
-          child: Slider(
-            value: value.clamp(0, 100).toDouble(),
-            max: 100,
-            label: '$value',
-            onChanged: (v) => onChanged(v.round()),
-          ),
+          child: Slider(value: value.clamp(0, 100).toDouble(), max: 100, label: '$value', onChanged: (v) => onChanged(v.round())),
         ),
       ),
-      step(Icons.add, t('Louder'), 3),
+      btn(Icons.add, t('Louder'), step),
       SizedBox(
-        width: big ? 44 : 36,
+        width: 44,
         child: Text('$value', textAlign: TextAlign.right, style: TextStyle(fontSize: big ? 18 : 15, fontWeight: FontWeight.w800)),
       ),
     ]);
