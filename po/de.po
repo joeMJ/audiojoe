@@ -1,0 +1,231 @@
+# German translation of audiojoe (web app and app).
+# Base language: English. Generate the client files with tools/i18n.py.
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: de\n"
+
+msgid "Add"
+msgstr "Hinzufügen"
+
+msgid "Add podcast"
+msgstr "Podcast hinzufügen"
+
+msgid "Add source"
+msgstr "Quelle hinzufügen"
+
+msgid "Address"
+msgstr "Adresse"
+
+msgid "API key"
+msgstr "API-Schlüssel"
+
+msgid "Audiobooks"
+msgstr "Hör­bücher"
+
+msgid "Back"
+msgstr "Zurück"
+
+msgid "Cancel"
+msgstr "Abbrechen"
+
+msgid "Code from the authenticator app"
+msgstr "Code aus der Authenticator-App"
+
+msgid "Continue"
+msgstr "Weiter­hören"
+
+msgid "converted"
+msgstr "umgerechnet"
+
+msgid "Device name"
+msgstr "Gerätename"
+
+msgid "Devices"
+msgstr "Geräte"
+
+msgid "Error"
+msgstr "Fehler"
+
+msgid "failed"
+msgstr "fehlgeschlagen"
+
+msgid "from cache"
+msgstr "aus dem Cache"
+
+msgid "Here"
+msgstr "Hier"
+
+msgid "in cache"
+msgstr "im Cache"
+
+msgid "just now"
+msgstr "gerade eben"
+
+msgid "Kind"
+msgstr "Art"
+
+msgid "Last on {device} · {ago}"
+msgstr "Zuletzt auf {device} · {ago}"
+
+msgid "last seen {ago}"
+msgstr "zuletzt {ago}"
+
+msgid "loading {p}"
+msgstr "lädt {p}"
+
+msgid "missing – will reload"
+msgstr "fehlt – wird nachgeladen"
+
+msgid "Music"
+msgstr "Musik"
+
+msgid "Name"
+msgstr "Name"
+
+msgid "New"
+msgstr "Neu"
+
+msgid "No audiobook sources. Add Audiobookshelf in the desktop or phone app."
+msgstr "Keine Hörbuch-Quelle. Audiobookshelf in der Desktop- oder Telefon-App hinzufügen."
+
+msgid "No podcasts subscribed yet."
+msgstr "Noch keine Podcasts abonniert."
+
+msgid "No podcasts subscribed. Add them in the desktop or phone app."
+msgstr "Keine Podcasts abonniert. Hinzufügen in der Desktop- oder Telefon-App."
+
+msgid "No sources yet. Add one in the settings."
+msgstr "Noch keine Quellen. In den Einstellungen hinzufügen."
+
+msgid "No sources. Add them in the desktop or phone app."
+msgstr "Keine Quellen. Hinzufügen in der Desktop- oder Telefon-App."
+
+msgid "Nothing is playing."
+msgstr "Es läuft nichts."
+
+msgid "Nothing saved offline yet."
+msgstr "Noch nichts offline gespeichert."
+
+msgid "Nothing to continue."
+msgstr "Nichts zum Weiterhören."
+
+msgid "Now playing"
+msgstr "Jetzt läuft"
+
+msgid "Offline"
+msgstr "Offline"
+
+msgid "Offline · cache"
+msgstr "Offline · Cache"
+
+msgid "online only"
+msgstr "nur online"
+
+msgid "Password"
+msgstr "Kennwort"
+
+msgid "Play"
+msgstr "Abspielen"
+
+msgid "Play all"
+msgstr "Alle abspielen"
+
+msgid "Podcasts"
+msgstr "Podcasts"
+
+msgid "Positions synced"
+msgstr "Stände aktuell"
+
+msgid "ready"
+msgstr "fertig"
+
+msgid "Remove"
+msgstr "Entfernen"
+
+msgid "Resume"
+msgstr "Weiter"
+
+msgid "Save offline"
+msgstr "Offline"
+
+msgid "Search or feed URL"
+msgstr "Suche oder Feed-Adresse"
+
+msgid "Server"
+msgstr "Server"
+
+msgid "Server not reachable."
+msgstr "Server nicht erreichbar."
+
+msgid "Server reachable"
+msgstr "Server erreichbar"
+
+msgid "Settings"
+msgstr "Einstellungen"
+
+msgid "Sign in"
+msgstr "Anmelden"
+
+msgid "Sign out"
+msgstr "Abmelden"
+
+msgid "Sign out this device"
+msgstr "Dieses Gerät abmelden"
+
+msgid "Sign-in failed. Check name, password and code."
+msgstr "Anmeldung fehlgeschlagen. Name, Kennwort und Code prüfen."
+
+msgid "Source"
+msgstr "Quelle"
+
+msgid "Sources"
+msgstr "Quellen"
+
+msgid "Subscribe"
+msgstr "Abonnieren"
+
+msgid "Subscribed"
+msgstr "Abonniert"
+
+msgid "Taken over from {device} · {ago}"
+msgstr "Übernommen von {device} · {ago}"
+
+msgid "The browser may clear this storage when space runs low; missing titles are downloaded again automatically."
+msgstr "Der Browser kann diesen Speicher bei Platzmangel leeren; fehlende Titel werden automatisch nachgeladen."
+
+msgid "this device"
+msgstr "dieses Gerät"
+
+msgid "Too many attempts. Please wait 15 minutes."
+msgstr "Zu viele Versuche. Bitte 15 Minuten warten."
+
+msgid "unchanged"
+msgstr "unverändert"
+
+msgid "Unsubscribe"
+msgstr "Abbestellen"
+
+msgid "Used {used}"
+msgstr "Belegt {used}"
+
+msgid "Used {used} of about {quota}"
+msgstr "Belegt {used} von ca. {quota}"
+
+msgid "User name"
+msgstr "Benutzername"
+
+msgid "waiting"
+msgstr "wartet"
+
+msgid "{n} days ago"
+msgstr "vor {n} Tagen"
+
+msgid "{n} h ago"
+msgstr "vor {n} Std."
+
+msgid "{n} min ago"
+msgstr "vor {n} Min."
+
+msgid "{n} waiting to sync"
+msgstr "{n} warten auf Abgleich"

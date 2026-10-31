@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- audiojoe app icon: play symbol between sound bars, accent colour from tokens.json -->
+  <rect width="512" height="512" rx="112" fill="#1f5fd6"/>
+  <rect x="71" y="207" width="30" height="98" rx="15" fill="#ffffff"/>
+  <rect x="125" y="161" width="30" height="190" rx="15" fill="#ffffff"/>
+  <rect x="411" y="207" width="30" height="98" rx="15" fill="#ffffff"/>
+  <path d="M206 156 L206 356 L372 256 Z" fill="#ffffff" stroke="#ffffff" stroke-width="18" stroke-linejoin="round"/>
+</svg>

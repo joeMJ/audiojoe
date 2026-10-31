@@ -1,66 +1,10 @@
 // Base language English; German translation. Keys are the English texts.
-// (Will be generated from po/de.po once the strings settle.)
+// The German table is generated from po/de.po (tools/i18n.py).
 
-const de: Record<string, string> = {
-  "Now playing": "Jetzt läuft",
-  "Continue": "Weiter\u00adhören",
-  "Podcasts": "Podcasts",
-  "Music": "Musik",
-  "Audiobooks": "Hör\u00adbücher",
-  "No audiobook sources. Add Audiobookshelf in the desktop or phone app.": "Keine Hörbuch-Quelle. Audiobookshelf in der Desktop- oder Telefon-App hinzufügen.",
-  "Offline": "Offline",
-  "Server reachable": "Server erreichbar",
-  "Offline · cache": "Offline · Cache",
-  "Positions synced": "Stände aktuell",
-  "{n} waiting to sync": "{n} warten auf Abgleich",
-  "Sign in": "Anmelden",
-  "User name": "Benutzername",
-  "Password": "Kennwort",
-  "Code from the authenticator app": "Code aus der Authenticator-App",
-  "Device name": "Gerätename",
-  "Sign-in failed. Check name, password and code.": "Anmeldung fehlgeschlagen. Name, Kennwort und Code prüfen.",
-  "Too many attempts. Please wait 15 minutes.": "Zu viele Versuche. Bitte 15 Minuten warten.",
-  "Server not reachable.": "Server nicht erreichbar.",
-  "Nothing is playing.": "Es läuft nichts.",
-  "Source": "Quelle",
-  "Here": "Hier",
-  "unchanged": "unverändert",
-  "from cache": "aus dem Cache",
-  "converted": "umgerechnet",
-  "Taken over from {device} · {ago}": "Übernommen von {device} · {ago}",
-  "Last on {device} · {ago}": "Zuletzt auf {device} · {ago}",
-  "Play": "Abspielen",
-  "Resume": "Weiter",
-  "Play all": "Alle abspielen",
-  "Save offline": "Offline",
-  "Remove": "Entfernen",
-  "New": "Neu",
-  "Subscribed": "Abonniert",
-  "Back": "Zurück",
-  "Nothing to continue.": "Nichts zum Weiterhören.",
-  "No podcasts subscribed. Add them in the desktop or phone app.": "Keine Podcasts abonniert. Hinzufügen in der Desktop- oder Telefon-App.",
-  "No sources. Add them in the desktop or phone app.": "Keine Quellen. Hinzufügen in der Desktop- oder Telefon-App.",
-  "in cache": "im Cache",
-  "online only": "nur online",
-  "Used {used} of about {quota}": "Belegt {used} von ca. {quota}",
-  "The browser may clear this storage when space runs low; missing titles are downloaded again automatically.":
-    "Der Browser kann diesen Speicher bei Platzmangel leeren; fehlende Titel werden automatisch nachgeladen.",
-  "Nothing saved offline yet.": "Noch nichts offline gespeichert.",
-  "waiting": "wartet",
-  "loading {p}": "lädt {p}",
-  "ready": "fertig",
-  "failed": "fehlgeschlagen",
-  "missing – will reload": "fehlt – wird nachgeladen",
-  "Sign out this device": "Dieses Gerät abmelden",
-  "just now": "gerade eben",
-  "{n} min ago": "vor {n} Min.",
-  "{n} h ago": "vor {n} Std.",
-  "{n} days ago": "vor {n} Tagen",
-  "Error": "Fehler",
-};
+import de from "./de.g.json";
 
 const isDe = navigator.language.toLowerCase().startsWith("de");
-const lang = isDe ? de : {};
+const lang: Record<string, string> = isDe ? de : {};
 // Lets the browser hyphenate German labels correctly.
 document.documentElement.lang = isDe ? "de" : "en";
 
