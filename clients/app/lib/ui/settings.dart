@@ -1,5 +1,6 @@
-// Settings: sources (Jellyfin, Audiobookshelf), podcast import/export (OPML), signed-in
-// devices, sign out.
+// Settings: sources (Jellyfin, Audiobookshelf) and which of their libraries to show, music
+// (reading in the album directory, labels from MusicBrainz), podcast import/export (OPML),
+// signed-in devices, sign out.
 
 import 'dart:convert';
 
@@ -39,7 +40,7 @@ class _SettingsViewState extends State<SettingsView> {
           load: () async => await api.call('GET', '/sources') as List,
           builder: (context, list, reload) => Column(children: [
             if (list.isEmpty) emptyText(context, t('No sources yet. Add one in the settings.')),
-            for (final s in list.cast<Map>())
+            for (final s in list.cast<Map>()) ...[
               ItemRow(
                 leading: Icon(s['kind'] == 'audiobookshelf' ? Icons.menu_book : Icons.library_music, size: 32),
                 title: '${s['name']}',
@@ -55,8 +56,14 @@ class _SettingsViewState extends State<SettingsView> {
                   ),
                 ],
               ),
+              Libraries(source: s['id'] as int),
+            ],
           ]),
         ),
+        const SizedBox(height: 20),
+        Text(t('Music'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        MusicSettings(key: ValueKey('music$_gen')),
         const SizedBox(height: 20),
         Text(t('Devices'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
@@ -181,5 +188,137 @@ class _AddSourceDialogState extends State<AddSourceDialog> {
             child: Text(t('Add')),
           ),
         ],
+      );
+}
+
+/// The libraries of one source, each with a switch; hidden ones are left out on all devices.
+class Libraries extends StatelessWidget {
+  final int source;
+  const Libraries({super.key, required this.source});
+
+  @override
+  Widget build(BuildContext context) => Loader<List>(
+        load: () async => await api.call('GET', '/sources/$source/libraries') as List,
+        builder: (context, list, reload) => list.length < 2
+            ? const SizedBox.shrink()
+            : ExpansionTile(
+                tilePadding: const EdgeInsets.only(left: 56, right: 8),
+                title: Text(t('Libraries ({shown} of {n} shown)',
+                    {'shown': list.where((l) => l['hidden'] != true).length, 'n': list.length})),
+                children: [
+                  for (final l in list.cast<Map>())
+                    SwitchListTile(
+                      contentPadding: const EdgeInsets.only(left: 56, right: 8),
+                      title: Text('${l['title']}'),
+                      value: l['hidden'] != true,
+                      onChanged: (show) async {
+                        await api.call('PUT', '/sources/$source/libraries/${Uri.encodeComponent('${l['id']}')}', body: {'hidden': !show});
+                        reload();
+                      },
+                    ),
+                ],
+              ),
+      );
+}
+
+/// How often the album directory is read in again, "Read in again now", and labels from
+/// MusicBrainz (off unless switched on; it asks for a contact address MusicBrainz wants).
+class MusicSettings extends StatefulWidget {
+  const MusicSettings({super.key});
+  @override
+  State<MusicSettings> createState() => _MusicSettingsState();
+}
+
+class _MusicSettingsState extends State<MusicSettings> {
+  final contact = TextEditingController();
+  bool busy = false;
+
+  @override
+  void dispose() {
+    contact.dispose();
+    super.dispose();
+  }
+
+  void _say(String s) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s)));
+
+  Future<void> _refresh() async {
+    setState(() => busy = true);
+    var n = 0;
+    try {
+      final sources = (await api.call('GET', '/sources') as List).cast<Map>().where((s) => ['jellyfin', 'emby', 'plex'].contains(s['kind']));
+      for (final s in sources) {
+        for (final l in (await api.call('GET', '/sources/${s['id']}/libraries') as List).cast<Map>()) {
+          if (l['hidden'] == true) continue;
+          final r = await api.call('POST', '/sources/${s['id']}/music/refresh',
+              query: {'parent': '${l['id']}'}, timeout: const Duration(minutes: 5)) as Map;
+          n += r['albums'] as int;
+        }
+      }
+      _say(t('{n} albums read in.', {'n': n}));
+    } catch (e) {
+      _say('${t('Error')}: $e');
+    }
+    if (mounted) setState(() => busy = false);
+  }
+
+  @override
+  Widget build(BuildContext context) => Loader<Map>(
+        load: () async {
+          final m = await api.call('GET', '/settings/music') as Map;
+          contact.text = '${m['musicbrainz_contact'] ?? ''}';
+          return m;
+        },
+        builder: (context, m, reload) {
+          Future<void> put(Map<String, dynamic> body) async {
+            try {
+              await api.call('PUT', '/settings/music', body: body);
+            } catch (e) {
+              _say('${t('Error')}: $e');
+            }
+            reload();
+          }
+
+          return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(t('Read in the album directory again'), style: TextStyle(color: context.tok.muted)),
+            const SizedBox(height: 6),
+            Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+              SegmentedButton<String>(
+                showSelectedIcon: false,
+                segments: [
+                  ButtonSegment(value: 'daily', label: Text(t('Daily'))),
+                  ButtonSegment(value: 'weekly', label: Text(t('Weekly'))),
+                  ButtonSegment(value: 'manual', label: Text(t('Only by hand'))),
+                ],
+                selected: {'${m['refresh']}'},
+                onSelectionChanged: (v) => put({'refresh': v.first}),
+              ),
+              OutlinedButton.icon(
+                icon: busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh),
+                label: Text(t('Read in again now')),
+                onPressed: busy ? null : _refresh,
+              ),
+            ]),
+            const SizedBox(height: 12),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(t('Labels from MusicBrainz')),
+              subtitle: Text(t('Asks musicbrainz.org for the label of albums whose files name none. Only the release id is sent, with your contact address, which MusicBrainz asks for; at most one request per second.')),
+              value: m['musicbrainz'] == true,
+              onChanged: (on) {
+                if (on && contact.text.trim().isEmpty) {
+                  _say(t('Enter a contact address first.'));
+                  return;
+                }
+                put({'musicbrainz': on, 'musicbrainz_contact': contact.text.trim()});
+              },
+            ),
+            TextField(
+              controller: contact,
+              keyboardType: TextInputType.emailAddress,
+              decoration: InputDecoration(labelText: t('Contact for MusicBrainz (e-mail or web address)')),
+              onSubmitted: (v) => put({'musicbrainz_contact': v.trim()}),
+            ),
+          ]);
+        },
       );
 }

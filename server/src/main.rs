@@ -1,5 +1,6 @@
 mod access;
 mod audiobookshelf;
+mod chapters;
 mod auth;
 mod cli;
 mod config;
@@ -8,6 +9,7 @@ mod error;
 mod jellyfin;
 mod lists;
 mod media;
+mod music;
 mod notes;
 mod opml;
 mod playback;
@@ -108,6 +110,7 @@ async fn main() -> Result<()> {
     };
     tokio::spawn(podcasts::refresh_loop(state.clone()));
     tokio::spawn(audiobookshelf::sync_loop(state.clone()));
+    tokio::spawn(music::refresh_loop(state.clone()));
     if let Some(addr) = sonos::lan_addr(&state) {
         let lan = tokio::net::TcpListener::bind(addr).await?;
         tracing::info!("Sonos stream port on {addr} (LAN only)");
@@ -134,6 +137,11 @@ async fn main() -> Result<()> {
         .route("/api/v1/sources/{id}", delete(sources::delete))
         .route("/api/v1/sources/{id}/browse", get(sources::browse))
         .route("/api/v1/sources/{id}/books", get(sources::books))
+        .route("/api/v1/sources/{id}/libraries", get(sources::libraries))
+        .route("/api/v1/sources/{id}/music", get(music::albums))
+        .route("/api/v1/sources/{id}/music/refresh", post(music::refresh))
+        .route("/api/v1/settings/music", get(music::get_settings).put(music::put_settings))
+        .route("/api/v1/sources/{id}/libraries/{library}", axum::routing::put(sources::set_library))
         .route("/api/v1/image/{key}", get(sources::image))
         .route("/api/v1/podcasts", get(podcasts::list).post(podcasts::subscribe))
         .route("/api/v1/podcasts/opml", get(opml::export).post(opml::import))

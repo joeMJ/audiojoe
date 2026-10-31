@@ -33,6 +33,9 @@ struct Episode {
     description: String,
     notes: String,
     image_url: String,
+    chapters_url: String,
+    /// Podlove chapters from the feed as JSON; None = look them up at the first opening.
+    chapters: Option<String>,
 }
 
 struct Feed {
@@ -86,6 +89,12 @@ fn parse_feed(bytes: &[u8]) -> anyhow::Result<Feed> {
             if !(url.starts_with("https://") || url.starts_with("http://")) {
                 return None;
             }
+            let duration_s = it.itunes_ext().and_then(|i| i.duration()).and_then(parse_duration);
+            // A chapter file comes first; Podlove chapters only without one.
+            let (psc, chapters_url) = crate::chapters::from_item(it);
+            let chapters = Some(crate::chapters::to_json(psc, duration_s.map(|d| d * 1000)))
+                .filter(|v| chapters_url.is_empty() && v.as_array().is_some_and(|a| !a.is_empty()))
+                .map(|v| v.to_string());
             Some(Episode {
                 guid: it.guid().map(|g| g.value().to_string()).unwrap_or_else(|| url.clone()),
                 title: it.title().unwrap_or("").trim().to_string(),
@@ -93,7 +102,7 @@ fn parse_feed(bytes: &[u8]) -> anyhow::Result<Feed> {
                     .pub_date()
                     .and_then(|d| chrono::DateTime::parse_from_rfc2822(d.trim()).ok())
                     .map(|d| d.with_timezone(&chrono::Utc).format("%Y-%m-%dT%H:%M:%SZ").to_string()),
-                duration_s: it.itunes_ext().and_then(|i| i.duration()).and_then(parse_duration),
+                duration_s,
                 mime: enc.mime_type().to_string(),
                 size: enc.length().parse().ok().filter(|&n: &i64| n > 0),
                 description: plain_text(
@@ -109,6 +118,8 @@ fn parse_feed(bytes: &[u8]) -> anyhow::Result<Feed> {
                         .unwrap_or(""),
                 ),
                 image_url: it.itunes_ext().and_then(|i| i.image()).unwrap_or("").to_string(),
+                chapters_url,
+                chapters,
                 url,
             })
         })
@@ -167,15 +178,20 @@ fn store(c: &mut rusqlite::Connection, podcast_id: i64, feed: &Feed, etag: Optio
     let mut n = 0;
     {
         let mut stmt = tx.prepare(
-            "INSERT INTO episode (podcast_id, guid, title, published, duration_s, url, mime, size, description, image_url, notes)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            "INSERT INTO episode (podcast_id, guid, title, published, duration_s, url, mime, size, description, image_url, notes,
+                                  chapters_url, chapters)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
              ON CONFLICT (podcast_id, guid) DO UPDATE SET title = excluded.title, published = excluded.published,
                duration_s = excluded.duration_s, url = excluded.url, mime = excluded.mime, size = excluded.size,
-               description = excluded.description, image_url = excluded.image_url, notes = excluded.notes",
+               description = excluded.description, image_url = excluded.image_url, notes = excluded.notes,
+               chapters_url = excluded.chapters_url,
+               chapters = CASE WHEN excluded.chapters IS NOT NULL THEN excluded.chapters
+                               WHEN excluded.chapters_url <> episode.chapters_url OR excluded.url <> episode.url THEN NULL
+                               ELSE episode.chapters END",
         )?;
         for e in &feed.episodes {
             n += stmt.execute((podcast_id, &e.guid, &e.title, &e.published, e.duration_s, &e.url, &e.mime, e.size,
-                               &e.description, &e.image_url, &e.notes))?;
+                               &e.description, &e.image_url, &e.notes, &e.chapters_url, &e.chapters))?;
         }
     }
     tx.commit()?;

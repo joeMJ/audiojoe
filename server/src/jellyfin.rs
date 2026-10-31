@@ -39,7 +39,7 @@ impl Jellyfin {
         )
     }
 
-    async fn get(&self, http: &reqwest::Client, path: &str, query: &[(&str, String)]) -> ApiResult<Value> {
+    pub(crate) async fn get(&self, http: &reqwest::Client, path: &str, query: &[(&str, String)]) -> ApiResult<Value> {
         let res = http
             .get(format!("{}{path}", self.base))
             .query(query)
@@ -58,7 +58,7 @@ impl Jellyfin {
     }
 
     /// The Jellyfin user whose library is browsed: the first administrator.
-    async fn user_id(&self, state: &AppState) -> ApiResult<String> {
+    pub(crate) async fn user_id(&self, state: &AppState) -> ApiResult<String> {
         if let Some(id) = state.jellyfin_users.lock().unwrap().get(&self.source_id) {
             return Ok(id.clone());
         }

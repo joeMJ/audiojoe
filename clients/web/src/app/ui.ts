@@ -301,8 +301,9 @@ function renderNowPlaying() {
   const pos = h("span"), rest = h("span");
   const play = h("button", { className: "play", onclick: () => player.toggle() });
   const rate = h("button", { className: "big sec", onclick: () => player.nextRate() });
-  // In the car: offline state left, speed, next item of the queue right (no sleep timer).
-  const next = h("button", { className: "big sec next", onclick: () => void player.skip(1) }, t("Next item"),
+  // In the car: offline state left, speed, next chapter (else next item of the queue) right (no sleep timer).
+  const byChapter = player.hasChapters();
+  const next = h("button", { className: "big sec next", onclick: () => void (byChapter ? player.nextChapter() : player.skip(1)) }, byChapter ? t("Next chapter") : t("Next item"),
     icon('<path d="M18 5v14M6 6l9 6-9 6z" fill="currentColor"/>')) as HTMLButtonElement;
   const here = h("div");
   const from = h("div", { className: "from" });
@@ -319,11 +320,11 @@ function renderNowPlaying() {
       h("div", { className: "fmt" }, here),
       bar, h("div", { className: "times" }, pos, rest),
       h("div", { className: "ctrl" },
-        s.queue.length > 1 ? h("button", { onclick: () => void player.skip(-1), ariaLabel: t("Previous") }, icon('<path d="M6 5v14M18 6l-9 6 9 6z" fill="currentColor"/>')) : null,
+        player.canStep() ? h("button", { onclick: () => void player.stepBack(), ariaLabel: byChapter ? t("Previous chapter") : t("Previous") }, icon('<path d="M6 5v14M18 6l-9 6 9 6z" fill="currentColor"/>')) : null,
         player.isLive() ? null : h("button", { className: "skip", onclick: () => player.seekBy(-15000), ariaLabel: t("Back {n} s", { n: 15 }) }, skipIcon(15, true)),
         play,
         player.isLive() ? null : h("button", { className: "skip", onclick: () => player.seekBy(30000), ariaLabel: t("Forward {n} s", { n: 30 }) }, skipIcon(30, false)),
-        s.queue.length > 1 ? h("button", { onclick: () => void player.skip(1), ariaLabel: t("Next") }, icon('<path d="M18 5v14M6 6l9 6-9 6z" fill="currentColor"/>')) : null),
+        player.canStep() ? h("button", { onclick: () => void player.stepForward(), ariaLabel: byChapter ? t("Next chapter") : t("Next") }, icon('<path d="M18 5v14M6 6l9 6-9 6z" fill="currentColor"/>')) : null),
       player.isLive() ? null : tools,
       from)),
   );
@@ -429,9 +430,9 @@ function albumHead(album: Item, tracks: Item[], buttons: HTMLElement[]) {
 }
 
 function renderChapters(it: Item) {
-  const now = player.position();
-  main.append(h("div", { className: "list" }, ...(it.chapters ?? []).map((c) =>
-    h("div", { className: now >= c.start_ms && now < c.end_ms ? "item tap on" : "item tap", onclick: () => {
+  const now = player.chapterIndex();
+  main.append(h("div", { className: "list" }, ...(it.chapters ?? []).map((c, i) =>
+    h("div", { className: i === now ? "item tap on" : "item tap", onclick: () => {
       player.seekTo(c.start_ms / (player.duration() || 1));
       npTab = "play";
       show("np");
@@ -452,14 +453,14 @@ function updateNowPlaying() {
   npRefs.bar.style.visibility = player.isLive() ? "hidden" : "";
   npRefs.play.textContent = s.playing ? "❚❚" : "▶";
   npRefs.rate.textContent = `${t("Speed")} ${s.rate.toLocaleString()}×`;
-  npRefs.next.disabled = s.index + 1 >= s.queue.length;
+  npRefs.next.disabled = player.hasChapters() ? player.chapterIndex() + 1 >= (s.item?.chapters?.length ?? 0) && s.index + 1 >= s.queue.length : s.index + 1 >= s.queue.length;
   const here = JSON.stringify([s.delivered, s.fromCache, s.transcoded]);
   if (npRefs.here.dataset.v !== here) {
     npRefs.here.dataset.v = here;
     npRefs.here.replaceChildren(qualityRow(s.delivered ?? s.item?.quality, s.fromCache, s.transcoded ? s.item?.quality : null));
   }
   if (s.item?.chapters?.length) {
-    const c = player.chapter();
+    const c = t("Chapter {c}", { c: player.chapterLine() });
     if (npRefs.sub.textContent !== c) npRefs.sub.textContent = c;
   }
   npRefs.from.textContent = s.takenOver ? t("Taken over from {device} · {ago}", { device: s.takenOver.device, ago: ago(s.takenOver.at) }) : "";
@@ -596,55 +597,136 @@ function offBadge(off?: OfflineEntry) {
 
 // ---------------------------------------------------------------- music
 
-let libStack: { source: number; parent?: string; title: string; album?: Item }[] = [];
+// All visible music libraries of all sources together, from the server's album directory:
+// albums, artists (without samplers), samplers, genres, years, recently added and – when the
+// files name enough of them – labels, with a search over title, artist, genre, label and year.
+
+type Album = Item & { artist: string; sampler: boolean; genres: string[]; added: string | null; tracks: number | null; label: string | null; source: number };
+let collection: { at: number; albums: Album[]; labels: boolean } | null = null;
+let musicGroup: { title: string; sub: string; albums: Album[] } | null = null;
+let musicAlbum: Album | null = null;
+let musicQuery = "";
+const MUSIC_VIEW = "aj_music_view";
+function musicView(): string {
+  try { return localStorage.getItem(MUSIC_VIEW) ?? "albums"; } catch { return "albums"; }
+}
+
+async function loadCollection() {
+  // Kept for a minute, so opening an album and going back does not reload everything.
+  if (collection && Date.now() - collection.at < 60_000) return collection;
+  const albums: Album[] = [];
+  let labels = false;
+  let failed: unknown = null;
+  for (const src of (await api<{ id: number; kind: string }[]>("GET", "/sources")).filter((x) => ["jellyfin", "emby", "plex"].includes(x.kind))) {
+    try {
+      for (const l of (await api<{ items: Item[] }>("GET", `/sources/${src.id}/browse`)).items.filter((i) => i.kind === "folder")) {
+        const r = await api<{ albums: Album[]; labels: boolean }>("GET", `/sources/${src.id}/music?parent=${encodeURIComponent(l.key.split(":")[2])}`);
+        albums.push(...r.albums.map((x) => ({ ...x, source: src.id })));
+        labels ||= r.labels;
+      }
+    } catch (e) {
+      failed = e; // a source that is down leaves out only its own albums
+    }
+  }
+  if (!albums.length && failed) throw failed;
+  const named = albums.filter((x) => x.label).length;
+  collection = { at: Date.now(), albums, labels: labels || (albums.length > 0 && named >= albums.length * 0.1) };
+  return collection;
+}
+
+const sortName = (s: string) => s.trim().toLowerCase().replace(/^the /, "");
+const byTitle = (a: Album, b: Album) => a.title.toLowerCase().localeCompare(b.title.toLowerCase());
+const byArtist = (a: Album, b: Album) => sortName(a.artist).localeCompare(sortName(b.artist)) || (a.year ?? 0) - (b.year ?? 0);
 
 async function renderMusic() {
   try {
-    if (!libStack.length) {
-      const sources = (await api<{ id: number; name: string; kind: string }[]>("GET", "/sources")).filter((x) => ["jellyfin", "emby", "plex"].includes(x.kind));
-      main.append(h("h2", {}, t("Music")));
-      if (!sources.length) return void main.append(h("div", { className: "empty" }, t("No sources yet. Add one in the settings.")));
-      main.append(h("div", { className: "list" },
-        ...sources.map((s) =>
-        h("div", { className: "item tap", onclick: () => ((libStack = [{ source: s.id, title: s.name }]), show("lib")) },
-          thumb({ title: s.name }), h("div", { className: "tx" }, h("div", { className: "t1" }, s.name), h("div", { className: "t2" }, s.kind))))));
+    if (musicAlbum) return void (await renderAlbum(musicAlbum));
+    const col = await loadCollection();
+    if (!col.albums.length) {
+      main.append(h("h2", {}, t("Music")), h("div", { className: "empty" }, t("No sources yet. Add one in the settings.")));
       return;
     }
-    const cur = libStack[libStack.length - 1];
-    const head = h("div", { className: "chips" });
-    head.append(h("button", { className: "chip", onclick: () => (libStack.pop(), show("lib")) }, `← ${t("Back")}`));
-    if (!cur.album) head.append(h("h2", { style: "margin:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis" }, cur.title));
-    main.append(head);
-    const q = cur.parent ? `?parent=${encodeURIComponent(cur.parent)}&limit=300` : "";
-    const res = await api<{ items: Item[] }>("GET", `/sources/${cur.source}/browse${q}`);
-    const tracks = res.items.filter((i) => i.kind === "track");
-    const album = cur.album;
-    const buttons = tracks.length ? [h("button", { className: "big", onclick: () => void start(tracks, 0, album ? { list: "music", key: album.key } : undefined) }, album ? t("Play album") : t("Play all")),
-      ...(album ? [nextButton(album)] : []),
-      h("button", { className: "big sec", onclick: (ev: Event) => { (ev.target as HTMLButtonElement).disabled = true; void addOffline(tracks); } }, t("Save offline"))] : [];
-    if (cur.album) main.append(albumHead(cur.album, tracks, buttons));
-    else head.append(...buttons);
+    const input = h("input", { className: "search", type: "search", placeholder: t("Search title, artist, genre, label"), value: musicQuery, enterKeyHint: "search" }) as HTMLInputElement;
     const box = h("div", { className: "list" });
-    for (const it of res.items) {
-      if (it.kind === "track") {
-        const off = await offlineEntry(it.key);
-        box.append(h("div", { className: "item tap", onclick: () => void start(tracks, tracks.indexOf(it)) },
-          h("div", { className: "ic" }, String(it.track ?? "♫")),
-          h("div", { className: "tx" }, h("div", { className: "t1" }, it.title),
-            h("div", { className: "t2" }, [it.subtitle, it.duration_ms ? clock(it.duration_ms) : ""].filter(Boolean).join(" · "))),
-          offBadge(off), h("span", { className: "badge" }, qualityBadge(it.quality))));
+    const row = (a: Album) => h("div", { className: "item tap", onclick: () => ((musicAlbum = a), show("lib")) }, thumb(a),
+      h("div", { className: "tx" }, h("div", { className: "t1" }, a.title),
+        h("div", { className: "t2" }, [a.artist, a.year ? `${a.year}` : "", a.tracks ? t("{n} titles", { n: a.tracks }) : ""].filter(Boolean).join(" · "))),
+      nextButton(a));
+    const folder = (title: string, albums: Album[], sorted: () => Album[]) => {
+      const sub = albums.length === 1 ? t("1 album") : t("{n} albums", { n: albums.length });
+      return h("div", { className: "item tap", onclick: () => ((musicGroup = { title, sub, albums: sorted() }), show("lib")) },
+        thumb({ title, image: albums.find((x) => x.image)?.image ?? null }),
+        h("div", { className: "tx" }, h("div", { className: "t1" }, title), h("div", { className: "t2" }, sub)));
+    };
+    const groupBy = (l: Album[], keys: (a: Album) => string[]) => {
+      const m = new Map<string, Album[]>();
+      for (const a of l) for (const k of keys(a).map((x) => x.trim()).filter(Boolean)) m.set(k, [...(m.get(k) ?? []), a]);
+      return m;
+    };
+    const folders = (m: Map<string, Album[]>, order: (a: string, b: string) => number, sort: (a: Album, b: Album) => number) =>
+      [...m.keys()].sort(order).map((k) => folder(k, m.get(k)!, () => [...m.get(k)!].sort(sort)));
+    const byName = (a: string, b: string) => sortName(a).localeCompare(sortName(b));
+
+    const fill = () => {
+      const q = musicQuery.toLowerCase();
+      const all = col.albums;
+      let out: HTMLElement[] = [];
+      if (q) {
+        const hits = all.filter((a) => [a.title, a.artist, a.label ?? "", `${a.year ?? ""}`, ...a.genres].some((x) => x.toLowerCase().includes(q))).sort(byArtist);
+        out = hits.length ? hits.slice(0, 300).map(row) : [h("div", { className: "empty" }, t("Nothing found."))];
+      } else if (musicGroup) {
+        const g = musicGroup;
+        out = [h("div", { className: "chips" }, h("button", { className: "chip", onclick: () => ((musicGroup = null), show("lib")) }, `← ${t("Back")}`),
+          h("h2", { style: "margin:0" }, g.title), h("span", { className: "muted" }, g.sub)), ...g.albums.map(row)];
       } else {
-        const id = it.key.split(":")[2];
-        box.append(h("div", { className: "item tap", onclick: () => (libStack.push({ source: cur.source, parent: id, title: it.title, album: it.kind === "album" ? it : undefined }), show("lib")) },
-          thumb(it), h("div", { className: "tx" }, h("div", { className: "t1" }, it.title),
-            h("div", { className: "t2" }, [it.subtitle, it.year].filter(Boolean).join(" · "))),
-          it.kind === "album" ? nextButton(it) : null));
+        const v = musicView();
+        if (v === "artists") {
+          // An artist's albums by year, the oldest first.
+          out = folders(groupBy(all.filter((a) => !a.sampler), (a) => [a.artist]), byName, (a, b) => (a.year ?? 9999) - (b.year ?? 9999));
+        } else if (v === "samplers") out = all.filter((a) => a.sampler).sort(byTitle).map(row);
+        else if (v === "genres") out = folders(groupBy(all, (a) => a.genres), (a, b) => a.toLowerCase().localeCompare(b.toLowerCase()), byArtist);
+        else if (v === "years") out = folders(groupBy(all, (a) => (a.year ? [`${a.year}`] : [])), (a, b) => b.localeCompare(a), byArtist);
+        else if (v === "labels" && col.labels) out = folders(groupBy(all, (a) => [a.label ?? ""]), byName, byArtist);
+        else if (v === "new") out = [...all].sort((a, b) => (b.added ?? "").localeCompare(a.added ?? "")).slice(0, 100).map(row);
+        else out = [...all].sort(byTitle).map(row);
       }
-    }
-    main.append(box);
+      box.replaceChildren(...out);
+      tabs.style.display = q ? "none" : "";
+    };
+
+    const tab = (v: string, label: string) => h("button", {
+      className: !musicGroup && musicView() === v ? "chip on" : "chip",
+      onclick: () => { try { localStorage.setItem(MUSIC_VIEW, v); } catch { /* private window */ } musicGroup = null; show("lib"); },
+    }, label);
+    const tabs = h("div", { className: "chips wrap" }, tab("albums", t("Albums")), tab("artists", t("Artists")), tab("samplers", t("Samplers")),
+      tab("genres", t("Genres")), tab("years", t("Years")), tab("new", t("Recently added")), col.labels ? tab("labels", t("Labels")) : null);
+    input.addEventListener("input", () => ((musicQuery = input.value.trim()), fill()));
+    main.append(h("div", { className: "chips searchrow" }, input, h("span", { className: "lens", ariaHidden: "true" }, icon('<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/>'))));
+    main.append(tabs, box);
+    fill();
   } catch (e) {
     main.append(failure(e));
   }
+}
+
+async function renderAlbum(album: Album) {
+  main.append(h("div", { className: "chips" }, h("button", { className: "chip", onclick: () => ((musicAlbum = null), show("lib")) }, `← ${t("Back")}`)));
+  const res = await api<{ items: Item[] }>("GET", `/sources/${album.source}/browse?parent=${encodeURIComponent(album.key.split(":")[2])}&limit=500`);
+  const tracks = res.items.filter((i) => i.kind === "track");
+  const buttons = tracks.length ? [h("button", { className: "big", onclick: () => void start(tracks, 0, { list: "music", key: album.key }) }, t("Play album")),
+    nextButton(album),
+    h("button", { className: "big sec", onclick: (ev: Event) => { (ev.target as HTMLButtonElement).disabled = true; void addOffline(tracks); } }, t("Save offline"))] : [];
+  main.append(albumHead(album, tracks, buttons));
+  const box = h("div", { className: "list" });
+  for (const it of tracks) {
+    const off = await offlineEntry(it.key);
+    box.append(h("div", { className: "item tap", onclick: () => void start(tracks, tracks.indexOf(it)) },
+      h("div", { className: "ic" }, String(it.track ?? "♫")),
+      h("div", { className: "tx" }, h("div", { className: "t1" }, it.title),
+        h("div", { className: "t2" }, [it.subtitle, it.duration_ms ? clock(it.duration_ms) : ""].filter(Boolean).join(" · "))),
+      offBadge(off), h("span", { className: "badge" }, qualityBadge(it.quality))));
+  }
+  main.append(box);
 }
 
 // ---------------------------------------------------------------- radio

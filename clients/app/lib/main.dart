@@ -4,12 +4,12 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:just_audio_background/just_audio_background.dart';
 import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 
 import 'api.dart';
 import 'appearance.dart';
 import 'downloads.dart';
+import 'media_session.dart';
 import 'player.dart';
 import 'store.dart';
 import 'sync.dart';
@@ -22,11 +22,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (Platform.isAndroid) {
     // Notification and lock-screen controls; keeps playing in the background.
-    await JustAudioBackground.init(
-      androidNotificationChannelId: 'io.github.joemj.audiojoe.playback',
-      androidNotificationChannelName: 'Playback',
-      androidNotificationOngoing: true,
-    );
+    await startMediaSession();
   } else {
     // Desktop: libmpv (bit-exact FLAC, any sample rate).
     JustAudioMediaKit.ensureInitialized(linux: true, windows: true);

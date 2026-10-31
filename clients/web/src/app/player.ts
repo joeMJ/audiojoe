@@ -46,10 +46,46 @@ export const isLive = () => state.item?.kind === "radio";
 export const duration = () =>
   parts().length ? state.item?.duration_ms ?? 0 : Number.isFinite(audio.duration) ? audio.duration * 1000 : state.item?.duration_ms ?? 0;
 
-export function chapter(): string {
-  const ms = position();
-  return state.item?.chapters?.find((c) => ms >= c.start_ms && ms < c.end_ms)?.title ?? "";
+const chapters = () => state.item?.chapters ?? [];
+export const hasChapters = () => chapters().length > 0;
+
+/** Index of the chapter at the position, -1 without chapters. */
+export function chapterIndex(): number {
+  const ms = position(), l = chapters();
+  for (let i = l.length - 1; i >= 0; i--) if (ms >= l[i].start_ms) return i;
+  return l.length ? 0 : -1;
 }
+
+export function chapter(): string {
+  const i = chapterIndex();
+  return i < 0 ? "" : chapters()[i].title;
+}
+
+/** "3/11 · Name"; empty without chapters. */
+export function chapterLine(): string {
+  const i = chapterIndex();
+  return i < 0 ? "" : `${i + 1}/${chapters().length} · ${chapter()}`;
+}
+
+/** Next chapter; after the last one the next item, if any. */
+export async function nextChapter() {
+  const i = chapterIndex(), l = chapters();
+  if (i >= 0 && i + 1 < l.length) return void (await seekGlobal(l[i + 1].start_ms, state.playing).then(() => persist()));
+  await skip(1);
+}
+
+/** Start of the chapter; within its first 3 seconds the previous chapter. */
+export async function previousChapter() {
+  const i = chapterIndex(), l = chapters();
+  if (i < 0) return void (await skip(-1));
+  const to = position() - l[i].start_ms < 3000 && i > 0 ? l[i - 1].start_ms : l[i].start_ms;
+  await seekGlobal(to, state.playing).then(() => persist());
+}
+
+/** ⏮ ⏭: by chapter when there are chapters, else by item. */
+export const stepForward = () => (hasChapters() ? nextChapter() : skip(1));
+export const stepBack = () => (hasChapters() ? previousChapter() : skip(-1));
+export const canStep = () => hasChapters() || state.queue.length > 1;
 
 export function setDevice(name: string) {
   myDevice = name;
@@ -239,8 +275,9 @@ function mediaSession(it: Item) {
   ms.setActionHandler("pause", () => audio.pause());
   ms.setActionHandler("seekbackward", () => seekBy(-15000));
   ms.setActionHandler("seekforward", () => seekBy(30000));
-  ms.setActionHandler("previoustrack", state.queue.length > 1 ? () => void skip(-1) : null);
-  ms.setActionHandler("nexttrack", state.queue.length > 1 ? () => void skip(1) : null);
+  // Lock screen and steering wheel: by chapter, else by item.
+  ms.setActionHandler("previoustrack", canStep() ? () => void stepBack() : null);
+  ms.setActionHandler("nexttrack", canStep() ? () => void stepForward() : null);
 }
 
 let saveTimer: number | undefined;
@@ -270,7 +307,16 @@ audio.addEventListener("ended", async () => {
   if (more) await skip(1);
   else if (after) await after();
 });
-audio.addEventListener("timeupdate", () => notify());
+let shownChapter = "";
+audio.addEventListener("timeupdate", () => {
+  // The car's mini player shows the chapter as the artist line.
+  const c = chapterLine();
+  if (c !== shownChapter && "mediaSession" in navigator && navigator.mediaSession.metadata) {
+    shownChapter = c;
+    navigator.mediaSession.metadata.artist = c || (state.item?.subtitle ?? state.item?.podcast ?? "");
+  }
+  notify();
+});
 audio.addEventListener("error", () => notify());
 document.addEventListener("visibilitychange", () => document.hidden && void persist());
 

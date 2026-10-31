@@ -119,9 +119,6 @@ msgstr "Kennwort"
 msgid "Play"
 msgstr "Abspielen"
 
-msgid "Play all"
-msgstr "Alle abspielen"
-
 msgid "Podcasts"
 msgstr "Podcasts"
 
@@ -471,3 +468,72 @@ msgstr "Zur Gruppe hinzufügen"
 
 msgid "Remove from group"
 msgstr "Aus der Gruppe nehmen"
+
+msgid "Albums"
+msgstr "Alben"
+
+msgid "Artists"
+msgstr "Interpreten"
+
+msgid "Samplers"
+msgstr "Sampler"
+
+msgid "Genres"
+msgstr "Genres"
+
+msgid "Years"
+msgstr "Jahre"
+
+msgid "Labels"
+msgstr "Labels"
+
+msgid "Asks musicbrainz.org for the label of albums whose files name none. Only the release id is sent, with your contact address, which MusicBrainz asks for; at most one request per second."
+msgstr "Fragt musicbrainz.org nach dem Label von Alben, deren Dateien keines nennen. Gesendet wird nur die Release-ID, zusammen mit deiner Kontaktadresse, die MusicBrainz verlangt; höchstens eine Anfrage pro Sekunde."
+
+msgid "Chapter {c}"
+msgstr "Kapitel {c}"
+
+msgid "Contact for MusicBrainz (e-mail or web address)"
+msgstr "Kontakt für MusicBrainz (E-Mail oder Webadresse)"
+
+msgid "Daily"
+msgstr "Täglich"
+
+msgid "Weekly"
+msgstr "Wöchentlich"
+
+msgid "Only by hand"
+msgstr "Nur von Hand"
+
+msgid "Enter a contact address first."
+msgstr "Bitte zuerst eine Kontaktadresse eingeben."
+
+msgid "Labels from MusicBrainz"
+msgstr "Labels von MusicBrainz"
+
+msgid "Libraries ({shown} of {n} shown)"
+msgstr "Bibliotheken ({shown} von {n} sichtbar)"
+
+msgid "Next chapter"
+msgstr "Nächstes Kapitel"
+
+msgid "Previous chapter"
+msgstr "Vorheriges Kapitel"
+
+msgid "Read in again now"
+msgstr "Jetzt neu einlesen"
+
+msgid "Read in the album directory again"
+msgstr "Albenverzeichnis neu einlesen"
+
+msgid "Search title, artist, genre, label"
+msgstr "Titel, Interpret, Genre, Label suchen"
+
+msgid "{n} albums"
+msgstr "{n} Alben"
+
+msgid "{n} albums read in."
+msgstr "{n} Alben eingelesen."
+
+msgid "1 album"
+msgstr "1 Album"

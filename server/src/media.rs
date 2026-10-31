@@ -115,6 +115,10 @@ async fn resolve(state: &AppState, user: &CurrentUser, key: &str, part: usize) -
 
 pub async fn item(State(state): State<AppState>, user: CurrentUser, Path(key): Path<String>) -> ApiResult<Json<Value>> {
     let mut meta = resolve(&state, &user, &key, 0).await?.meta;
+    // Episode chapters: looked up at the first opening, then stored.
+    if let Ok(Key::Episode(id)) = parse_key(&key) {
+        meta["chapters"] = crate::chapters::of_episode(&state, id).await;
+    }
     // Fresh listening progress from Audiobookshelf before answering.
     if let Ok(Key::Abs(src, item)) = parse_key(&key) {
         if let Ok(abs) = audiobookshelf::source(&state, src).await {

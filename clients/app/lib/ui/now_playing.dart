@@ -59,8 +59,14 @@ class _PlaybackTab extends StatelessWidget {
           Text(it.title, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
           const SizedBox(height: 4),
-          Text(player.chapter.isNotEmpty ? player.chapter : it.subtitle, textAlign: TextAlign.center, maxLines: 1,
+          Text(it.subtitle, textAlign: TextAlign.center, maxLines: 1,
               overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 15, color: k.muted, fontWeight: FontWeight.w600)),
+          if (player.chapterLine.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(t('Chapter {c}', {'c': player.chapterLine}), textAlign: TextAlign.center, maxLines: 1,
+                  overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+            ),
           const SizedBox(height: 12),
           _FormatChips(it),
           const SizedBox(height: 4),
@@ -196,10 +202,12 @@ class _VolumeRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = big ? 52.0 : 40.0;
+    // − at the left edge, + at the right edge, the value between slider and + (all rows end flush).
     Widget btn(IconData icon, String tip, int delta) => SizedBox(
           width: 52,
           height: size,
-          child: Center(
+          child: Align(
+            alignment: delta < 0 ? Alignment.centerLeft : Alignment.centerRight,
             child: SizedBox(
               width: size,
               height: size,
@@ -221,11 +229,11 @@ class _VolumeRow extends StatelessWidget {
           child: Slider(value: value.clamp(0, 100).toDouble(), max: 100, label: '$value', onChanged: (v) => onChanged(v.round())),
         ),
       ),
-      btn(Icons.add, t('Louder'), step),
       SizedBox(
         width: 44,
-        child: Text('$value', textAlign: TextAlign.right, style: TextStyle(fontSize: big ? 18 : 15, fontWeight: FontWeight.w800)),
+        child: Text('$value', textAlign: TextAlign.center, style: TextStyle(fontSize: big ? 18 : 15, fontWeight: FontWeight.w800)),
       ),
+      btn(Icons.add, t('Louder'), step),
     ]);
   }
 }
@@ -254,10 +262,17 @@ class _Controls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final playing = sonos.output?.playing ?? player.playing;
-    final many = player.queue.length > 1;
+    // With chapters ⏮ ⏭ go by chapter (after the last one to the next title), else by title.
+    final byChapter = player.chapters.isNotEmpty;
+    final many = byChapter || player.queue.length > 1;
     final scheme = Theme.of(context).colorScheme;
     return Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-      if (many) IconButton(iconSize: 32, tooltip: t('Previous'), onPressed: () => player.skip(-1), icon: const Icon(Icons.skip_previous)),
+      if (many)
+        IconButton(
+            iconSize: 32,
+            tooltip: byChapter ? t('Previous chapter') : t('Previous'),
+            onPressed: () => byChapter ? player.previousChapter() : player.skip(-1),
+            icon: const Icon(Icons.skip_previous)),
       if (!player.live) _Skip(seconds: 15, back: true),
       SizedBox(
         width: 88,
@@ -271,7 +286,12 @@ class _Controls extends StatelessWidget {
         ),
       ),
       if (!player.live) _Skip(seconds: 30, back: false),
-      if (many) IconButton(iconSize: 32, tooltip: t('Next'), onPressed: () => player.skip(1), icon: const Icon(Icons.skip_next)),
+      if (many)
+        IconButton(
+            iconSize: 32,
+            tooltip: byChapter ? t('Next chapter') : t('Next'),
+            onPressed: () => byChapter ? player.nextChapter() : player.skip(1),
+            icon: const Icon(Icons.skip_next)),
     ]);
   }
 }
@@ -462,12 +482,12 @@ class _ChaptersTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final current = player.chapter;
+    final current = player.chapterIndex;
     return ListView.builder(
       itemCount: it.chapters.length,
       itemBuilder: (context, i) {
         final c = it.chapters[i];
-        final active = c.title == current && player.position >= c.startMs && player.position < c.endMs;
+        final active = i == current;
         return ListTile(
           selected: active,
           leading: Icon(active ? Icons.play_arrow : Icons.bookmark_outline),

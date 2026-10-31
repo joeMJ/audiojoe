@@ -31,7 +31,7 @@ impl Plex {
         (axum::http::HeaderName::from_static("x-plex-token"), self.token.clone())
     }
 
-    async fn get(&self, http: &reqwest::Client, path: &str, query: &[(&str, String)]) -> ApiResult<Value> {
+    pub(crate) async fn get(&self, http: &reqwest::Client, path: &str, query: &[(&str, String)]) -> ApiResult<Value> {
         let res = http
             .get(format!("{}{path}", self.base))
             .query(query)

@@ -6,7 +6,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:just_audio_background/just_audio_background.dart';
+import 'package:audio_service/audio_service.dart' show MediaItem;
 
 import 'api.dart';
 import 'downloads.dart';
@@ -66,12 +66,38 @@ class Player extends ChangeNotifier {
   bool get playing => audio.playing;
   bool get live => item?.kind == 'radio';
 
-  String get chapter {
-    final ms = position;
-    for (final c in item?.chapters ?? const <Chapter>[]) {
-      if (ms >= c.startMs && ms < c.endMs) return c.title;
+  List<Chapter> get chapters => item?.chapters ?? const [];
+
+  /// Index of the chapter at the position, -1 without chapters.
+  int get chapterIndex {
+    final ms = position, l = chapters;
+    for (var i = l.length - 1; i >= 0; i--) {
+      if (ms >= l[i].startMs) return i;
     }
-    return '';
+    return l.isEmpty ? -1 : 0;
+  }
+
+  String get chapter {
+    final i = chapterIndex;
+    return i < 0 ? '' : chapters[i].title;
+  }
+
+  /// "Chapter 3/11 · Name"; empty without chapters.
+  String get chapterLine => chapterIndex < 0 ? '' : '${chapterIndex + 1}/${chapters.length} · $chapter';
+
+  /// Next chapter; after the last one the next item, if any.
+  Future<void> nextChapter() async {
+    final i = chapterIndex;
+    if (i >= 0 && i + 1 < chapters.length) return seekTo(chapters[i + 1].startMs);
+    if (index + 1 < queue.length) return skip(1);
+  }
+
+  /// Start of the chapter; within its first 3 seconds the previous chapter.
+  Future<void> previousChapter() async {
+    final i = chapterIndex;
+    if (i < 0) return index > 0 ? skip(-1) : seekTo(0);
+    final c = chapters[i];
+    return seekTo(position - c.startMs < 3000 && i > 0 ? chapters[i - 1].startMs : c.startMs);
   }
 
   /// Metadata for an item: from the server, else from the local copy (offline).

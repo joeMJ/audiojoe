@@ -138,7 +138,7 @@ class MiniPlayer extends StatelessWidget {
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text(it.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
-                      Text(player.chapter.isNotEmpty ? player.chapter : (it.quality?.badge ?? it.subtitle),
+                      Text(player.chapterLine.isNotEmpty ? t('Chapter {c}', {'c': player.chapterLine}) : (it.quality?.badge ?? it.subtitle),
                           maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: context.tok.muted, fontSize: 13)),
                     ]),
                   ),

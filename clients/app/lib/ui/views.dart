@@ -7,10 +7,10 @@ import '../downloads.dart';
 import '../l10n.dart';
 import '../models.dart';
 import '../player.dart';
-import '../store.dart';
 import 'common.dart';
 import 'details.dart';
 import 'lists.dart';
+import 'music.dart';
 
 Future<void> startPlayback(BuildContext context, List<Item> items, [int i = 0, VoidCallback? opened, Entry? from]) async {
   // A search field may still hold the keyboard; the player view must get the full height.
@@ -212,104 +212,6 @@ class _AddPodcastDialogState extends State<AddPodcastDialog> {
       );
 }
 
-// ---------------------------------------------------------------- audiobooks and music (browse a source)
-
-class BrowseView extends StatefulWidget {
-  final List<String> kinds; // [audiobookshelf] or [jellyfin, emby, plex]
-  final VoidCallback onPlay;
-  const BrowseView({super.key, required this.kinds, required this.onPlay});
-  @override
-  State<BrowseView> createState() => _BrowseViewState();
-}
-
-class _BrowseViewState extends State<BrowseView> {
-  final stack = <({int source, String? parent, String title, Item? album})>[];
-
-  Future<List<Item>> _load() async {
-    if (stack.isEmpty) {
-      final sources = (await api.call('GET', '/sources') as List).cast<Map>().where((s) => widget.kinds.contains(s['kind'])).toList();
-      if (sources.isEmpty) return [];
-      stack.add((source: sources.first['id'] as int, parent: null, title: sources.first['name'] as String, album: null));
-    }
-    final cur = stack.last;
-    final res = await api.call('GET', '/sources/${cur.source}/browse',
-        query: {if (cur.parent != null) 'parent': cur.parent!, 'limit': '500'});
-    final items = itemsOf(res['items']);
-    // A single library: show its content directly.
-    if (cur.parent == null && items.length == 1 && items.first.kind == 'folder') {
-      stack.add((source: cur.source, parent: items.first.key.split(':')[2], title: items.first.title, album: null));
-      return _load();
-    }
-    return items;
-  }
-
-  @override
-  Widget build(BuildContext context) => Loader<List<Item>>(
-        key: ValueKey(stack.isEmpty ? 'root' : '${stack.last.source}/${stack.last.parent}'),
-        load: _load,
-        builder: (context, items, _) {
-          if (stack.isEmpty) return emptyText(context, t('No sources yet. Add one in the settings.'));
-          final tracks = items.where((i) => i.kind == 'track').toList();
-          final positions = Stores.positions.data;
-          return ListView(padding: const EdgeInsets.all(12), children: [
-            if (stack.last.album != null) ...[
-              Align(alignment: Alignment.centerLeft, child: ActionChip(label: Text('← ${t('Back')}'), onPressed: () => setState(stack.removeLast))),
-              const SizedBox(height: 10),
-              AlbumHeader(album: stack.last.album!, tracks: tracks, actions: [
-                if (tracks.isNotEmpty) ...[
-                  FilledButton.icon(
-                      icon: const Icon(Icons.play_arrow),
-                      onPressed: () => startPlayback(context, tracks, 0, widget.onPlay, (list: 'music', key: stack.last.album!.key)),
-                      label: Text(t('Play album'))),
-                  saveOfflineButton(tracks.first, tracks),
-                  NextButton(stack.last.album!),
-                ],
-              ]),
-            ] else
-              Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-                if (stack.length > 1) ActionChip(label: Text('← ${t('Back')}'), onPressed: () => setState(stack.removeLast)),
-                Text(stack.last.title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-                if (tracks.isNotEmpty) ...[
-                  FilledButton(onPressed: () => startPlayback(context, tracks, 0, widget.onPlay), child: Text(t('Play all'))),
-                  saveOfflineButton(tracks.first, tracks),
-                ],
-              ]),
-            const SizedBox(height: 10),
-            for (final it in items)
-              if (it.kind == 'folder' || it.kind == 'album' || it.kind == 'artist')
-                ItemRow(
-                  leading: CoverThumb(image: it.image, label: it.title),
-                  title: it.title,
-                  subtitle: [it.subtitle, if (it.year != null) '${it.year}'].where((s) => s.isNotEmpty).join(' · '),
-                  trailing: [if (it.kind == 'album') NextButton(it)],
-                  onTap: () => setState(() => stack.add(
-                      (source: stack.last.source, parent: it.key.split(':')[2], title: it.title, album: it.kind == 'album' ? it : null))),
-                )
-              else
-                ItemRow(
-                  leading: it.kind == 'track' ? CoverThumb(label: '${it.track ?? ''}') : CoverThumb(image: it.image, label: it.title),
-                  title: it.title,
-                  subtitle: [it.subtitle, if (it.durationMs != null) clock(it.durationMs!)].where((s) => s.isNotEmpty).join(' · '),
-                  progress: () {
-                    final p = positions[it.key];
-                    return p != null && it.durationMs != null && p['finished'] != true ? (p['position_ms'] as int) / it.durationMs! : null;
-                  }(),
-                  // Titles play at a tap (the album page is the place to look first); books open their details.
-                  onTap: it.kind == 'track'
-                      ? () => startPlayback(context, tracks, tracks.indexOf(it), widget.onPlay)
-                      : () => openDetails(context, it, widget.onPlay),
-                  onLongPress: () => openDetails(context, it, widget.onPlay),
-                  trailing: [
-                    if (it.quality?.badge.isNotEmpty == true) Badge2(it.quality!.badge),
-                    saveOfflineButton(it),
-                    if (it.kind == 'book') rowButton(t('Play'), () => startPlayback(context, [it], 0, widget.onPlay)),
-                  ],
-                ),
-          ]);
-        },
-      );
-}
-
 // ---------------------------------------------------------------- music: library or internet radio
 
 class MusicTab extends StatefulWidget {
@@ -321,7 +223,7 @@ class MusicTab extends StatefulWidget {
 
 class _MusicTabState extends State<MusicTab> {
   @override
-  Widget build(BuildContext context) => BrowseView(key: const ValueKey('jf'), kinds: const ['jellyfin', 'emby', 'plex'], onPlay: widget.onPlay);
+  Widget build(BuildContext context) => MusicView(onPlay: widget.onPlay);
 }
 
 class RadioView extends StatefulWidget {
