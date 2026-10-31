@@ -210,9 +210,9 @@ class ItemRow extends StatelessWidget {
   final String title, subtitle;
   final double? progress;
   final List<Widget> trailing;
-  final VoidCallback? onTap;
+  final VoidCallback? onTap, onLongPress;
   const ItemRow({super.key, required this.leading, required this.title, this.subtitle = '', this.progress,
-      this.trailing = const [], this.onTap});
+      this.trailing = const [], this.onTap, this.onLongPress});
 
   @override
   Widget build(BuildContext context) {
@@ -221,6 +221,7 @@ class ItemRow extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(SizeTokens.radius),
         onTap: onTap,
+        onLongPress: onLongPress,
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: SizeTokens.touchPhone + 8),
           child: Padding(

@@ -52,7 +52,7 @@ class _ShellState extends State<Shell> {
               // No text input here: never shrink for a keyboard left over from a search field.
               resizeToAvoidBottomInset: false,
               appBar: AppBar(
-                leading: IconButton(tooltip: t('Close'), onPressed: () => Navigator.pop(context), icon: const Icon(Icons.keyboard_arrow_down, size: 32)),
+                leading: IconButton(tooltip: t('Back'), onPressed: () => Navigator.pop(context), icon: const Icon(Icons.arrow_back)),
                 actions: const [StatusPills(), SizedBox(width: 8)],
               ),
               body: const SafeArea(top: false, child: NowPlayingView()),

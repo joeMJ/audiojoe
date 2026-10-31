@@ -85,7 +85,8 @@ class Chapter {
 class Item {
   final String key, kind, title, subtitle;
   final int? durationMs, track, year;
-  final String? image, published, description, notes;
+  final String? image, published, description, notes, series;
+  final List<String> genres;
   final Quality? quality;
   final List<Part> parts;
   final List<Chapter> chapters;
@@ -105,6 +106,8 @@ class Item {
     this.published,
     this.description,
     this.notes,
+    this.series,
+    this.genres = const [],
     this.quality,
     this.parts = const [],
     this.chapters = const [],
@@ -126,6 +129,8 @@ class Item {
         published: j['published']?.toString(),
         description: j['description'] as String?,
         notes: j['notes'] as String?,
+        series: j['series'] as String?,
+        genres: (j['genres'] as List? ?? []).map((g) => '$g').toList(),
         quality: Quality.fromJson(j['quality']),
         parts: (j['parts'] as List? ?? []).map(Part.fromJson).toList(),
         chapters: (j['chapters'] as List? ?? []).map(Chapter.fromJson).toList(),

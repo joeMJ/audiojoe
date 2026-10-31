@@ -21,6 +21,8 @@ export interface Item {
   description?: string | null;
   /** Shownotes as filtered HTML (paragraphs, lists, emphasis, links) from the server. */
   notes?: string | null;
+  genres?: string[];
+  series?: string | null;
   favorite?: boolean;
   track?: number | null;
   year?: number | null;

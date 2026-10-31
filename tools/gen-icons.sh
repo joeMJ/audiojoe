@@ -27,6 +27,15 @@ for d in mdpi:108 hdpi:162 xhdpi:216 xxhdpi:324 xxxhdpi:432; do
     convert "$SRC" -filter Lanczos -resize "$((n * 78 / 100))x$((n * 78 / 100))" -background none -gravity center \
         -extent "${n}x${n}" -strip "$APP/android/app/src/main/res/mipmap-${d%%:*}/ic_launcher_foreground.png"
 done
+# Monochrome layer for themed icons (Android 13+): the line drawing (design/icon-line.png,
+# black lines on transparent ground) turned white; the launcher tints it. Drawn at
+# 52 % so ring and play mark stay inside the round mask.
+for d in mdpi:108 hdpi:162 xhdpi:216 xxhdpi:324 xxxhdpi:432; do
+    n=${d#*:}
+    convert design/icon-line.png -channel RGB -evaluate set 100% +channel \
+        -filter Lanczos -resize "$((n * 52 / 100))x$((n * 52 / 100))" -background none -gravity center \
+        -extent "${n}x${n}" -strip "$APP/android/app/src/main/res/mipmap-${d%%:*}/ic_launcher_monochrome.png"
+done
 mkdir -p "$APP/assets"
 render 256 "$APP/assets/icon.png"
 tmp=$(mktemp -d)

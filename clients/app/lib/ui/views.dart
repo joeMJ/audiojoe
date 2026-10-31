@@ -9,7 +9,7 @@ import '../models.dart';
 import '../player.dart';
 import '../store.dart';
 import 'common.dart';
-import 'notes.dart';
+import 'details.dart';
 
 Future<void> startPlayback(BuildContext context, List<Item> items, [int i = 0, VoidCallback? opened]) async {
   // A search field may still hold the keyboard; the player view must get the full height.
@@ -47,6 +47,10 @@ class ContinueView extends StatelessWidget {
     }
   }
 
+  static Item _itemOf(Playback p) => Item(
+      key: p.key, kind: p.key.startsWith('episode:') ? 'episode' : p.key.startsWith('abs:') ? 'book' : 'track',
+      title: p.title, subtitle: p.subtitle, image: coverOf(p.key), positionMs: p.positionMs, durationMs: p.durationMs);
+
   @override
   Widget build(BuildContext context) => Loader<List<Playback>>(
         load: _load,
@@ -55,6 +59,7 @@ class ContinueView extends StatelessWidget {
           return ListView(padding: const EdgeInsets.all(12), children: [
             for (final p in list)
               ItemRow(
+                onTap: () => openDetails(context, _itemOf(p), onPlay),
                 leading: CoverThumb(image: coverOf(p.key), label: p.subtitle.isEmpty ? p.title : p.subtitle),
                 title: p.title.isEmpty ? p.key : p.title,
                 subtitle: '${clock(p.positionMs)}${p.durationMs != null ? ' / ${clock(p.durationMs!)}' : ''} · '
@@ -62,10 +67,7 @@ class ContinueView extends StatelessWidget {
                 progress: p.durationMs != null && p.durationMs! > 0 ? p.positionMs / p.durationMs! : null,
                 trailing: [
                   ListenableBuilder(listenable: downloads, builder: (context, _) => offlineIcon(context, p.key, showOnlineOnly: true)),
-                  rowButton(t('Resume'), () => startPlayback(context, [
-                        Item(key: p.key, kind: p.key.startsWith('episode:') ? 'episode' : p.key.startsWith('abs:') ? 'book' : 'track',
-                            title: p.title, subtitle: p.subtitle, image: coverOf(p.key))
-                      ], 0, onPlay)),
+                  rowButton(t('Resume'), () => startPlayback(context, [_itemOf(p)], 0, onPlay)),
                 ],
               ),
           ]);
@@ -140,7 +142,7 @@ class _PodcastsViewState extends State<PodcastsView> {
               published: e.published, positionMs: e.positionMs, finished: e.finished, image: e.image, description: e.description)))
             ItemRow(
               leading: CoverThumb(image: e.image, label: e.subtitle),
-              onTap: () => showEpisode(context, e, () => startPlayback(context, [e], 0, widget.onPlay)),
+              onTap: () => openDetails(context, e, widget.onPlay),
               title: e.title,
               subtitle: [e.subtitle, e.published?.substring(0, 10), if (e.durationMs != null) clock(e.durationMs!)].whereType<String>().join(' · '),
               progress: e.positionMs != null && e.durationMs != null && !e.finished ? e.positionMs! / e.durationMs! : null,
@@ -194,52 +196,6 @@ class _PodcastHeaderState extends State<PodcastHeader> {
     );
   }
 }
-
-/// Episode details: cover, date, duration and the show notes, with a play button.
-void showEpisode(BuildContext context, Item e, VoidCallback onPlay) => showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.6,
-        maxChildSize: 0.95,
-        builder: (ctx, scroll) => ListView(controller: scroll, padding: const EdgeInsets.all(16), children: [
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            CoverThumb(image: e.image, label: e.subtitle, size: 88),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(e.title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                Text([e.subtitle, e.published?.substring(0, 10), if (e.durationMs != null) clock(e.durationMs!)].whereType<String>().join(' · '),
-                    style: TextStyle(color: ctx.tok.muted)),
-              ]),
-            ),
-          ]),
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: FilledButton.icon(
-              icon: const Icon(Icons.play_arrow),
-              label: Text((e.positionMs ?? 0) > 0 ? t('Resume') : t('Play')),
-              onPressed: () {
-                Navigator.pop(ctx);
-                onPlay();
-              },
-            ),
-          ),
-          const SizedBox(height: 12),
-          // The list carries the short text; the shownotes come with the item itself.
-          FutureBuilder<dynamic>(
-            future: api.call('GET', '/items/${Uri.encodeComponent(e.key)}').catchError((_) => null),
-            builder: (ctx, s) {
-              final notes = s.data is Map ? (s.data as Map)['notes'] as String? : null;
-              if ((notes ?? '').isNotEmpty) return NotesView(notes!);
-              return SelectableText((e.description ?? '').isEmpty ? t('No description.') : e.description!, style: const TextStyle(fontSize: 15, height: 1.45));
-            },
-          ),
-        ]),
-      ),
-    );
 
 class AddPodcastDialog extends StatefulWidget {
   const AddPodcastDialog({super.key});
@@ -313,13 +269,13 @@ class BrowseView extends StatefulWidget {
 }
 
 class _BrowseViewState extends State<BrowseView> {
-  final stack = <({int source, String? parent, String title})>[];
+  final stack = <({int source, String? parent, String title, Item? album})>[];
 
   Future<List<Item>> _load() async {
     if (stack.isEmpty) {
       final sources = (await api.call('GET', '/sources') as List).cast<Map>().where((s) => widget.kinds.contains(s['kind'])).toList();
       if (sources.isEmpty) return [];
-      stack.add((source: sources.first['id'] as int, parent: null, title: sources.first['name'] as String));
+      stack.add((source: sources.first['id'] as int, parent: null, title: sources.first['name'] as String, album: null));
     }
     final cur = stack.last;
     final res = await api.call('GET', '/sources/${cur.source}/browse',
@@ -327,7 +283,7 @@ class _BrowseViewState extends State<BrowseView> {
     final items = itemsOf(res['items']);
     // A single library: show its content directly.
     if (cur.parent == null && items.length == 1 && items.first.kind == 'folder') {
-      stack.add((source: cur.source, parent: items.first.key.split(':')[2], title: items.first.title));
+      stack.add((source: cur.source, parent: items.first.key.split(':')[2], title: items.first.title, album: null));
       return _load();
     }
     return items;
@@ -342,14 +298,24 @@ class _BrowseViewState extends State<BrowseView> {
           final tracks = items.where((i) => i.kind == 'track').toList();
           final positions = Stores.positions.data;
           return ListView(padding: const EdgeInsets.all(12), children: [
-            Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-              if (stack.length > 1) ActionChip(label: Text('← ${t('Back')}'), onPressed: () => setState(stack.removeLast)),
-              Text(stack.last.title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-              if (tracks.isNotEmpty) ...[
-                FilledButton(onPressed: () => startPlayback(context, tracks, 0, widget.onPlay), child: Text(t('Play all'))),
-                saveOfflineButton(tracks.first, tracks),
-              ],
-            ]),
+            if (stack.last.album != null) ...[
+              Align(alignment: Alignment.centerLeft, child: ActionChip(label: Text('← ${t('Back')}'), onPressed: () => setState(stack.removeLast))),
+              const SizedBox(height: 10),
+              AlbumHeader(album: stack.last.album!, tracks: tracks, actions: [
+                if (tracks.isNotEmpty) ...[
+                  FilledButton.icon(icon: const Icon(Icons.play_arrow), onPressed: () => startPlayback(context, tracks, 0, widget.onPlay), label: Text(t('Play album'))),
+                  saveOfflineButton(tracks.first, tracks),
+                ],
+              ]),
+            ] else
+              Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                if (stack.length > 1) ActionChip(label: Text('← ${t('Back')}'), onPressed: () => setState(stack.removeLast)),
+                Text(stack.last.title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                if (tracks.isNotEmpty) ...[
+                  FilledButton(onPressed: () => startPlayback(context, tracks, 0, widget.onPlay), child: Text(t('Play all'))),
+                  saveOfflineButton(tracks.first, tracks),
+                ],
+              ]),
             const SizedBox(height: 10),
             for (final it in items)
               if (it.kind == 'folder' || it.kind == 'album' || it.kind == 'artist')
@@ -357,7 +323,8 @@ class _BrowseViewState extends State<BrowseView> {
                   leading: CoverThumb(image: it.image, label: it.title),
                   title: it.title,
                   subtitle: [it.subtitle, if (it.year != null) '${it.year}'].where((s) => s.isNotEmpty).join(' · '),
-                  onTap: () => setState(() => stack.add((source: stack.last.source, parent: it.key.split(':')[2], title: it.title))),
+                  onTap: () => setState(() => stack.add(
+                      (source: stack.last.source, parent: it.key.split(':')[2], title: it.title, album: it.kind == 'album' ? it : null))),
                 )
               else
                 ItemRow(
@@ -368,7 +335,11 @@ class _BrowseViewState extends State<BrowseView> {
                     final p = positions[it.key];
                     return p != null && it.durationMs != null && p['finished'] != true ? (p['position_ms'] as int) / it.durationMs! : null;
                   }(),
-                  onTap: it.kind == 'track' ? () => startPlayback(context, tracks, tracks.indexOf(it), widget.onPlay) : null,
+                  // Titles play at a tap (the album page is the place to look first); books open their details.
+                  onTap: it.kind == 'track'
+                      ? () => startPlayback(context, tracks, tracks.indexOf(it), widget.onPlay)
+                      : () => openDetails(context, it, widget.onPlay),
+                  onLongPress: () => openDetails(context, it, widget.onPlay),
                   trailing: [
                     if (it.quality?.badge.isNotEmpty == true) Badge2(it.quality!.badge),
                     saveOfflineButton(it),

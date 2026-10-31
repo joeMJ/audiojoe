@@ -217,6 +217,8 @@ pub async fn item(state: &AppState, abs: &Abs, id: &str) -> ApiResult<(Value, Ve
         "description": crate::podcasts::plain_text(meta["description"].as_str().unwrap_or("")),
         "notes": crate::notes::html(meta["description"].as_str().unwrap_or("")),
         "published": meta["publishedYear"].as_str(),
+        "genres": meta["genres"].as_array().map(|g| g.iter().filter_map(|x| x.as_str()).take(4).collect::<Vec<_>>()).unwrap_or_default(),
+        "series": meta["seriesName"].as_str().filter(|s| !s.is_empty()),
         "quality": {
             "codec": first["codec"].as_str().unwrap_or("").to_lowercase(),
             "bitrate": first["bitRate"].as_i64(),

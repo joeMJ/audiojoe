@@ -121,6 +121,7 @@ fn normalize(src: i64, m: &Value) -> Value {
         "title": m["title"].as_str().unwrap_or(""),
         "subtitle": subtitle,
         "year": m["year"].as_i64(),
+        "genres": m["Genre"].as_array().map(|g| g.iter().filter_map(|x| x["tag"].as_str()).take(4).collect::<Vec<_>>()).unwrap_or_default(),
         "track": m["index"].as_i64(),
         "duration_ms": m["duration"].as_i64(),
         "image": m["thumb"].as_str().map(|_| format!("/api/v1/image/plex:{src}:{id}")),

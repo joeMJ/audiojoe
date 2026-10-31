@@ -63,6 +63,9 @@ function failure(e: unknown) {
   return h("div", { className: "empty" }, online ? `${t("Error")}: ${(e as Error).message}` : t("Server not reachable."));
 }
 
+/** Click handler of a button inside a tappable row: the row must not react as well. */
+const own = (f: (ev: Event) => void) => (ev: Event) => { ev.stopPropagation(); f(ev); };
+
 async function start(items: Item[], index = 0) {
   const meta = await player.itemMeta(items[index].key);
   const queue = items.slice();
@@ -262,6 +265,66 @@ function notesView(html: string) {
   return box;
 }
 
+// ---------------------------------------------------------------- details page
+
+/** Details of an episode, book or title in place of the list; nothing plays until a button
+ *  is pressed. "Back" re-renders the list. */
+function openDetails(base: Item) {
+  const back = view;
+  main.replaceChildren(h("div", { className: "chips" }, h("button", { className: "chip", onclick: () => show(back) }, `← ${t("Back")}`)));
+  main.scrollTop = 0;
+  const page = h("div", { className: "details page" });
+  main.append(page);
+  void (async () => {
+    let it = base;
+    try {
+      it = { ...base, ...(await api<Item>("GET", `/items/${encodeURIComponent(base.key)}`)) };
+    } catch { /* offline: what the list knew */ }
+    const pos = it.playback?.position_ms ?? it.position_ms ?? 0;
+    const finished = it.playback?.finished ?? it.finished ?? false;
+    const dur = it.duration_ms ?? 0;
+    const facts = [it.published?.slice(0, 10) || (it.year ? String(it.year) : ""), dur ? clock(dur) : "", ...(it.genres ?? []),
+      it.chapters?.length ? t("{n} chapters", { n: it.chapters.length }) : "", qualityBadge(it.quality)].filter(Boolean) as string[];
+    const off = await offlineEntry(it.key);
+    const parts: (HTMLElement | null)[] = [
+      h("div", { className: "head" }, h("div", { className: "cover" }, thumb({ title: it.subtitle || it.title, image: it.image ?? base.image })),
+        h("div", {}, h("div", { className: "title" }, it.title), h("div", { className: "sub" }, it.subtitle ?? ""),
+          it.series ? h("div", { className: "sub" }, it.series) : null,
+          h("div", { className: "facts" }, ...facts.map((f) => h("span", { className: "badge" }, f))),
+          pos > 0 && !finished && dur ? h("div", { className: "prog" }, h("i", { style: `width:${(pos / dur) * 100}%` })) : null,
+          pos > 0 && !finished && dur ? h("div", { className: "sub" }, `${clock(pos)} / ${clock(dur)}`) : null,
+          h("div", { className: "chips", style: "margin-top:12px" },
+            h("button", { className: "big", onclick: () => void start([it]) }, pos > 0 && !finished ? t("Resume") : t("Play")),
+            offBadge(off) ?? h("button", { className: "big sec", onclick: (ev: Event) => { (ev.target as HTMLButtonElement).disabled = true; void addOffline([it]); } }, t("Save offline"))))),
+      it.notes ? notesView(it.notes) : h("div", { className: "desc" }, it.description || t("No description.")),
+      it.chapters?.length ? h("h3", {}, t("Chapters")) : null,
+      it.chapters?.length ? h("div", { className: "list" }, ...it.chapters.map((c) =>
+        h("div", { className: "item" }, h("div", { className: "tx" }, h("div", { className: "t1" }, c.title)), h("span", { className: "badge" }, clock(c.start_ms))))) : null,
+      it.quality?.codec ? h("div", { className: "note" }, `${t("Format")}: ${qualityText(it.quality)}`) : null];
+    page.append(...parts.filter((x): x is HTMLElement => x !== null));
+  })();
+}
+
+/** Head of an opened album: cover, artist, year, genres, length, format, description. */
+function albumHead(album: Item, tracks: Item[], buttons: HTMLElement[]) {
+  const total = tracks.reduce((n, x) => n + (x.duration_ms ?? 0), 0);
+  const q = tracks.map((x) => qualityBadge(x.quality)).find(Boolean) ?? "";
+  const facts = h("div", { className: "facts" });
+  const desc = h("div", {});
+  const fill = (a: Item) => facts.replaceChildren(...[a.year ? String(a.year) : "", ...(a.genres ?? []), t("{n} titles", { n: tracks.length }),
+    total ? clock(total) : "", q].filter(Boolean).map((f) => h("span", { className: "badge" }, f)));
+  fill(album);
+  void api<Item>("GET", `/items/${encodeURIComponent(album.key)}`).then((a) => {
+    fill({ ...album, ...a });
+    if (a.notes) desc.replaceChildren(notesView(a.notes));
+  }).catch(() => undefined);
+  return h("div", { className: "details album" },
+    h("div", { className: "head" }, h("div", { className: "cover" }, thumb(album)),
+      h("div", {}, h("div", { className: "title" }, album.title), h("div", { className: "sub" }, album.subtitle ?? ""), facts,
+        h("div", { className: "chips", style: "margin-top:12px" }, ...buttons))),
+    desc);
+}
+
 function renderChapters(it: Item) {
   const now = player.position();
   main.append(h("div", { className: "list" }, ...(it.chapters ?? []).map((c) =>
@@ -324,12 +387,13 @@ async function renderContinue() {
     const f = p.duration_ms ? p.position_ms / p.duration_ms : 0;
     const kind = p.key.startsWith("episode:") ? "episode" : p.key.startsWith("abs:") ? "book" : "track";
     const item: Item = { key: p.key, kind, title: p.title, subtitle: p.subtitle };
-    box.append(h("div", { className: "item" }, thumb({ title: p.subtitle || p.title, image: `/api/v1/image/${encodeURIComponent(p.key)}` }),
+    const base: Item = { ...item, image: `/api/v1/image/${encodeURIComponent(p.key)}`, duration_ms: p.duration_ms, position_ms: p.position_ms };
+    box.append(h("div", { className: "item tap", onclick: () => openDetails(base) }, thumb({ title: p.subtitle || p.title, image: base.image }),
       h("div", { className: "tx" }, h("div", { className: "t1" }, p.title || p.key),
         h("div", { className: "t2" }, `${clock(p.position_ms)}${p.duration_ms ? " / " + clock(p.duration_ms) : ""} · ${p.device ? t("Last on {device} · {ago}", { device: p.device, ago: ago(p.updated_at) }) : ago(p.updated_at)}`),
         h("div", { className: "prog" }, h("i", { style: `width:${f * 100}%` }))),
       h("span", { className: off?.status === "done" ? "badge ok" : "badge warn" }, off?.status === "done" ? t("in cache") : t("online only")),
-      h("button", { className: "big", onclick: () => void start([item]) }, t("Resume"))));
+      h("button", { className: "big", onclick: own(() => void start([item])) }, t("Resume"))));
   }
   main.append(box);
 }
@@ -366,12 +430,12 @@ async function renderPodcasts() {
     for (const [i, e] of items.entries()) {
       const off = await offlineEntry(e.key);
       const f = e.position_ms && e.duration_ms ? e.position_ms / e.duration_ms : 0;
-      box.append(h("div", { className: "item" }, thumb({ title: e.subtitle, image: e.image }),
+      box.append(h("div", { className: "item tap", onclick: () => openDetails(items[i]) }, thumb({ title: e.subtitle, image: e.image }),
         h("div", { className: "tx" }, h("div", { className: "t1" }, e.title),
           h("div", { className: "t2" }, [e.subtitle, e.published?.slice(0, 10), e.duration_ms ? clock(e.duration_ms) : ""].filter(Boolean).join(" · ")),
           f ? h("div", { className: "prog" }, h("i", { style: `width:${f * 100}%` })) : null),
-        offBadge(off) ?? h("button", { className: "big sec", onclick: (ev: Event) => { (ev.target as HTMLButtonElement).disabled = true; void addOffline([e]); } }, t("Save offline")),
-        h("button", { className: "big", onclick: () => void start([items[i]]) }, f ? t("Resume") : t("Play"))));
+        offBadge(off) ?? h("button", { className: "big sec", onclick: own((ev) => { (ev.target as HTMLButtonElement).disabled = true; void addOffline([e]); }) }, t("Save offline")),
+        h("button", { className: "big", onclick: own(() => void start([items[i]])) }, f ? t("Resume") : t("Play"))));
     }
     main.append(box);
   } catch (e) {
@@ -389,7 +453,7 @@ function offBadge(off?: OfflineEntry) {
 
 // ---------------------------------------------------------------- music
 
-let libStack: { source: number; parent?: string; title: string }[] = [];
+let libStack: { source: number; parent?: string; title: string; album?: Item }[] = [];
 
 async function renderMusic() {
   try {
@@ -408,15 +472,15 @@ async function renderMusic() {
     if (cur.source === RADIO) return renderRadio();
     const head = h("div", { className: "chips" });
     head.append(h("button", { className: "chip", onclick: () => (libStack.pop(), show("lib")) }, `← ${t("Back")}`));
-    head.append(h("h2", { style: "margin:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis" }, cur.title));
+    if (!cur.album) head.append(h("h2", { style: "margin:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis" }, cur.title));
     main.append(head);
     const q = cur.parent ? `?parent=${encodeURIComponent(cur.parent)}&limit=300` : "";
     const res = await api<{ items: Item[] }>("GET", `/sources/${cur.source}/browse${q}`);
     const tracks = res.items.filter((i) => i.kind === "track");
-    if (tracks.length) {
-      head.append(h("button", { className: "big", onclick: () => void start(tracks, 0) }, t("Play all")),
-        h("button", { className: "big sec", onclick: (ev: Event) => { (ev.target as HTMLButtonElement).disabled = true; void addOffline(tracks); } }, t("Save offline")));
-    }
+    const buttons = tracks.length ? [h("button", { className: "big", onclick: () => void start(tracks, 0) }, cur.album ? t("Play album") : t("Play all")),
+      h("button", { className: "big sec", onclick: (ev: Event) => { (ev.target as HTMLButtonElement).disabled = true; void addOffline(tracks); } }, t("Save offline"))] : [];
+    if (cur.album) main.append(albumHead(cur.album, tracks, buttons));
+    else head.append(...buttons);
     const box = h("div", { className: "list" });
     for (const it of res.items) {
       if (it.kind === "track") {
@@ -428,7 +492,7 @@ async function renderMusic() {
           offBadge(off), h("span", { className: "badge" }, qualityBadge(it.quality))));
       } else {
         const id = it.key.split(":")[2];
-        box.append(h("div", { className: "item tap", onclick: () => (libStack.push({ source: cur.source, parent: id, title: it.title }), show("lib")) },
+        box.append(h("div", { className: "item tap", onclick: () => (libStack.push({ source: cur.source, parent: id, title: it.title, album: it.kind === "album" ? it : undefined }), show("lib")) },
           thumb(it), h("div", { className: "tx" }, h("div", { className: "t1" }, it.title),
             h("div", { className: "t2" }, [it.subtitle, it.year].filter(Boolean).join(" · ")))));
       }
@@ -519,12 +583,12 @@ async function renderBooks() {
       const p = positions.get(it.key);
       const f = p && it.duration_ms && !p.finished ? p.position_ms / it.duration_ms : 0;
       const off = await offlineEntry(it.key);
-      box.append(h("div", { className: "item" }, thumb(it),
+      box.append(h("div", { className: "item tap", onclick: () => openDetails({ ...it, position_ms: p?.position_ms }) }, thumb(it),
         h("div", { className: "tx" }, h("div", { className: "t1" }, it.title),
           h("div", { className: "t2" }, [it.subtitle, it.duration_ms ? clock(it.duration_ms) : ""].filter(Boolean).join(" · ")),
           f ? h("div", { className: "prog" }, h("i", { style: `width:${f * 100}%` })) : null),
-        offBadge(off) ?? h("button", { className: "big sec", onclick: (ev: Event) => { (ev.target as HTMLButtonElement).disabled = true; void addOffline([it]); } }, t("Save offline")),
-        h("button", { className: "big", onclick: () => void start([it]) }, f ? t("Resume") : t("Play"))));
+        offBadge(off) ?? h("button", { className: "big sec", onclick: own((ev) => { (ev.target as HTMLButtonElement).disabled = true; void addOffline([it]); }) }, t("Save offline")),
+        h("button", { className: "big", onclick: own(() => void start([it])) }, f ? t("Resume") : t("Play"))));
     }
     main.append(box);
   } catch (e) {

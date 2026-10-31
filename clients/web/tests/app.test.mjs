@@ -132,6 +132,19 @@ try {
   await waitText(ep.title.slice(0, 20));
   const rowSizes = await page.evaluate(() => [...document.querySelectorAll("main .item .big, main .item .badge.slot")].map((e) => e.offsetHeight));
   check("list buttons and offline state equally tall", rowSizes.length > 1 && new Set(rowSizes).size === 1, [...new Set(rowSizes)].join(", "));
+  // Tapping the row (not a button) opens the details; nothing plays.
+  await page.evaluate((title) => [...document.querySelectorAll("main .item")].find((r) => r.innerText.includes(title)).querySelector(".tx").click(), ep.title);
+  await page.waitForSelector(".details.page .title", { timeout: 15000 });
+  await sleep(1500);
+  const det = await page.evaluate(() => ({ title: document.querySelector(".details.page .title")?.innerText,
+    notes: document.querySelector(".details.page .notes, .details.page .desc")?.innerText.length ?? 0,
+    buttons: [...document.querySelectorAll(".details.page .big")].map((b) => b.innerText),
+    playing: [...document.querySelectorAll("audio")].some((a) => !a.paused) }));
+  await shot("03b-details-folge");
+  check("row tap opens details without playing", det.title?.length > 3 && det.notes > 40 && det.buttons.some((b) => /Abspielen|Weiter/.test(b)) && !det.playing,
+    `${det.notes} chars, buttons ${det.buttons.join("/")}, playing ${det.playing}`);
+  await clickText(`← Zurück`);
+  await waitText(ep.title.slice(0, 20));
   await page.evaluate((title) => {
     const row = [...document.querySelectorAll("main .item")].find((r) => r.innerText.includes(title));
     [...row.querySelectorAll("button")].find((b) => ["Abspielen", "Weiter"].includes(b.innerText)).click();

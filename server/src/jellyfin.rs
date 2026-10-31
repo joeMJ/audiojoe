@@ -143,6 +143,7 @@ fn normalize(prefix: &str, source: i64, v: &Value) -> Value {
         "title": v["Name"].as_str().unwrap_or(""),
         "subtitle": subtitle,
         "year": v["ProductionYear"].as_i64(),
+        "genres": v["Genres"].as_array().map(|g| g.iter().filter_map(|x| x.as_str()).take(4).collect::<Vec<_>>()).unwrap_or_default(),
         "track": v["IndexNumber"].as_i64(),
         "disc": v["ParentIndexNumber"].as_i64(),
         "duration_ms": v["RunTimeTicks"].as_i64().map(|t| t / 10_000),

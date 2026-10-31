@@ -76,6 +76,12 @@ h2 { margin: 0 0 10px; font-size: 21px; }
 .details .head { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 14px; }
 .details .head .ic { width: 110px; height: 110px; border-radius: 14px; }
 .details .facts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.details .cover .ic { width: 200px; height: 200px; border-radius: 16px; font-size: 40px; }
+.details.page .prog, .details .head .prog { margin-top: 12px; }
+.details h3 { margin: 18px 0 8px; }
+.details.album { margin-bottom: 12px; }
+.details.album .notes { margin-top: 4px; }
+@media (max-width: 560px) { .details .head:has(.cover) { flex-direction: column; } }
 .desc { font-size: 18px; line-height: 1.5; white-space: pre-line; user-select: text; }
 .notes { font-size: 18px; line-height: 1.5; user-select: text; overflow-wrap: anywhere; }
 .notes p, .notes ul, .notes ol, .notes blockquote { margin: 0 0 12px; }

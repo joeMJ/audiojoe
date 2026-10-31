@@ -14,7 +14,6 @@ const deStrings = <String, String>{
   "Back {n} s": "{n} s zurück",
   "Cancel": "Abbrechen",
   "Chapters": "Kapitel",
-  "Close": "Schließen",
   "Code from the authenticator app": "Code aus der Authenticator-App",
   "Continue": "Weiter­hören",
   "Description": "Beschreibung",
@@ -61,6 +60,7 @@ const deStrings = <String, String>{
   "Password": "Kennwort",
   "Pause": "Pause",
   "Play": "Abspielen",
+  "Play album": "Album abspielen",
   "Play all": "Alle abspielen",
   "Play here": "Hier abspielen",
   "Playback": "Wiedergabe",
@@ -127,5 +127,6 @@ const deStrings = <String, String>{
   "{n} h ago": "vor {n} Std.",
   "{n} min": "{n} min",
   "{n} min ago": "vor {n} Min.",
+  "{n} titles": "{n} Titel",
   "{n} waiting to sync": "{n} warten auf Abgleich",
 };
