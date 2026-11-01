@@ -265,8 +265,8 @@ try {
   const fits = await page.evaluate(() => document.querySelector("main").scrollHeight <= document.querySelector("main").clientHeight + 2);
   check("player fits the car screen without scrolling", fits);
   const dock = await page.evaluate(() => {
-    const m = document.querySelector("main").getBoundingClientRect(), d = document.querySelector(".dockbar").getBoundingClientRect();
-    return Math.round(m.bottom - d.bottom);
+    const m = document.querySelector("main").getBoundingClientRect(), d = document.querySelector(".dockbar").getBoundingClientRect(), tb = document.querySelector("main > .tools").getBoundingClientRect();
+    return Math.round(m.bottom - Math.max(d.bottom, tb.bottom));
   });
   check("progress, controls and toolbar docked at the bottom", dock >= 0 && dock <= 30, `${dock} px above the bottom`);
   const coverBox = await page.evaluate(() => {
@@ -274,8 +274,11 @@ try {
     return { whole: c.top >= m.top && c.bottom <= m.bottom && c.height >= 190, h: Math.round(c.height), below: Math.round(m.bottom - c.bottom) };
   });
   check("cover fully visible next to the controls", coverBox.whole, JSON.stringify(coverBox));
-  const last = await page.evaluate(() => document.querySelector(".dockbar").lastElementChild?.className);
-  check("toolbar is the last row, „Taken over from …“ not below it", last === "tools", last);
+  const tbRow = await page.evaluate(() => {
+    const m = document.querySelector("main"), d = document.querySelector(".dockbar").getBoundingClientRect(), tb = document.querySelector("main > .tools").getBoundingClientRect();
+    return { last: m.lastElementChild?.className, below: tb.top >= d.bottom - 1 };
+  });
+  check("toolbar is the last row below the controls, „Taken over from …“ not below it", tbRow.last === "tools" && tbRow.below, JSON.stringify(tbRow));
   const cut = await page.evaluate(() => [...document.querySelectorAll(".tools button")].filter((b) => b.scrollWidth > b.clientWidth + 1).map((b) => b.innerText));
   check("toolbar labels not cut off", !cut.length, cut.join(", "));
   // With chapters the right button goes to the next chapter.
@@ -287,6 +290,32 @@ try {
     tb.length === 3 && /Cache|Offline|lädt|wartet/.test(tb[0].t) && /Tempo/.test(tb[1].t) && /Nächster Podcast/.test(tb[2].t) && !tb.some((x) => /Schlaf/.test(x.t)),
     tb.map((x) => x.t).join(" | "));
   check("offline state fills its field", tb[0].inner >= tb[0].w - 2 && Math.abs(tb[0].w - tb[1].w) <= 2, `${tb[0].inner}/${tb[0].w} vs ${tb[1].w}`);
+  // Narrow screen (other cars): under 420 px right of the cover the three buttons stack under the
+  // cover in the left column, the cover stays at the top; 800 × 480 still uses the wide layout.
+  const layout = () => page.evaluate(() => {
+    const r = (q) => document.querySelector(q).getBoundingClientRect();
+    const m = r("main"), chips = r("main > .chips"), c = r("main > .cover"), d = r(".dockbar"), tb = r("main > .tools");
+    const btn = [...document.querySelectorAll("main > .tools > *")].map((b) => b.getBoundingClientRect());
+    const stacked = btn.every((b, i) => !i || b.top >= btn[i - 1].bottom - 1);
+    const cut = [...document.querySelectorAll(".tools button")].filter((b) => b.scrollWidth > b.clientWidth + 1).map((b) => b.innerText);
+    const main = document.querySelector("main");
+    const cs = getComputedStyle(document.querySelector("main > .tools")), ms = getComputedStyle(main);
+    return { area: cs.gridArea, dir: cs.flexDirection, mainAreas: ms.gridTemplateAreas, cols: ms.gridTemplateColumns, tb: [Math.round(tb.left), Math.round(tb.top), Math.round(tb.width)], cover: [Math.round(c.left), Math.round(c.bottom)], n: document.querySelectorAll("main > .tools, main > .cover").length, coverTop: Math.round(c.top - chips.bottom), coverH: Math.round(c.height), underCover: tb.top >= c.bottom - 1 && Math.abs(tb.left - c.left) <= 1 && tb.width <= c.width + 1,
+      belowDock: tb.top >= d.bottom - 1, stacked, cut, fits: main.scrollHeight <= main.clientHeight + 2, dock: Math.round(m.bottom - Math.max(d.bottom, tb.bottom)), minBtn: Math.min(...btn.map((b) => Math.min(b.width, b.height))) };
+  });
+  await page.setViewport({ width: 700, height: 480, deviceScaleFactor: 1 });
+  await sleep(500);
+  await shot("04c-eng-700x480");
+  let L = await layout();
+  check("700 × 480: cover at the top, buttons stacked under the cover", L.coverTop <= 12 && L.underCover && L.stacked, JSON.stringify(L));
+  check("700 × 480: buttons ≥ 64 px, labels not cut, fits without scrolling, controls docked", L.minBtn >= 64 && !L.cut.length && L.fits && L.dock <= 30, JSON.stringify(L));
+  await page.setViewport({ width: 800, height: 480, deviceScaleFactor: 1 });
+  await sleep(500);
+  await shot("04d-800x480");
+  L = await layout();
+  check("800 × 480: wide layout (toolbar below the controls), cover whole, fits without scrolling", L.belowDock && !L.underCover && L.coverH >= 190 && L.fits && !L.cut.length, JSON.stringify(L));
+  await page.setViewport({ width: 773, height: 601, deviceScaleFactor: 1.53 });
+  await sleep(500);
   await clickText("Details");
   const notes = await page.evaluate(() => {
     const n = document.querySelector(".notes");

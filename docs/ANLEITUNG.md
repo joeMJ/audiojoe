@@ -94,7 +94,9 @@ dem Hören auf.
 Der Web-Player ist für den Browser im Auto gebaut (große Knöpfe, Bedienung unten angedockt). Statt
 des Schlaf-Timers gibt es **Nächster Podcast** bzw. **Nächstes Album**: Die laufende Folge gilt als
 gehört (das Album verlässt die Liste), und der nächste Eintrag aus **Weiterhören** startet. Bei
-Hörbüchern fehlt der Knopf. Links in den Shownotes stehen nur als Text.
+Hörbüchern fehlt der Knopf. Auf schmaleren Bildschirmen als dem des Tesla (weniger als 420 px
+rechts vom Cover) stehen die drei Knöpfe untereinander unter dem Cover, die Bedienknöpfe bleiben
+rechts unten. Links in den Shownotes stehen nur als Text.
 
 <p align="center">
   <img src="screenshots/web-player.webp" alt="Web-Player im Format des Auto-Bildschirms" width="580">

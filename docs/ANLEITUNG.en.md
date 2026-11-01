@@ -91,7 +91,9 @@ media from the cache** tidies up after listening.
 The web player is built for the in-car browser (large buttons, controls docked at the bottom).
 Instead of the sleep timer it has **Next podcast** or **Next album**: the episode counts as heard
 (the album leaves the list) and the next entry of **Continue** starts. Audiobooks have no such
-button. Links in show notes are shown as text only.
+button. On screens narrower than the Tesla's (less than 420 px right of the cover) the three
+buttons stack under the cover; the controls stay at the bottom right. Links in show notes are
+shown as text only.
 
 <p align="center">
   <img src="screenshots/web-player.webp" alt="Web player in the size of the car screen" width="580">

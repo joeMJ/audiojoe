@@ -360,7 +360,7 @@ function renderNowPlaying() {
   const title = h("div", { className: "title" });
   flow(title, it.title);
   // The cover stands left at full size; facts (with "Taken over from …") scroll on the right
-  // when space is short; progress, controls and toolbar are docked at the bottom right.
+  // when space is short; progress, controls and toolbar are docked at the bottom right (see app.css).
   main.classList.add("dock");
   main.append(
     cover,
@@ -377,8 +377,9 @@ function renderNowPlaying() {
         player.isLive() ? null : h("button", { className: "skip", onclick: () => player.seekBy(-15000), ariaLabel: t("Back {n} s", { n: 15 }) }, skipIcon(15, true)),
         play,
         player.isLive() ? null : h("button", { className: "skip", onclick: () => player.seekBy(30000), ariaLabel: t("Forward {n} s", { n: 30 }) }, skipIcon(30, false)),
-        player.canStep() ? h("button", { onclick: () => void player.stepForward(), ariaLabel: byChapter ? t("Next chapter") : t("Next") }, icon('<path d="M18 5v14M6 6l9 6-9 6z" fill="currentColor"/>')) : null),
-      player.isLive() ? null : tools),
+        player.canStep() ? h("button", { onclick: () => void player.stepForward(), ariaLabel: byChapter ? t("Next chapter") : t("Next") }, icon('<path d="M18 5v14M6 6l9 6-9 6z" fill="currentColor"/>')) : null)),
+    // The toolbar is its own grid cell: below the controls, or under the cover when space is short.
+    ...(player.isLive() ? [] : [tools]),
   );
   npRefs = { bar, fill, knob, pos, rest, play, from, rate, here, sub, next, off, title };
   updateNowPlaying();
