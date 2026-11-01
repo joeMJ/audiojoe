@@ -153,8 +153,11 @@ Future<bool> Function(List<String> cmd) runCommand = (cmd) async {
 };
 
 /// Starts a command without waiting, then ends the app. Replaceable in tests.
+/// Windows: `detached` creates the child with DETACHED_PROCESS, and powershell.exe then does
+/// nothing (tested in the VM 2026-11-01); `normal` uses CREATE_NO_WINDOW (Dart SDK
+/// runtime/bin/process_win.cc) and the child keeps running after the app has ended.
 Future<void> Function(List<String> cmd) startAndQuit = (cmd) async {
-  await Process.start(cmd.first, cmd.sublist(1), mode: ProcessStartMode.detached);
+  await Process.start(cmd.first, cmd.sublist(1), mode: Platform.isWindows ? ProcessStartMode.normal : ProcessStartMode.detached);
   exit(0);
 };
 
