@@ -209,7 +209,7 @@ async function load(it: Item, autoplay: boolean, cue = false, fromStart = false)
   state.delivered = cached ? off?.delivered ?? it.quality : it.quality;
   state.transcoded = cached ? !!off?.transcoded : false;
   const start = it.kind === "radio" || fromStart ? { ms: 0 } : await startPosition(it);
-  state.takenOver = start.from ? { device: start.from.device, at: start.from.updated_at } : undefined;
+  takeOver(start.from ? { device: start.from.device, at: start.from.updated_at } : undefined);
   mediaSession(it);
   void dropPlayed();
   if (cue) {
@@ -302,6 +302,16 @@ export async function skip(d: 1 | -1) {
   await load(state.queue[i], true, false, true);
 }
 
+/** "Next podcast" / "Next album": the item counts as heard (an album leaves its list) and the
+ *  next entry of the same continue list plays. */
+export async function finishAndNext() {
+  const after = state.entry && nextAfter ? await nextAfter(state.entry).catch(() => null) : null;
+  if (!after) return;
+  await persist(true);
+  void dropPlayed();
+  await after();
+}
+
 async function persist(finished = false) {
   const it = state.item;
   // Live radio has no position to continue from.
@@ -375,10 +385,18 @@ audio.addEventListener("timeupdate", () => {
 audio.addEventListener("error", () => notify());
 document.addEventListener("visibilitychange", () => document.hidden && void persist());
 
+/** "Taken over from …" is shown for a few seconds only (as in the app). */
+let takenOverTimer: ReturnType<typeof setTimeout> | undefined;
+function takeOver(v: PlayerState["takenOver"]) {
+  state.takenOver = v;
+  clearTimeout(takenOverTimer);
+  if (v) takenOverTimer = setTimeout(() => ((state.takenOver = undefined), notify()), 8000);
+}
+
 // Another device moved on: follow it while this device is not playing the item.
 onRemote((p) => {
   if (!p.key || !state.item || p.key !== state.item.key || state.playing || p.device === myDevice) return;
-  state.takenOver = { device: p.device, at: p.updated_at };
+  takeOver({ device: p.device, at: p.updated_at });
   if (!audio.src) {
     cuedMs = p.position_ms;
     notify();

@@ -20,6 +20,7 @@ function totp(secret, t = Date.now() / 1000) {
   const o = h[h.length - 1] & 15;
   return String((h.readUInt32BE(o) & 0x7fffffff) % 1e6).padStart(6, "0");
 }
+const QUEUE = "aj_queue";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failed = 0;
 const check = (name, cond, detail = "") => {
@@ -37,7 +38,7 @@ const waitText = (s, timeout = 30000) => page.waitForFunction((x) => document.bo
 const nav = (l) => page.evaluate((l) => [...document.querySelectorAll("nav button")].find((b) => b.innerText.replace(/­/g, "").includes(l)).click(), l);
 const title = () => page.evaluate(() => document.querySelector(".np .title .txt")?.innerText);
 const ctrl = () => page.evaluate(() => ({ steps: document.querySelectorAll(".ctrl button:not(.skip):not(.play)").length,
-  next: !document.querySelector(".tools .next")?.disabled }));
+  next: !!document.querySelector(".tools .next") }));
 try {
   await page.goto(base, { waitUntil: "networkidle0" });
   await sleep((30 - (Date.now() / 1000) % 30 + 1) * 1000);
@@ -69,7 +70,7 @@ try {
   await page.waitForSelector(".np .title", { timeout: 20000 });
   await sleep(1000);
   const c = await ctrl();
-  check("after a reload: same title, ⏮ ⏭ and „Nächster“ still there", (await title()) === first && c.steps === 2 && c.next, `${await title()}, ${JSON.stringify(c)}`);
+  check("after a reload: same title, ⏮ ⏭ and „Nächstes Album“ still there", (await title()) === first && c.steps === 2 && c.next, `${await title()}, ${JSON.stringify(c)}`);
   await page.evaluate(() => document.querySelectorAll(".ctrl button:not(.skip):not(.play)")[1].click());
   await sleep(3000);
   const second = await title();
@@ -108,6 +109,23 @@ try {
     steps: document.querySelectorAll(".ctrl button:not(.skip):not(.play)").length }));
   check("another device taking over gets the album with ⏮ ⏭", taken.title === second && taken.steps === 2, JSON.stringify(taken));
   await other.close();
+
+  // A title that plays to its end: the next one follows (not several later), and the server keeps
+  // the finished title as heard – a stored end position made titles end at once and be skipped.
+  await page.evaluate(() => document.querySelector(".ctrl .play").click());
+  await sleep(2500);
+  const before = await page.evaluate((q) => JSON.parse(localStorage.getItem(q)), QUEUE);
+  const bar = await page.$(".bar");
+  const box = await bar.boundingBox();
+  await page.mouse.click(box.x + box.width - 1, box.y + box.height / 2);
+  await page.waitForFunction((t) => document.querySelector(".np .title .txt")?.innerText !== t, { timeout: 30000, polling: 250 }, second);
+  await sleep(4000);
+  const after = await page.evaluate((q) => JSON.parse(localStorage.getItem(q)), QUEUE);
+  const heard = await page.evaluate(async (k) => (await (await fetch(`/api/v1/playback/${encodeURIComponent(k)}`)).json()), before.queue[before.index].key);
+  check("at the end of a title the next one plays, none skipped", after.index === before.index + 1 && (await title()) !== second,
+    `index ${before.index} → ${after.index}, ${await title()}`);
+  check("the title that ended is saved as heard", heard.finished === true, JSON.stringify({ finished: heard.finished, position: heard.position_ms, duration: heard.duration_ms }));
+  await page.evaluate(() => document.querySelector(".ctrl .play")?.innerText === "❚❚" && document.querySelector(".ctrl .play").click());
 } catch (e) {
   check(`aborted: ${e.message}`, false);
 }

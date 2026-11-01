@@ -391,7 +391,21 @@ Die Desktop-App spielt über [media_kit](https://github.com/media-kit/media-kit)
 - **Windows:** `media_kit_libs_windows_audio` lädt beim Bauen eine auf Ton beschränkte Fassung von
   libmpv und FFmpeg (`mpv-dev-x86_64-20230924-git-652a1dd`, aus
   [media-kit/libmpv-win32-audio-build](https://github.com/media-kit/libmpv-win32-audio-build)).
-  Die Lizenz dieser Fassung wird mit dem ersten Windows-Paket geprüft und hier nachgetragen.
+  Das Windows-Paket liefert daraus `libmpv-2.dll` mit; die App lädt sie dynamisch.
+  - **Lizenz der DLL: LGPL-3.0-or-later.** mpv ist mit `-Dgpl=false` gebaut (LGPL-2.1-or-later),
+    FFmpeg mit `--disable-gpl --disable-nonfree --enable-version3` (LGPL-3.0-or-later) und statisch
+    in die DLL gelinkt; damit gilt für die DLL als Ganzes LGPL-3.0-or-later. Belegt durch
+    `packages/mpv.cmake` und `packages/ffmpeg.cmake` des Bau-Repositorys.
+  - **Mitgebaute Bibliotheken** (laut denselben Dateien): unter LGPL fribidi, libplacebo,
+    openal-soft, LAME, libsoxr; uchardet (MPL-1.1, GPL-2.0 oder LGPL-2.1 nach Wahl); unter
+    freizügigen Lizenzen libass und mujs (ISC), harfbuzz, lcms2, libxml2, libvpl (MIT), libarchive,
+    libwebp, libmysofa, Opus, Speex, Vorbis (BSD), libjpeg (IJG), libpng (libpng), bzip2 (bzip2),
+    zimg (WTFPL), mbedtls (Apache-2.0). Keine Bibliothek, die nur unter GPL steht.
+  - **Quelltext:** die Bauanleitung im Repository
+    [media-kit/libmpv-win32-audio-build](https://github.com/media-kit/libmpv-win32-audio-build)
+    (Release `2023-09-24`) mit den Quellen von [mpv](https://github.com/mpv-player/mpv) und
+    [FFmpeg](https://github.com/FFmpeg/FFmpeg) (Stand `ea3d24bbe3c5`). Die LGPL erlaubt, die DLL
+    durch eine eigene Fassung zu ersetzen; sie liegt neben `audiojoe.exe` im Programmordner.
 
 ## Web-App
 

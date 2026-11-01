@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 User=audiojoe
 Group=audiojoe
-ExecStart=/usr/local/bin/audiojoe-server --config /etc/audiojoe/config.toml
+ExecStart=/usr/bin/audiojoe-server --config /etc/audiojoe/config.toml
 Restart=on-failure
 TimeoutStopSec=10
 StateDirectory=audiojoe

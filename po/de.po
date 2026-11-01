@@ -603,3 +603,75 @@ msgstr "{range} durchsuchen"
 
 msgid "{n} speakers found"
 msgstr "{n} Lautsprecher gefunden"
+
+msgid "Next podcast"
+msgstr "Nächster Podcast"
+
+msgid "Next album"
+msgstr "Nächstes Album"
+
+msgid "Maintenance"
+msgstr "Pflege"
+
+msgid "Version {v} is available."
+msgstr "Version {v} ist verfügbar."
+
+msgid "Updated from {from} to {to} {ago}."
+msgstr "Von {from} auf {to} aktualisiert, {ago}."
+
+msgid "Version {v} did not start; the server went back to {from}."
+msgstr "Version {v} startete nicht; der Server ist zurück auf {from}."
+
+msgid "Last update failed: {msg}"
+msgstr "Letzte Aktualisierung gescheitert: {msg}"
+
+msgid "Up to date."
+msgstr "Aktuell."
+
+msgid "Server {v}. Updates are not managed here (server not installed from the package, see the installation guide)."
+msgstr "Server {v}. Aktualisierungen werden hier nicht verwaltet (Server nicht aus dem Paket installiert, siehe Installationsanleitung)."
+
+msgid "Checked {ago}."
+msgstr "Geprüft {ago}."
+
+msgid "Update at 04:00"
+msgstr "Um 04:00 aktualisieren"
+
+msgid "Only report"
+msgstr "Nur melden"
+
+msgid "Update requested"
+msgstr "Aktualisierung angefordert"
+
+msgid "Update now"
+msgstr "Jetzt aktualisieren"
+
+msgid "Update started; the server restarts briefly."
+msgstr "Aktualisierung gestartet; der Server startet kurz neu."
+
+msgid "Debian updates"
+msgstr "Debian-Aktualisierungen"
+
+msgid "Installed automatically every day; unused packages are removed."
+msgstr "Werden täglich automatisch eingespielt; nicht mehr benötigte Pakete werden entfernt."
+
+msgid "Not set up for automatic installation."
+msgstr "Nicht für automatisches Einspielen eingerichtet."
+
+msgid "Last run {ago}."
+msgstr "Zuletzt {ago}."
+
+msgid "Last updated: {pkgs}."
+msgstr "Zuletzt aktualisiert: {pkgs}."
+
+msgid "{n} updates waiting."
+msgstr "{n} Aktualisierungen stehen aus."
+
+msgid "Database backups"
+msgstr "Datenbanksicherungen"
+
+msgid "None yet; one is made before every server update."
+msgstr "Noch keine; vor jeder Server-Aktualisierung wird eine angelegt."
+
+msgid "{n} kept (before every server update), latest {ago}."
+msgstr "{n} aufbewahrt (vor jeder Server-Aktualisierung), neueste {ago}."

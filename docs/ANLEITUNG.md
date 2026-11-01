@@ -92,13 +92,14 @@ dem Hören auf.
 ## Im Auto (Web-Player)
 
 Der Web-Player ist für den Browser im Auto gebaut (große Knöpfe, Bedienung unten angedockt). Statt
-des Schlaf-Timers gibt es **Nächstes Kapitel** bzw. **Nächster**. Links in den Shownotes stehen nur
-als Text.
+des Schlaf-Timers gibt es **Nächster Podcast** bzw. **Nächstes Album**: Die laufende Folge gilt als
+gehört (das Album verlässt die Liste), und der nächste Eintrag aus **Weiterhören** startet. Bei
+Hörbüchern fehlt der Knopf. Links in den Shownotes stehen nur als Text.
 
 <p align="center">
   <img src="screenshots/web-player.webp" alt="Web-Player im Format des Auto-Bildschirms" width="580">
   <br>
-  <em>Web-Player im Format des Tesla-Bildschirms: Folge mit Kapiteln, übernommen vom Telefon</em>
+  <em>Web-Player im Format des Tesla-Bildschirms: Folge mit Kapiteln, eben vom Telefon übernommen (der Hinweis steht nur kurz da)</em>
   <br><br>
   <img src="screenshots/web-radio.webp" alt="Web-Player: Radio-Favoriten" width="580">
   <br>
@@ -107,7 +108,8 @@ als Text.
 
 ## Einstellungen
 
-Quellen und Bibliotheken, Musik (Albenverzeichnis, MusicBrainz), Sonos (Lautsprecher), Podcasts
+Quellen und Bibliotheken, Musik (Albenverzeichnis, MusicBrainz), Sonos (Lautsprecher), Pflege
+(Server- und Debian-Updates, Sicherungen; siehe [Installation](INSTALLATION.md#updates-und-pflege)), Podcasts
 (OPML), Geräte (angemeldete Geräte, einzeln abmelden), **Dieses Gerät abmelden** und
 **Über audiojoe** mit Version, Anleitung, Datenschutz und den Lizenzen Dritter. Im Web-Player
 stehen das Abmelden und **Über audiojoe** unten auf der Seite **Offline**. Siehe [Erste Schritte](ERSTE-SCHRITTE.md).

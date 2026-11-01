@@ -143,6 +143,17 @@ async function playEntry(list: ListName, e: ListEntry) {
   await start([{ key: e.key, kind: list === "podcasts" ? "episode" : "book", title: e.title, subtitle: e.subtitle }], 0, entry);
 }
 
+/** Whether the continue list has an entry after this one. */
+async function nextInList(entry: player.Entry) {
+  try {
+    const list = await api<ListEntry[]>("GET", `/lists/${entry.list}`);
+    const i = list.findIndex((x) => x.key === entry.key);
+    return i >= 0 && i + 1 < list.length;
+  } catch {
+    return false;
+  }
+}
+
 // At the end of an item: the next entry of the same list plays.
 player.setNextAfter(async (entry) => {
   let list: ListEntry[];
@@ -328,30 +339,37 @@ function renderNowPlaying() {
   const pos = h("span"), rest = h("span");
   const play = h("button", { className: "play", onclick: () => player.toggle() });
   const rate = h("button", { className: "big sec", onclick: () => player.nextRate() });
-  // In the car: offline state left, speed, next chapter (else next item of the queue) right (no sleep timer).
+  // In the car: offline state left, speed, and for episodes and albums "next" right: the item
+  // counts as heard and the next entry of the continue list plays (no sleep timer; audiobooks
+  // have no such button).
   const byChapter = player.hasChapters();
-  const next = h("button", { className: "big sec next", onclick: () => void (byChapter ? player.nextChapter() : player.skip(1)) }, byChapter ? t("Next chapter") : t("Next item"),
+  const next = h("button", { className: "big sec next", disabled: true, onclick: () => void player.finishAndNext() },
+    it.kind === "episode" ? t("Next podcast") : t("Next album"),
     icon('<path d="M18 5v14M6 6l9 6-9 6z" fill="currentColor"/>')) as HTMLButtonElement;
+  const entry = s.entry;
+  if (entry) void nextInList(entry).then((ok) => (next.disabled = !ok));
   const here = h("div");
   const from = h("div", { className: "from" });
   const kind = it.kind === "episode" ? `Podcast · ${it.subtitle ?? ""}` : it.subtitle ?? "";
   const sub = h("div", { className: "sub" }, it.kind === "episode" ? it.published?.slice(0, 10) ?? "" : it.kind === "book" ? "" : it.subtitle ?? "");
   const off = h("div", { className: "offtool" });
-  const tools = h("div", { className: "tools" }, off, rate, next);
+  const tools = h("div", { className: "tools" }, off, rate, it.kind === "episode" || it.kind === "track" ? next : null);
   void fillOffTool(off);
   // "(16 of 21)" after the title in a queue (an album); with chapters after the chapter name.
   // A long title (and chapter) flows, so the count stays visible.
   const title = h("div", { className: "title" });
   flow(title, it.title);
-  // Cover and facts scroll when space is short; progress, controls and toolbar stay docked at
-  // the bottom of the window.
+  // The cover stands left at full size; facts (with "Taken over from …") scroll on the right
+  // when space is short; progress, controls and toolbar are docked at the bottom right.
   main.classList.add("dock");
   main.append(
-    h("div", { className: "np" }, cover, h("div", {},
+    cover,
+    h("div", { className: "np" },
       h("div", { className: "kind" }, kind),
       title,
       sub,
-      h("div", { className: "fmt" }, here))),
+      h("div", { className: "fmt" }, here),
+      from),
     h("div", { className: "dockbar" },
       bar, h("div", { className: "times" }, pos, rest),
       h("div", { className: "ctrl" },
@@ -360,8 +378,7 @@ function renderNowPlaying() {
         play,
         player.isLive() ? null : h("button", { className: "skip", onclick: () => player.seekBy(30000), ariaLabel: t("Forward {n} s", { n: 30 }) }, skipIcon(30, false)),
         player.canStep() ? h("button", { onclick: () => void player.stepForward(), ariaLabel: byChapter ? t("Next chapter") : t("Next") }, icon('<path d="M18 5v14M6 6l9 6-9 6z" fill="currentColor"/>')) : null),
-      player.isLive() ? null : tools,
-      from),
+      player.isLive() ? null : tools),
   );
   npRefs = { bar, fill, knob, pos, rest, play, from, rate, here, sub, next, off, title };
   updateNowPlaying();
@@ -489,7 +506,6 @@ function updateNowPlaying() {
   npRefs.bar.style.visibility = player.isLive() ? "hidden" : "";
   npRefs.play.textContent = s.playing ? "❚❚" : "▶";
   npRefs.rate.textContent = `${t("Speed")} ${s.rate.toLocaleString()}×`;
-  npRefs.next.disabled = player.hasChapters() ? player.chapterIndex() + 1 >= (s.item?.chapters?.length ?? 0) && s.index + 1 >= s.queue.length : s.index + 1 >= s.queue.length;
   const here = JSON.stringify([s.delivered, s.fromCache, s.transcoded]);
   if (npRefs.here.dataset.v !== here) {
     npRefs.here.dataset.v = here;

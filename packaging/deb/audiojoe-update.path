@@ -1,0 +1,9 @@
+[Unit]
+Description=audiojoe server update requested in an app
+
+[Path]
+PathExists=/var/lib/audiojoe/update-request
+Unit=audiojoe-update-now.service
+
+[Install]
+WantedBy=paths.target

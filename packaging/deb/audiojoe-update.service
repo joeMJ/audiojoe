@@ -1,0 +1,9 @@
+[Unit]
+Description=audiojoe server update (check, database backup, install, way back on failure)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/audiojoe-update
+TimeoutStartSec=30min

@@ -1,0 +1,222 @@
+#!/usr/bin/env bash
+# audiojoe-update – keeps the audiojoe server up to date (runs as root).
+#
+#   audiojoe-update            check; install a newer version when the mode is "auto"
+#   audiojoe-update --check    only check and report
+#   audiojoe-update --now      install a newer version now (also in mode "notify")
+#
+# Started nightly at 04:00 by audiojoe-update.timer and, when someone presses "Update now" in
+# an app, by audiojoe-update.path. Source of new versions: SOURCE in /etc/audiojoe/update.conf
+# (the GitHub repository; for tests a Gitea repository with the same release layout).
+#
+# Before an update the database is backed up (/var/backups/audiojoe, the last 5 are kept).
+# If the new version does not answer within 60 seconds, the previous package and the backup
+# are put back. The result goes to /var/lib/audiojoe/update-status.json for the apps.
+set -Eeuo pipefail
+export LC_ALL=C.UTF-8 PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+CONF=/etc/audiojoe/update.conf
+STATE=/var/lib/audiojoe
+CACHE=/var/cache/audiojoe
+BACKUPS=/var/backups/audiojoe
+STATUS="$STATE/update-status.json"
+PKG=audiojoe-server
+ARCH=amd64
+
+action=auto
+case "${1:-}" in
+  "") ;;
+  --check) action=check ;;
+  --now) action=now ;;
+  *) echo "usage: audiojoe-update [--check|--now]" >&2; exit 2 ;;
+esac
+
+exec 9>/run/audiojoe-update.lock
+flock -n 9 || { echo "audiojoe-update is already running" >&2; exit 0; }
+
+# key=value lines only; the file is not executed.
+conf() { [ -r "$CONF" ] && sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$CONF" | tail -n1 | tr -d '"' || true; }
+SOURCE="$(conf SOURCE)"; SOURCE="${SOURCE:-https://api.github.com/repos/joeMJ/audiojoe}"
+TOKEN_FILE="$(conf TOKEN_FILE)"
+
+[ "$action" = now ] && rm -f "$STATE/update-request"
+mode="$(tr -d '[:space:]' < "$STATE/update-mode" 2>/dev/null || true)"
+[ "$mode" = notify ] || mode=auto
+
+installed="$(dpkg-query -W -f='${Version}' "$PKG" 2>/dev/null || echo "")"
+now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+log() { echo "$*"; }
+
+# Previous result, so that a plain check does not forget the last update.
+last_update='null'
+[ -r "$STATUS" ] && last_update="$(jq -c '.last_update // null' "$STATUS" 2>/dev/null || echo null)"
+
+debian_status() {
+  local stamp=/var/lib/apt/periodic/unattended-upgrades-stamp lg=/var/log/unattended-upgrades/unattended-upgrades.log
+  local last=null pkgs='[]' pending
+  [ -e "$stamp" ] && last="\"$(date -u -r "$stamp" +%Y-%m-%dT%H:%M:%SZ)\""
+  if [ -r "$lg" ]; then
+    pkgs="$(grep -h "Packages that will be upgraded:" "$lg" 2>/dev/null | tail -n1 \
+            | sed 's/.*upgraded: *//' | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -cs . || echo '[]')"
+  fi
+  pending="$(apt-get -s -o Debug::NoLocking=1 upgrade 2>/dev/null | grep -c '^Inst ' || true)"
+  jq -cn --argjson last "$last" --argjson pkgs "$pkgs" --argjson pending "${pending:-0}" \
+     --arg auto "$([ -e /etc/apt/apt.conf.d/52audiojoe-upgrades ] && echo yes || echo no)" \
+     '{last_run: $last, upgraded: $pkgs, pending: $pending, automatic: ($auto == "yes")}'
+}
+
+backups_status() {
+  { find "$BACKUPS" -maxdepth 1 -name '*.db' -printf '%f\t%s\t%T@\n' 2>/dev/null || true; } | sort -r \
+    | jq -R 'split("\t") | {file: .[0], bytes: (.[1] | tonumber), at: (.[2] | tonumber | floor | todate)}' | jq -cs .
+}
+
+# result: ok | available | updated | rolled_back | failed ; message: English text for the log
+write_status() {
+  local result="$1" message="$2" latest="${3:-}"
+  local tmp; tmp="$(mktemp "$STATE/.update-status.XXXXXX")"
+  installed="$(dpkg-query -W -f='${Version}' "$PKG" 2>/dev/null || echo "")"
+  jq -n --arg checked "$(now)" --arg installed "$installed" --arg latest "$latest" --arg mode "$mode" \
+        --arg result "$result" --arg message "$message" --arg source "$SOURCE" \
+        --argjson last_update "$last_update" --argjson debian "$(debian_status)" --argjson backups "$(backups_status)" \
+     '{checked_at: $checked, installed: $installed, latest: (if $latest == "" then null else $latest end),
+       mode: $mode, result: $result, message: $message, source: $source,
+       last_update: $last_update, debian: $debian, backups: $backups}' > "$tmp"
+  chmod 644 "$tmp"
+  mv -f "$tmp" "$STATUS"
+}
+
+fail() { write_status failed "$1" "${latest:-}"; log "✖ $1"; exit 1; }
+# Unexpected error: the server must not stay stopped, and the apps learn about it.
+trap 'rc=$?; trap - ERR; systemctl start audiojoe-server 2>/dev/null || true; write_status failed "unexpected error in line $LINENO" "${latest:-}" || true; log "✖ unexpected error in line $LINENO"; exit $rc' ERR
+
+api() {
+  local url="$1"
+  if [ -n "$TOKEN_FILE" ] && [ -r "$TOKEN_FILE" ]; then
+    # The token goes to curl on standard input, not on the command line.
+    printf 'Authorization: token %s\n' "$(tr -d '[:space:]' < "$TOKEN_FILE")" \
+      | curl -fsSL --max-time 60 -H @- -H 'Accept: application/json' "$url"
+  else
+    curl -fsSL --max-time 60 -H 'Accept: application/json' "$url"
+  fi
+}
+
+download() { # url file
+  if [ -n "$TOKEN_FILE" ] && [ -r "$TOKEN_FILE" ]; then
+    printf 'Authorization: token %s\n' "$(tr -d '[:space:]' < "$TOKEN_FILE")" \
+      | curl -fsSL --max-time 600 -H @- -H 'Accept: application/octet-stream' -o "$2" "$1"
+  else
+    curl -fsSL --max-time 600 -H 'Accept: application/octet-stream' -o "$2" "$1"
+  fi
+}
+
+# Fetches the package of a release (JSON on stdin) into $CACHE and checks it against SHA256SUMS.
+fetch_deb() { # version release-json
+  local version="$1" rel="$2" name="${PKG}_${1}_${ARCH}.deb" url sums
+  url="$(jq -r --arg n "$name" '.assets[] | select(.name == $n) | .browser_download_url' <<<"$rel" | head -n1)"
+  sums="$(jq -r '.assets[] | select(.name == "SHA256SUMS") | .browser_download_url' <<<"$rel" | head -n1)"
+  [ -n "$url" ] && [ -n "$sums" ] || return 1
+  mkdir -p "$CACHE"
+  download "$url" "$CACHE/$name.part" || return 1
+  download "$sums" "$CACHE/SHA256SUMS.part" || return 1
+  if ! (cd "$CACHE" && grep -E "  \*?$name\$" SHA256SUMS.part | sed "s/$name\$/$name.part/" | sha256sum -c --status); then
+    rm -f "$CACHE/$name.part" "$CACHE/SHA256SUMS.part"
+    return 1
+  fi
+  rm -f "$CACHE/SHA256SUMS.part"
+  mv -f "$CACHE/$name.part" "$CACHE/$name"
+}
+
+# A top-level setting of config.toml (before the first [section]).
+toml() { sed -n '/^[[:space:]]*\[/q; s/^[[:space:]]*'"$1"'[[:space:]]*=[[:space:]]*"\(.*\)".*/\1/p' /etc/audiojoe/config.toml 2>/dev/null | head -n1; }
+listen="$(toml listen)"
+listen="${listen/0.0.0.0/127.0.0.1}"
+healthy() { # version – the server answers with this version within 60 s
+  local i v
+  for i in $(seq 1 30); do
+    sleep 2
+    v="$(curl -fsS --max-time 3 "http://$listen/api/v1/health" 2>/dev/null | jq -r '.version // empty' 2>/dev/null || true)"
+    [ "$v" = "$1" ] && return 0
+  done
+  return 1
+}
+
+# ---------------------------------------------------------------- check
+
+latest=""
+release="$(api "$SOURCE/releases/latest")" || fail "release list not reachable: $SOURCE"
+tag="$(jq -r '.tag_name // empty' <<<"$release")"
+[ -n "$tag" ] || fail "no release found at $SOURCE"
+latest="${tag#v}"
+
+if [ -n "$installed" ] && ! dpkg --compare-versions "$latest" gt "$installed"; then
+  write_status ok "up to date" "$latest"
+  log "✔ $PKG $installed is up to date"
+  exit 0
+fi
+# A version that already failed to start is not tried again at night, only on request.
+failed_before="$(jq -r --arg v "$latest" 'select(.to == $v and .result != "updated") | .to' <<<"$last_update" 2>/dev/null || true)"
+if [ "$action" = auto ] && [ -n "$failed_before" ]; then
+  write_status "$(jq -r .result <<<"$last_update")" "version $latest did not start before; not tried again automatically" "$latest"
+  log "→ $PKG $latest failed before; not tried again (audiojoe-update --now tries it)"
+  exit 0
+fi
+if [ "$action" = check ] || { [ "$action" = auto ] && [ "$mode" = notify ]; }; then
+  write_status available "version $latest is available" "$latest"
+  log "→ $PKG $latest is available (installed: ${installed:-none}); not installed (mode $mode)"
+  exit 0
+fi
+
+# ---------------------------------------------------------------- update
+
+log "→ updating $PKG ${installed:-none} → $latest"
+fetch_deb "$latest" "$release" || fail "package $latest could not be downloaded or its checksum is wrong"
+new="$CACHE/${PKG}_${latest}_${ARCH}.deb"
+
+old=""
+if [ -n "$installed" ]; then
+  old="$CACHE/${PKG}_${installed}_${ARCH}.deb"
+  if [ ! -f "$old" ]; then
+    rel_old="$(api "$SOURCE/releases/tags/v$installed" 2>/dev/null || true)"
+    [ -n "$rel_old" ] && fetch_deb "$installed" "$rel_old" || true
+  fi
+  [ -f "$old" ] || fail "package of the installed version $installed not available, so no way back – update not started"
+fi
+
+db="$(toml database)"
+db="${db:-/var/lib/audiojoe/audiojoe.db}"
+stamp="$(date -u +%Y%m%d-%H%M%S)"
+backup="$BACKUPS/audiojoe-${installed:-new}-$stamp.db"
+install -d -m 750 "$BACKUPS"
+systemctl stop audiojoe-server
+if [ -f "$db" ]; then
+  # Stopped server: database, write-ahead log and index together are a consistent copy.
+  for ext in "" -wal -shm; do if [ -f "$db$ext" ]; then cp -a "$db$ext" "$backup$ext"; fi; done
+fi
+{ ls -1t "$BACKUPS"/audiojoe-*.db 2>/dev/null || true; } | tail -n +6 | while read -r f; do rm -f "$f" "$f-wal" "$f-shm"; done
+
+started="$(now)"
+if dpkg -i "$new" >/dev/null && systemctl restart audiojoe-server && healthy "$latest"; then
+  last_update="$(jq -cn --arg from "$installed" --arg to "$latest" --arg at "$started" --arg backup "${backup##*/}" \
+                 '{from: $from, to: $to, at: $at, result: "updated", backup: $backup}')"
+  # Keep the packages of this and the previous version (the way back for the next update).
+  { ls -1t "$CACHE"/${PKG}_*_${ARCH}.deb 2>/dev/null || true; } | { grep -v -e "_${latest}_" -e "_${installed}_" || true; } | xargs -r rm -f
+  write_status updated "updated from $installed to $latest" "$latest"
+  log "✔ $PKG $latest is running"
+  exit 0
+fi
+
+log "✖ $latest did not start; going back to $installed"
+systemctl stop audiojoe-server || true
+if [ -n "$old" ]; then
+  dpkg -i --force-downgrade "$old" >/dev/null || true
+  if [ -f "$backup" ]; then
+    for ext in "" -wal -shm; do rm -f "$db$ext"; if [ -f "$backup$ext" ]; then cp -a "$backup$ext" "$db$ext"; fi; done
+  fi
+fi
+systemctl restart audiojoe-server || true
+result=rolled_back
+healthy "$installed" || result=failed
+last_update="$(jq -cn --arg from "$installed" --arg to "$latest" --arg at "$started" --arg backup "${backup##*/}" --arg r "$result" \
+               '{from: $from, to: $to, at: $at, result: $r, backup: $backup}')"
+write_status "$result" "version $latest did not start; $( [ $result = rolled_back ] && echo "back on $installed" || echo "the previous version does not answer either" )" "$latest"
+exit 1

@@ -9,6 +9,7 @@ mod docs;
 mod error;
 mod jellyfin;
 mod lists;
+mod maintenance;
 mod media;
 mod music;
 mod notes;
@@ -155,6 +156,8 @@ async fn main() -> Result<()> {
         .route("/api/v1/lists/{list}", get(lists::get).post(lists::add).put(lists::order))
         .route("/api/v1/lists/{list}/{key}", delete(lists::remove))
         .route("/api/v1/radio/favorites/{uuid}", axum::routing::put(radio::add_favorite).delete(radio::remove_favorite))
+        .route("/api/v1/maintenance", get(maintenance::status).put(maintenance::set_mode))
+        .route("/api/v1/maintenance/update", post(maintenance::request_update))
         .route("/api/v1/sonos", get(sonos::list).post(sonos::add))
         .route("/api/v1/sonos/scan", post(sonos::scan))
         .route("/api/v1/sonos/setup", get(sonos::setup))

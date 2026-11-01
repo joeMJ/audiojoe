@@ -1,7 +1,8 @@
 # Datenschutz und Netzzugriffe
 
-audiojoe sendet keine Nutzungsdaten und hat keine Telemetrie, keine Updateprüfung und keine
-Absturzberichte. Alle Zugriffe nach außen macht der **Server**; die Apps und der Web-Player
+audiojoe sendet keine Nutzungsdaten und hat keine Telemetrie und keine Absturzberichte. Die
+einzige Prüfung auf neue Versionen macht der Server, wenn er aus dem Paket installiert ist
+([Updates](#updates-nur-mit-dem-server-paket)). Alle Zugriffe nach außen macht der **Server**; die Apps und der Web-Player
 verbinden sich nur mit dem eigenen audiojoe-Server. Bei jedem Zugriff auf einen fremden Server
 wird, wie bei jedem Netzzugriff, die IP-Adresse des audiojoe-Servers übermittelt, dazu die
 Kennung `audiojoe/<Version>`. Die IP-Adresse und die Browserkennung der Geräte gibt der Server
@@ -61,6 +62,21 @@ Server der Weiterleitung.
   ab (höchstens 64 Adressen), ohne Multicast.
 - **Umrechnung:** Für Hi-Res-FLAC, das ein Ziel nicht abspielen kann (Offline-Speicher im Auto,
   Sonos), startet der Server `ffmpeg`; es holt die Datei selbst bei der Quelle.
+
+## Updates (nur mit dem Server-Paket)
+
+- **Server:** Jede Nacht um 04:00 fragt `audiojoe-update` mit `curl` die Release-Liste des
+  Repositorys ab (`api.github.com`, Adresse in `/etc/audiojoe/update.conf`). Gesendet werden
+  nur die IP-Adresse des Servers und die Kennung von `curl`, keine Version und keine Kennung der
+  Installation. Ist ein neueres Release da, lädt der Server Paket und Prüfsummen bei GitHub. Auch
+  „Nur melden“ fragt nachts ab; ganz abschalten:
+  `systemctl disable --now audiojoe-update.timer audiojoe-update.path`.
+- **Debian** (nur vom Proxmox-Skript eingerichtet): `unattended-upgrades` fragt täglich die
+  Debian-Paketquellen (`deb.debian.org`, `security.debian.org`) und lädt Updates von dort.
+- **Pflege-Übersicht:** Was die App unter **Einstellungen → Pflege** zeigt (Versionen, letzte
+  Debian-Updates, Sicherungen), liegt nur auf dem Server
+  (`/var/lib/audiojoe/update-status.json`); Sicherungen der Datenbank in
+  `/var/backups/audiojoe/` (die letzten 5).
 
 ## Was der Server speichert
 

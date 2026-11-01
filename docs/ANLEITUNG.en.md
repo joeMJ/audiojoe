@@ -89,13 +89,14 @@ media from the cache** tidies up after listening.
 ## In the car (web player)
 
 The web player is built for the in-car browser (large buttons, controls docked at the bottom).
-Instead of the sleep timer it has **Next chapter** or **Next item**. Links in show notes are shown
-as text only.
+Instead of the sleep timer it has **Next podcast** or **Next album**: the episode counts as heard
+(the album leaves the list) and the next entry of **Continue** starts. Audiobooks have no such
+button. Links in show notes are shown as text only.
 
 <p align="center">
   <img src="screenshots/web-player.webp" alt="Web player in the size of the car screen" width="580">
   <br>
-  <em>Web player in the size of the Tesla screen: episode with chapters, taken over from the phone</em>
+  <em>Web player in the size of the Tesla screen: episode with chapters, just taken over from the phone (the note shows only briefly)</em>
   <br><br>
   <img src="screenshots/web-radio.webp" alt="Web player: radio favourites" width="580">
   <br>
@@ -104,7 +105,8 @@ as text only.
 
 ## Settings
 
-Sources and libraries, music (album index, MusicBrainz), Sonos (speakers), podcasts (OPML), devices
+Sources and libraries, music (album index, MusicBrainz), Sonos (speakers), maintenance (server and
+Debian updates, backups; see [Installation](INSTALLATION.en.md#updates-and-maintenance)), podcasts (OPML), devices
 (signed-in devices, sign out each one), **Sign out this device** and **About audiojoe** with
 version, manual, privacy and the third-party licences. In the web player signing out and
 **About audiojoe** are at the bottom of the **Offline** page. See [Getting started](ERSTE-SCHRITTE.en.md).

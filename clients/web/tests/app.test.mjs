@@ -269,13 +269,22 @@ try {
     return Math.round(m.bottom - d.bottom);
   });
   check("progress, controls and toolbar docked at the bottom", dock >= 0 && dock <= 30, `${dock} px above the bottom`);
+  const coverBox = await page.evaluate(() => {
+    const m = document.querySelector("main").getBoundingClientRect(), c = document.querySelector("main > .cover").getBoundingClientRect();
+    return { whole: c.top >= m.top && c.bottom <= m.bottom && c.height >= 190, h: Math.round(c.height), below: Math.round(m.bottom - c.bottom) };
+  });
+  check("cover fully visible next to the controls", coverBox.whole, JSON.stringify(coverBox));
+  const last = await page.evaluate(() => document.querySelector(".dockbar").lastElementChild?.className);
+  check("toolbar is the last row, „Taken over from …“ not below it", last === "tools", last);
+  const cut = await page.evaluate(() => [...document.querySelectorAll(".tools button")].filter((b) => b.scrollWidth > b.clientWidth + 1).map((b) => b.innerText));
+  check("toolbar labels not cut off", !cut.length, cut.join(", "));
   // With chapters the right button goes to the next chapter.
   const hasChapters = await page.evaluate(() => /\(\d+ von \d+\)$/.test(document.querySelector(".np .sub .txt")?.innerText ?? ""));
   if (hasChapters) console.log("  episode has chapters: " + await page.evaluate(() => document.querySelector(".np .sub .txt")?.innerText));
   const tb = await page.evaluate(() => [...document.querySelector(".tools").children].map((c) => ({ t: c.innerText.trim(), w: c.offsetWidth, h: c.offsetHeight,
     inner: c.firstElementChild ? c.firstElementChild.offsetWidth : c.offsetWidth })));
   check("car toolbar: offline left, speed, next right; no sleep timer",
-    tb.length === 3 && /Cache|Offline|lädt|wartet/.test(tb[0].t) && /Tempo/.test(tb[1].t) && (hasChapters ? /Nächstes Kapitel/ : /Nächster/).test(tb[2].t) && !tb.some((x) => /Schlaf/.test(x.t)),
+    tb.length === 3 && /Cache|Offline|lädt|wartet/.test(tb[0].t) && /Tempo/.test(tb[1].t) && /Nächster Podcast/.test(tb[2].t) && !tb.some((x) => /Schlaf/.test(x.t)),
     tb.map((x) => x.t).join(" | "));
   check("offline state fills its field", tb[0].inner >= tb[0].w - 2 && Math.abs(tb[0].w - tb[1].w) <= 2, `${tb[0].inner}/${tb[0].w} vs ${tb[1].w}`);
   await clickText("Details");

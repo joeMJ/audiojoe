@@ -71,6 +71,10 @@ class _SettingsViewState extends State<SettingsView> {
         const SizedBox(height: 8),
         const SonosSettings(),
         const SizedBox(height: 20),
+        Text(t('Maintenance'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        MaintenanceSettings(key: ValueKey('maint$_gen')),
+        const SizedBox(height: 20),
         Text(t('Devices'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
         Loader<List>(
@@ -325,6 +329,106 @@ class _MusicSettingsState extends State<MusicSettings> {
               keyboardType: TextInputType.emailAddress,
               decoration: InputDecoration(labelText: t('Contact for MusicBrainz (e-mail or web address)')),
               onSubmitted: (v) => put({'musicbrainz_contact': v.trim()}),
+            ),
+          ]);
+        },
+      );
+}
+
+/// Server updates (nightly at 04:00 or only reported), Debian updates and database backups, as
+/// `audiojoe-update` on the server last reported them.
+class MaintenanceSettings extends StatefulWidget {
+  const MaintenanceSettings({super.key});
+  @override
+  State<MaintenanceSettings> createState() => _MaintenanceSettingsState();
+}
+
+class _MaintenanceSettingsState extends State<MaintenanceSettings> {
+  int _gen = 0;
+
+  void _say(String s) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s)));
+
+  Future<void> _call(String method, String path, [Map<String, dynamic>? body, String? done]) async {
+    try {
+      await api.call(method, path, body: body);
+      if (done != null) _say(done);
+    } catch (e) {
+      _say('${t('Error')}: $e');
+    }
+    if (mounted) setState(() => _gen++);
+  }
+
+  String _server(Map st) {
+    final last = st['last_update'] as Map?;
+    switch (st['result']) {
+      case 'available':
+        return t('Version {v} is available.', {'v': '${st['latest']}'});
+      case 'updated':
+        return t('Updated from {from} to {to} {ago}.', {'from': '${last?['from']}', 'to': '${last?['to']}', 'ago': ago('${last?['at']}')});
+      case 'rolled_back':
+        return t('Version {v} did not start; the server went back to {from}.', {'v': '${last?['to'] ?? st['latest']}', 'from': '${last?['from']}'});
+      case 'failed':
+        return t('Last update failed: {msg}', {'msg': '${st['message']}'});
+      default:
+        return t('Up to date.');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Loader<Map>(
+        key: ValueKey('m$_gen'),
+        load: () async => await api.call('GET', '/maintenance') as Map,
+        builder: (context, m, reload) {
+          final muted = TextStyle(color: context.tok.muted);
+          final st = m['status'] as Map?;
+          if (m['managed'] != true || st == null) {
+            return Text(t('Server {v}. Updates are not managed here (server not installed from the package, see the installation guide).', {'v': '${m['version']}'}),
+                style: muted);
+          }
+          final deb = (st['debian'] as Map?) ?? const {};
+          final backups = ((st['backups'] as List?) ?? const []).cast<Map>();
+          final newer = st['latest'] != null && st['latest'] != st['installed'] && st['result'] != 'ok';
+          return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(t('Server {v}', {'v': '${st['installed']}'}), style: const TextStyle(fontWeight: FontWeight.w700)),
+            Text('${_server(st)} ${t('Checked {ago}.', {'ago': ago('${st['checked_at']}')})}', style: muted),
+            const SizedBox(height: 8),
+            Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+              SegmentedButton<String>(
+                showSelectedIcon: false,
+                segments: [
+                  ButtonSegment(value: 'auto', label: Text(t('Update at 04:00'))),
+                  ButtonSegment(value: 'notify', label: Text(t('Only report'))),
+                ],
+                selected: {'${m['mode']}'},
+                onSelectionChanged: (v) => _call('PUT', '/maintenance', {'mode': v.first}),
+              ),
+              if (newer)
+                FilledButton.icon(
+                  icon: const Icon(Icons.system_update_alt),
+                  label: Text(m['requested'] == true ? t('Update requested') : t('Update now')),
+                  onPressed: m['requested'] == true
+                      ? null
+                      : () => _call('POST', '/maintenance/update', null, t('Update started; the server restarts briefly.')),
+                ),
+            ]),
+            const SizedBox(height: 12),
+            Text(t('Debian updates'), style: const TextStyle(fontWeight: FontWeight.w700)),
+            Text(
+              [
+                deb['automatic'] == true ? t('Installed automatically every day; unused packages are removed.') : t('Not set up for automatic installation.'),
+                if (deb['last_run'] != null) t('Last run {ago}.', {'ago': ago('${deb['last_run']}')}),
+                if ((deb['upgraded'] as List?)?.isNotEmpty == true) t('Last updated: {pkgs}.', {'pkgs': (deb['upgraded'] as List).join(', ')}),
+                if ((deb['pending'] ?? 0) != 0) t('{n} updates waiting.', {'n': deb['pending']}),
+              ].join(' '),
+              style: muted,
+            ),
+            const SizedBox(height: 12),
+            Text(t('Database backups'), style: const TextStyle(fontWeight: FontWeight.w700)),
+            Text(
+              backups.isEmpty
+                  ? t('None yet; one is made before every server update.')
+                  : t('{n} kept (before every server update), latest {ago}.', {'n': backups.length, 'ago': ago('${backups.first['at']}')}),
+              style: muted,
             ),
           ]);
         },

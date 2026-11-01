@@ -4,7 +4,7 @@
 #   tools/deploy-dev.sh [root@host]      default: $AUDIOJOE_DEV_HOST
 #
 # Copies the sources (without private/, target/, node_modules/), builds server, attrappe
-# and web app there, installs them and restarts the services.
+# and web app there, installs the server package (tools/build-server-deb.sh) and restarts.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 HOST="${1:-${AUDIOJOE_DEV_HOST:?set AUDIOJOE_DEV_HOST or pass root@host}}"
@@ -18,11 +18,12 @@ cd /opt/audiojoe/src
 cargo build --release --quiet
 (cd clients/web && npm install --no-audit --no-fund --silent && npm run --silent build >/dev/null)
 
-id audiojoe &>/dev/null || useradd --system --home-dir /var/lib/audiojoe --shell /usr/sbin/nologin audiojoe
-install -m 755 target/release/audiojoe-server target/release/attrappe /usr/local/bin/
-rm -rf /usr/share/audiojoe/web && mkdir -p /usr/share/audiojoe && cp -r clients/web/dist /usr/share/audiojoe/web
-mkdir -p /etc/systemd/journald.conf.d && install -m 644 packaging/lxc/journald-audiojoe.conf /etc/systemd/journald.conf.d/audiojoe.conf && systemctl restart systemd-journald
-install -m 644 packaging/lxc/audiojoe-server.service packaging/lxc/audiojoe-attrappe.service /etc/systemd/system/
+# The server as package (as on a real installation); the test source of the attrappe by hand.
+DEB=$(tools/build-server-deb.sh)
+rm -f /usr/local/bin/audiojoe-server /etc/systemd/system/audiojoe-server.service
+DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --reinstall --allow-downgrades -o Dpkg::Options::=--force-confold "./$DEB" >/dev/null
+install -m 755 target/release/attrappe /usr/local/bin/
+install -m 644 packaging/lxc/audiojoe-attrappe.service /etc/systemd/system/
 if [ -f /etc/audiojoe/config.toml ]; then chown root:audiojoe /etc/audiojoe/config.toml; chmod 640 /etc/audiojoe/config.toml; fi
 systemctl daemon-reload
 systemctl enable --now --quiet audiojoe-attrappe audiojoe-server

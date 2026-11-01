@@ -1,6 +1,8 @@
 # Privacy and network access
 
-audiojoe sends no usage data and has no telemetry, no update check and no crash reports. All
+audiojoe sends no usage data and has no telemetry and no crash reports. The only check for new
+versions is made by the server when it is installed from the package
+([Updates](#updates-only-with-the-server-package)). All
 access to the outside is made by the **server**; the apps and the web player only connect to your
 own audiojoe server. As with any network access, every request to another server carries the
 audiojoe server's IP address, plus the identifier `audiojoe/<version>`. The server does not pass on
@@ -57,6 +59,20 @@ feeds to a CDN), the server follows the redirect.
   address range you configured (at most 64 addresses), without multicast.
 - **Conversion:** for hi-res FLAC a target cannot play (offline storage in the car, Sonos), the
   server starts `ffmpeg`; it fetches the file from the source itself.
+
+## Updates (only with the server package)
+
+- **Server:** every night at 04:00 `audiojoe-update` asks the repository's release list with
+  `curl` (`api.github.com`, address in `/etc/audiojoe/update.conf`). Only the server's IP address
+  and `curl`'s identifier are sent, no version and no identifier of the installation. If there is
+  a newer release, the server downloads package and checksums from GitHub. "Only report" asks at
+  night as well; switch off completely:
+  `systemctl disable --now audiojoe-update.timer audiojoe-update.path`.
+- **Debian** (set up by the Proxmox script only): `unattended-upgrades` asks the Debian package
+  sources (`deb.debian.org`, `security.debian.org`) daily and downloads updates from there.
+- **Maintenance overview:** what the app shows under **Settings → Maintenance** (versions, last
+  Debian updates, backups) stays on the server (`/var/lib/audiojoe/update-status.json`); database
+  backups in `/var/backups/audiojoe/` (the last 5).
 
 ## What the server stores
 

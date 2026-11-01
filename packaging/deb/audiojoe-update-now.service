@@ -1,0 +1,9 @@
+[Unit]
+Description=audiojoe server update, requested in an app
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/audiojoe-update --now
+TimeoutStartSec=30min
