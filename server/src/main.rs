@@ -157,6 +157,7 @@ async fn main() -> Result<()> {
         .route("/api/v1/radio/favorites/{uuid}", axum::routing::put(radio::add_favorite).delete(radio::remove_favorite))
         .route("/api/v1/sonos", get(sonos::list).post(sonos::add))
         .route("/api/v1/sonos/scan", post(sonos::scan))
+        .route("/api/v1/sonos/setup", get(sonos::setup))
         .route("/api/v1/sonos/{id}", delete(sonos::remove))
         .route("/api/v1/sonos/{id}/play", post(sonos::play))
         .route("/api/v1/sonos/{id}/command", post(sonos::command))

@@ -79,7 +79,8 @@ Kontaktadresse nötig, die MusicBrainz verlangt – siehe [Datenschutz](DATENSCH
 ## Sonos
 
 Sonos braucht einen zweiten, nur im Heimnetz erreichbaren Port des Servers
-([Installation](INSTALLATION.md#sonos)). Lautsprecher lassen sich derzeit nur über die
-Schnittstelle des Servers eintragen (`POST /api/v1/sonos` mit `{"ip": "…"}` oder
-`POST /api/v1/sonos/scan` für den Bereich aus `[sonos] scan`); eine Bedienung in den Einstellungen
-folgt. Danach stehen die Räume im Player unter **Dieses Gerät** zur Auswahl.
+([Installation](INSTALLATION.md#sonos)). Lautsprecher kommen unter **Einstellungen → Sonos** dazu:
+die IP-Adresse eintragen und **Lautsprecher hinzufügen**, oder – wenn in der Konfiguration ein
+Bereich `[sonos] scan` steht – diesen Bereich durchsuchen. Dort lassen sie sich auch wieder
+entfernen; Lautsprecher gelten für alle Benutzer des Servers. Danach stehen die Räume im Player
+unter **Dieses Gerät** zur Auswahl.

@@ -79,7 +79,7 @@ MusicBrainz asks for – see [Privacy](DATENSCHUTZ.en.md)).
 ## Sonos
 
 Sonos needs a second port of the server, reachable only in the home network
-([Installation](INSTALLATION.en.md#sonos)). For now speakers can only be added through the
-server's interface (`POST /api/v1/sonos` with `{"ip": "…"}`, or `POST /api/v1/sonos/scan` for the
-range in `[sonos] scan`); a control in the settings is to follow. Then the rooms can be picked in
-the player under **This device**.
+([Installation](INSTALLATION.en.md#sonos)). Add speakers under **Settings → Sonos**: enter the IP
+address and **Add speaker**, or – when the configuration has a range `[sonos] scan` – search that
+range. They can be removed there too; speakers apply to all users of the server. Then the rooms can
+be picked in the player under **This device**.

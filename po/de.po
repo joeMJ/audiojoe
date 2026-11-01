@@ -573,3 +573,33 @@ msgstr "Lizenzen Dritter"
 
 msgid "Close"
 msgstr "Schließen"
+
+msgid "Sonos"
+msgstr "Sonos"
+
+msgid "Sonos is not set up on this server (stream port missing in the configuration, see the installation guide)."
+msgstr "Sonos ist auf diesem Server nicht eingerichtet (Stream-Port fehlt in der Konfiguration, siehe Installation)."
+
+msgid "not reachable"
+msgstr "nicht erreichbar"
+
+msgid "Removed: {name}"
+msgstr "Entfernt: {name}"
+
+msgid "No speakers yet."
+msgstr "Noch keine Lautsprecher."
+
+msgid "IP address of the speaker"
+msgstr "IP-Adresse des Lautsprechers"
+
+msgid "Add speaker"
+msgstr "Lautsprecher hinzufügen"
+
+msgid "Added: {name}"
+msgstr "Hinzugefügt: {name}"
+
+msgid "Search {range}"
+msgstr "{range} durchsuchen"
+
+msgid "{n} speakers found"
+msgstr "{n} Lautsprecher gefunden"

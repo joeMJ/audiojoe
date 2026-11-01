@@ -329,6 +329,12 @@ pub async fn list(State(state): State<AppState>, _user: CurrentUser) -> ApiResul
     Ok(Json(Value::Array(futures_util::future::join_all(futures).await)))
 }
 
+/// Whether Sonos is set up on this server (stream port) and the range "scan" probes.
+pub async fn setup(State(state): State<AppState>, _user: CurrentUser) -> Json<Value> {
+    let cfg = state.config.sonos.as_ref();
+    Json(json!({ "enabled": cfg.and_then(|s| s.listen).is_some(), "scan": cfg.and_then(|s| s.scan.clone()) }))
+}
+
 #[derive(Deserialize)]
 pub struct AddSpeaker {
     ip: String,

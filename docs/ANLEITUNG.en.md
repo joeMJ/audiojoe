@@ -104,7 +104,7 @@ as text only.
 
 ## Settings
 
-Sources and libraries, music (album index, MusicBrainz), podcasts (OPML), devices (signed-in
-devices, sign out each one), **Sign out this device** and **About audiojoe** with version, manual,
-privacy and the third-party licences. In the web player signing out and **About audiojoe** are at
-the bottom of the **Offline** page. See [Getting started](ERSTE-SCHRITTE.en.md).
+Sources and libraries, music (album index, MusicBrainz), Sonos (speakers), podcasts (OPML), devices
+(signed-in devices, sign out each one), **Sign out this device** and **About audiojoe** with
+version, manual, privacy and the third-party licences. In the web player signing out and
+**About audiojoe** are at the bottom of the **Offline** page. See [Getting started](ERSTE-SCHRITTE.en.md).

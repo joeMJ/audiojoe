@@ -1,5 +1,5 @@
 // Settings: sources (Jellyfin, Audiobookshelf) and which of their libraries to show, music
-// (reading in the album directory, labels from MusicBrainz), podcast import/export (OPML),
+// (reading in the album directory, labels from MusicBrainz), Sonos speakers, podcast import/export (OPML),
 // signed-in devices, sign out, about.
 
 import 'dart:convert';
@@ -66,6 +66,10 @@ class _SettingsViewState extends State<SettingsView> {
         Text(t('Music'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
         MusicSettings(key: ValueKey('music$_gen')),
+        const SizedBox(height: 20),
+        Text(t('Sonos'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        const SonosSettings(),
         const SizedBox(height: 20),
         Text(t('Devices'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
@@ -322,6 +326,110 @@ class _MusicSettingsState extends State<MusicSettings> {
               decoration: InputDecoration(labelText: t('Contact for MusicBrainz (e-mail or web address)')),
               onSubmitted: (v) => put({'musicbrainz_contact': v.trim()}),
             ),
+          ]);
+        },
+      );
+}
+
+/// Sonos speakers of the server: add by address, search the configured range, remove.
+/// Speakers are shared by all users; the server needs a stream port for them (`[sonos] listen`).
+class SonosSettings extends StatefulWidget {
+  const SonosSettings({super.key});
+  @override
+  State<SonosSettings> createState() => _SonosSettingsState();
+}
+
+class _SonosSettingsState extends State<SonosSettings> {
+  final ip = TextEditingController();
+  bool busy = false;
+  int _gen = 0;
+
+  void _say(String s) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s)));
+
+  Future<void> _run(Future<String> Function() f) async {
+    setState(() => busy = true);
+    try {
+      _say(await f());
+    } catch (e) {
+      _say('${t('Error')}: $e');
+    }
+    if (mounted) {
+      setState(() {
+        busy = false;
+        _gen++;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    ip.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Loader<List>(
+        key: ValueKey('sonos$_gen'),
+        load: () async => [await api.call('GET', '/sonos/setup') as Map, await api.call('GET', '/sonos') as List],
+        builder: (context, data, reload) {
+          final setup = data[0] as Map;
+          final speakers = (data[1] as List).cast<Map>()..sort((a, b) => '${a['name']}'.compareTo('${b['name']}'));
+          if (setup['enabled'] != true) {
+            return Text(t('Sonos is not set up on this server (stream port missing in the configuration, see the installation guide).'),
+                style: TextStyle(color: context.tok.muted));
+          }
+          return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            for (final sp in speakers)
+              ItemRow(
+                leading: Icon(sp['reachable'] == true ? Icons.speaker : Icons.speaker_outlined, size: 32),
+                title: '${sp['name']}',
+                subtitle: [
+                  '${sp['model']}',
+                  '${sp['ip']}',
+                  sp['s2'] == true ? 'S2' : 'S1',
+                  if (sp['reachable'] != true) t('not reachable'),
+                ].where((x) => x.isNotEmpty).join(' · '),
+                trailing: [
+                  IconButton(
+                    tooltip: t('Remove'),
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: busy ? null : () => _run(() async {
+                      await api.call('DELETE', '/sonos/${sp['id']}');
+                      return t('Removed: {name}', {'name': '${sp['name']}'});
+                    }),
+                  ),
+                ],
+              ),
+            if (speakers.isEmpty) emptyText(context, t('No speakers yet.')),
+            const SizedBox(height: 8),
+            Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+              SizedBox(
+                width: 200,
+                child: TextField(
+                  controller: ip,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(labelText: t('IP address of the speaker'), hintText: '192.0.2.40'),
+                ),
+              ),
+              FilledButton.icon(
+                icon: const Icon(Icons.add),
+                label: Text(t('Add speaker')),
+                onPressed: busy ? null : () => _run(() async {
+                  final r = await api.call('POST', '/sonos', body: {'ip': ip.text.trim()}) as Map;
+                  ip.clear();
+                  return t('Added: {name}', {'name': '${r['name']}'});
+                }),
+              ),
+              if (setup['scan'] != null)
+                OutlinedButton.icon(
+                  icon: busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.search),
+                  label: Text(t('Search {range}', {'range': '${setup['scan']}'})),
+                  onPressed: busy ? null : () => _run(() async {
+                    final found = await api.call('POST', '/sonos/scan', timeout: const Duration(minutes: 2)) as List;
+                    return t('{n} speakers found', {'n': found.length});
+                  }),
+                ),
+            ]),
           ]);
         },
       );
