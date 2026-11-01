@@ -843,7 +843,11 @@ class AboutPanel extends StatelessWidget {
             Row(children: [
               Image.asset('assets/icon.png', width: 48, height: 48),
               const SizedBox(width: 12),
-              const Text('audiojoe', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+              const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('audiojoe', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                // Developer below the name, as in tvjoe (prefs.rs, about page head).
+                Text('John Lose (joeMJ)'),
+              ]),
             ]),
             const SizedBox(height: 10),
             Text([
@@ -886,6 +890,8 @@ Future<void> showAbout(BuildContext context) async {
         const Text('audiojoe'),
       ]),
       content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('John Lose (joeMJ)'),
+        const SizedBox(height: 4),
         Text([
           t('App {v}', {'v': app.version}),
           if (server.isNotEmpty) t('Server {v}', {'v': server}),

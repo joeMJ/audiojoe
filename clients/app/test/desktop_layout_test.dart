@@ -153,6 +153,7 @@ void main() {
       await tester.pump();
       expect(find.text('Third-party licences'), findsOneWidget);
       expect(find.text('App 0.1.0'), findsOneWidget);
+      expect(find.text('John Lose (joeMJ)'), findsOneWidget);
       expect(find.byType(SettingsGroup), findsOneWidget);
     });
 

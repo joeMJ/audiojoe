@@ -1008,6 +1008,7 @@ function about() {
   return h("div", { className: "about" },
     h("h2", {}, t("About audiojoe")),
     h("div", {}, h("img", { src: "/icon-192.png", alt: "", width: 40, height: 40 }), h("span", {}, "audiojoe", ver)),
+    h("div", {}, "John Lose (joeMJ)"),
     h("div", { className: "muted" }, t("Licence: Apache 2.0")),
     h("div", { className: "links" }, link(t("Manual"), "manual"), link(t("Privacy"), "privacy")));
 }
