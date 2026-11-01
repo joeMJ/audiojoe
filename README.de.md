@@ -80,7 +80,7 @@ HTTP durch; zwischengespeichert wird nur auf den Geräten.
 
 | Teil | Status | Hinweis |
 | :--- | :--- | :--- |
-| **Server** (Debian 13, LXC) | Entwicklung | aus dem Quelltext ([Installation](docs/install-server.md#server)); Paket und Proxmox-Skript folgen mit `v0.1.0` |
+| **Server** (Debian 13, Ubuntu 24.04 / 26.04) | Entwicklung | Paket, Proxmox-Skript (Container), Ubuntu-Skript (VM) – [Server installieren](docs/install-server.md#server) |
 | **Android** | Entwicklung | signierte APK |
 | **Linux (Ubuntu 24.04 / 26.04)** | Entwicklung | `.deb` |
 | **Windows 10/11** | Entwicklung | Installationsprogramm folgt |

@@ -5,8 +5,8 @@ container or a VM in the home network) and the **apps** for Ubuntu, Debian, Wind
 (own pages, see [Apps](#apps)), plus the web player the server serves itself.
 
 > [!NOTE]
-> The packages and the Proxmox script fetch the server from the GitHub releases; those exist from
-> the first release (`v0.1.0`). Until then the server is built from source (below).
+> The package, the Proxmox script and the Ubuntu script fetch the server from the newest GitHub
+> release (since `v0.1.0`). Building from source is only needed for development.
 
 ## Server
 

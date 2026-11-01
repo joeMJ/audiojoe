@@ -5,8 +5,8 @@ Linux-Container oder eine VM im Heimnetz) und den **Apps** für Ubuntu, Debian, 
 (eigene Seiten, siehe [Apps](#apps)) sowie dem Web-Player, den der Server selbst ausliefert.
 
 > [!NOTE]
-> Die Pakete und das Proxmox-Skript holen den Server aus den GitHub-Releases; die gibt es ab dem
-> ersten Release (`v0.1.0`). Bis dahin wird der Server aus dem Quelltext gebaut (unten).
+> Das Paket, das Proxmox-Skript und das Ubuntu-Skript holen den Server aus dem neuesten
+> GitHub-Release (seit `v0.1.0`). Aus dem Quelltext bauen ist nur noch für die Entwicklung nötig.
 
 ## Server
 

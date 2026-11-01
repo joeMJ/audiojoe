@@ -77,7 +77,7 @@ HTTP; caching happens on the devices only.
 
 | Part | Status | Note |
 | :--- | :--- | :--- |
-| **Server** (Debian 13, LXC) | development | from source ([Installation](docs/install-server.en.md#server)); package and Proxmox script follow with `v0.1.0` |
+| **Server** (Debian 13, Ubuntu 24.04 / 26.04) | development | package, Proxmox script (container), Ubuntu script (VM) – [Install the server](docs/install-server.en.md#server) |
 | **Android** | development | signed APK |
 | **Linux (Ubuntu 24.04 / 26.04)** | development | `.deb` |
 | **Windows 10/11** | development | installer to follow |
