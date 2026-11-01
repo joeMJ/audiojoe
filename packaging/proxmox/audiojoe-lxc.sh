@@ -16,8 +16,8 @@
 # Values (environment): PRESET (optimal: 2 cores, 2048 MB, 16 GB; minimal: 1 core, 1024 MB, 8 GB),
 # CTID, HOSTNAME_CT (audiojoe), STORAGE (local-lvm), TEMPLATE_STORAGE (local), BRIDGE (vmbr0),
 # IP (dhcp or address/prefix), GW, DNS (empty: like the host), CORES (at least the preset),
-# DISK (GB, at least 8), RAM (MB, overrides the preset), PROXY (address of the reverse proxy,
-# optional), ADMIN (first user),
+# DISK (GB, at least 8), RAM (MB, overrides the preset), PROXY (IP address of the reverse proxy
+# that publishes audiojoe, e.g. NPM - not a download proxy; optional), ADMIN (first user),
 # SONOS (yes: stream port 8081).
 # RELEASE_API: release source (default: the GitHub repository), RELEASE_TOKEN_FILE: file with an
 # access token for a private repository (tests only).
@@ -56,7 +56,7 @@ wt() { whiptail --title "$TITLE" "$@" 3>&1 1>&2 2>&3; }
 ask() { # name proposal question – a value from the environment is kept, Enter keeps the proposal
   local v="${!1:-}"
   if [ -z "$v" ] && [ "$ASKING" = yes ]; then
-    if [ "$UI" = whiptail ]; then v="$(wt --inputbox "$3" 10 72 "$2")" || die "cancelled"
+    if [ "$UI" = whiptail ]; then v="$(wt --inputbox "$3" $((9 + $(printf '%s\n' "$3" | wc -l))) 76 "$2")" || die "cancelled"
     else read -r -p "$3 [$2]: " v; fi
   fi
   printf -v "$1" '%s' "${v:-$2}"
@@ -115,7 +115,10 @@ ask BRIDGE vmbr0 "Network bridge"
 ask IP dhcp "IPv4 address with prefix (e.g. 10.0.0.20/24) or dhcp"
 [ "$IP" = dhcp ] || ask GW "" "Gateway"
 ask DNS "" "DNS server (empty: like the host)"
-ask PROXY "" "Address of the reverse proxy (empty: none yet)"
+ask PROXY "" "IP address of the REVERSE PROXY that publishes audiojoe
+(e.g. Nginx Proxy Manager, Caddy) - NOT a proxy for downloads.
+audiojoe trusts its X-Forwarded-For header: real client addresses
+in the log and for the login lock. Empty: no reverse proxy yet."
 ask_yes SONOS "Sonos speakers in the home network? (opens stream port 8081)"
 ask ADMIN "" "Name of the first user (empty: later by hand)"
 
@@ -124,13 +127,14 @@ pct status "$CTID" >/dev/null 2>&1 && die "container $CTID exists already"
 [[ "$IP" = dhcp || "$IP" =~ ^[0-9.]+/[0-9]+$ ]] || die "IP must be dhcp or address/prefix"
 [ -z "${GW:-}" ] || [[ "$GW" =~ ^[0-9.]+$ ]] || die "gateway must be an IPv4 address"
 [ -z "${DNS:-}" ] || [[ "$DNS" =~ ^[0-9.]+$ ]] || die "DNS server must be an IPv4 address"
+[ -z "${PROXY:-}" ] || [[ "$PROXY" =~ ^[0-9a-fA-F:.]+$ ]] || die "reverse proxy: an IP address, not a name or URL"
 [[ "$SONOS" =~ ^(yes|no)$ ]] || die "SONOS must be yes or no"
 [ -z "${ADMIN:-}" ] || [[ "$ADMIN" =~ ^[a-z][a-z0-9_-]{0,31}$ ]] || die "user name: lower-case letters, digits, - and _"
 
 SUMMARY="Container $CTID \"$HOSTNAME_CT\", unprivileged Debian 13
 Resources: $PRESET – CPU cores $CORES, RAM $RAM MB, disk $DISK GB on $STORAGE
 Network: $BRIDGE, ${IP}${GW:+ via $GW}, DNS ${DNS:-like the host}
-Reverse proxy: ${PROXY:-none}; Sonos: $SONOS; first user: ${ADMIN:-none}
+Reverse proxy publishing audiojoe: ${PROXY:-none}; Sonos: $SONOS; first user: ${ADMIN:-none}
 Server package from: $RELEASE_API"
 printf '%s\n' "$SUMMARY" | sed 's/^/   /'
 if [ "$ASKING" = yes ] && [ "$DRY" != 1 ]; then

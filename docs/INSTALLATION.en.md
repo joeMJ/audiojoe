@@ -34,7 +34,8 @@ The script asks in dialogs (similar to the Proxmox helper scripts), first for th
 **optimal** (2 cores, 2 GB RAM, 16 GB disk, recommended) or **minimum** (1 core, 1 GB RAM, 8 GB
 disk) –, then for the CPU cores (more than the preset, never fewer), the disk (proposal from the
 preset, at least 8 GB), the container ID, name, storage, bridge, network (fixed address or DHCP),
-gateway, DNS server (empty: like the host), the address of the proxy, Sonos and the name of the
+gateway, DNS server (empty: like the host), the IP address of the **reverse proxy** that publishes
+audiojoe (e.g. Nginx Proxy Manager; not a proxy for downloads), Sonos and the name of the
 first user; Enter keeps the proposal. A summary shows everything before the container is created.
 Then it:
 
