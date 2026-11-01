@@ -30,6 +30,19 @@ TITLE="audiojoe – Proxmox container"
 say() { printf '\033[1;36m== %s\033[0m\n' "$*"; }
 die() { printf '\033[1;31m✖ %s\033[0m\n' "$*" >&2; exit 1; }
 run() { if [ "$DRY" = 1 ]; then printf '   %s\n' "$*"; else "$@"; fi; }
+BOX='box() { # colour line… – double frame around important lines (long lines wrapped at spaces, 74 columns)
+  local c="$1" w=0 l bar; shift
+  local -a out=()
+  for l in "$@"; do
+    if [ -z "$l" ]; then out+=(""); else while IFS= read -r part; do out+=("$part"); done < <(printf "%s\n" "$l" | fold -s -w 74 | sed "s/ *$//"); fi
+  done
+  for l in "${out[@]}"; do [ "${#l}" -gt "$w" ] && w=${#l}; done
+  bar="$(printf "%*s" $((w + 2)) "" | sed "s/ /═/g")"
+  printf "\n   \033[%sm╔%s╗\033[0m\n" "$c" "$bar"
+  for l in "${out[@]}"; do printf "   \033[%sm║\033[0m %-*s \033[%sm║\033[0m\n" "$c" "$w" "$l" "$c"; done
+  printf "   \033[%sm╚%s╝\033[0m\n\n" "$c" "$bar"
+}'
+eval "$BOX"
 
 # Dialogs only when someone sits at a terminal; otherwise environment values and proposals.
 ASKING=no; [ "$YES" = no ] && [ -t 0 ] && [ -t 1 ] && ASKING=yes
@@ -121,8 +134,10 @@ run pct create "$CTID" "$TEMPLATE_STORAGE:vztmpl/$TEMPLATE" --hostname "$HOSTNAM
 run pct start "$CTID"
 
 if [ "$DRY" != 1 ]; then
+  printf '   \033[1;33m…\033[0m waiting for the network in the container'
   for _ in $(seq 1 30); do pct exec "$CTID" -- getent hosts deb.debian.org >/dev/null 2>&1 && break; sleep 2; done
-  pct exec "$CTID" -- getent hosts deb.debian.org >/dev/null || die "container $CTID has no network/DNS"
+  pct exec "$CTID" -- getent hosts deb.debian.org >/dev/null || { echo; die "container $CTID has no network/DNS"; }
+  printf '\r   \033[1;32m✔\033[0m network in the container is up        \n'
   ADDR="$(pct exec "$CTID" -- sh -c "ip -4 -o addr show eth0 | awk '{print \$4}' | cut -d/ -f1 | head -n1")"
 else
   ADDR="${IP%/*}"; [ "$IP" = dhcp ] && ADDR="<address>"
@@ -139,20 +154,45 @@ set -Eeuo pipefail
 export LC_ALL=C.UTF-8 LANG=C.UTF-8
 ADDR="$1" PROXY="$2" SONOS="$3" API="$4" ADMIN="$5" DEFAULT_API="$6"
 read -r TOKEN || true
+eval "$7"   # box()
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
-apt-get -y -qq -o Dpkg::Options::=--force-confold full-upgrade >/dev/null
-apt-get -y -qq install curl ca-certificates jq unattended-upgrades >/dev/null
+LOG=/var/log/audiojoe-install.log; : > "$LOG"
+
+# One line per step: a spinner while it runs, then a check mark; on failure the end of the log.
+step() { # text command…
+  local text="$1" pid i=0 spin='|/-\'; shift
+  "$@" </dev/null >>"$LOG" 2>&1 & pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    printf '\r   \033[1;33m%s\033[0m %s ' "${spin:$((i++ % 4)):1}" "$text"; sleep 0.2
+  done
+  if wait "$pid"; then printf '\r   \033[1;32m✔\033[0m %s \n' "$text"
+  else printf '\r   \033[1;31m✖\033[0m %s – failed, last lines of %s:\n' "$text" "$LOG"; tail -n 15 "$LOG"; exit 1; fi
+}
 hdr() { [ -n "$TOKEN" ] && printf 'Authorization: token %s\n' "$TOKEN" || true; }
+url() { jq -r --arg n "$1" '.assets[] | select(.name == $n) | .browser_download_url' <<<"$rel"; }
+upgrade() { apt-get update; apt-get -y -o Dpkg::Options::=--force-confold full-upgrade; }
+tools() { apt-get -y install curl ca-certificates jq unattended-upgrades; }
+fetch() {
+  hdr | curl -fsSL -H @- -H 'Accept: application/octet-stream' -o "$deb" "$(url "$deb")"
+  hdr | curl -fsSL -H @- -H 'Accept: application/octet-stream' -o SHA256SUMS "$(url SHA256SUMS)"
+  grep -E "  \*?$deb\$" SHA256SUMS | sha256sum -c
+  rm -f SHA256SUMS
+}
+package() { apt-get -y -o Dpkg::Options::=--force-confold install "./$deb"; }
+selfcare() { # Debian keeps itself up to date: all updates daily, unused packages removed.
+  install -m 644 /usr/share/audiojoe/52audiojoe-upgrades /etc/apt/apt.conf.d/52audiojoe-upgrades
+  systemctl enable --now apt-daily.timer apt-daily-upgrade.timer
+  audiojoe-update --check || true
+}
+health() { for _ in $(seq 1 30); do curl -fsS "http://$ADDR:8080/api/v1/health" && return 0; sleep 1; done; return 1; }
+
+step "Updating Debian in the container" upgrade
+step "Installing curl, jq and unattended-upgrades" tools
 rel="$(hdr | curl -fsSL -H @- -H 'Accept: application/json' "$API/releases/latest")"
 ver="$(jq -r '.tag_name' <<<"$rel")"; ver="${ver#v}"
 deb="audiojoe-server_${ver}_amd64.deb"
-url() { jq -r --arg n "$1" '.assets[] | select(.name == $n) | .browser_download_url' <<<"$rel"; }
 mkdir -p /var/cache/audiojoe && cd /var/cache/audiojoe
-hdr | curl -fsSL -H @- -H 'Accept: application/octet-stream' -o "$deb" "$(url "$deb")"
-hdr | curl -fsSL -H @- -H 'Accept: application/octet-stream' -o SHA256SUMS "$(url SHA256SUMS)"
-grep -E "  \*?$deb\$" SHA256SUMS | sha256sum -c --quiet
-rm -f SHA256SUMS
+step "Downloading audiojoe $ver and checking the checksum" fetch
 
 install -d -m 755 /etc/audiojoe
 {
@@ -163,7 +203,7 @@ install -d -m 755 /etc/audiojoe
   if [ -n "$PROXY" ]; then echo "trusted_proxies = [\"$PROXY\"]"; else echo "trusted_proxies = []"; fi
   if [ "$SONOS" = yes ]; then printf '\n[sonos]\nlisten = "%s:8081"\n' "$ADDR"; fi
 } > /etc/audiojoe/config.toml
-apt-get -y -qq -o Dpkg::Options::=--force-confold install "./$deb" >/dev/null
+step "Installing the audiojoe server package" package
 
 # Another release source than the default (and its token) goes into the package's update.conf.
 if [ -n "$TOKEN" ]; then
@@ -173,30 +213,43 @@ if [ "$API" != "$DEFAULT_API" ] || [ -n "$TOKEN" ]; then
   { echo "# release source (written by audiojoe-lxc.sh)"; echo "SOURCE=$API"
     [ -z "$TOKEN" ] || echo "TOKEN_FILE=/etc/audiojoe/update-token"; } > /etc/audiojoe/update.conf
 fi
+step "Switching on the nightly updates" selfcare
+step "Waiting for the server to answer" health
 
-# Debian keeps itself up to date: all updates daily, unused packages removed.
-install -m 644 /usr/share/audiojoe/52audiojoe-upgrades /etc/apt/apt.conf.d/52audiojoe-upgrades
-systemctl enable --now --quiet apt-daily.timer apt-daily-upgrade.timer
-audiojoe-update --check >/dev/null || true
-
-for _ in $(seq 1 20); do curl -fsS "http://$ADDR:8080/api/v1/health" >/dev/null 2>&1 && break; sleep 1; done
-curl -fsS "http://$ADDR:8080/api/v1/health"; echo
 if [ -n "$ADMIN" ]; then
-  echo; echo "First user (shown once – put the secret into the authenticator app):"
-  runuser -u audiojoe -- audiojoe-server --config /etc/audiojoe/config.toml user add "$ADMIN"
+  out="$(runuser -u audiojoe -- audiojoe-server --config /etc/audiojoe/config.toml user add "$ADMIN")"
+  mapfile -t user <<<"$out"
+  box "1;33" "FIRST USER - shown only once, write it down now" "" "${user[@]}" "" \
+    "Put the totp secret into your authenticator app (or open the totp uri" \
+    "on the phone). Sign in with user name, password and the 6-digit code."
 fi
 EOS
 )
 if [ "$DRY" = 1 ]; then
   printf '   pct exec %s -- bash -s %q %q %q %q %q %q   (install, see INSIDE in this script)\n' "$CTID" "$ADDR" "${PROXY:-}" "$SONOS" "$RELEASE_API" "${ADMIN:-}" "$DEFAULT_API"
+  printf '     steps: update Debian, install tools, download and check audiojoe, install it, nightly updates, wait for the server, first user\n'
 else
-  printf '%s\n' "$TOKEN" | pct exec "$CTID" -- bash -c "$INSIDE" inside "$ADDR" "${PROXY:-}" "$SONOS" "$RELEASE_API" "${ADMIN:-}" "$DEFAULT_API"
+  printf '%s\n' "$TOKEN" | pct exec "$CTID" -- bash -c "$INSIDE" inside "$ADDR" "${PROXY:-}" "$SONOS" "$RELEASE_API" "${ADMIN:-}" "$DEFAULT_API" "$BOX"
 fi
 
 say "Done"
 cat <<EOF
-   audiojoe runs in container $CTID at http://$ADDR:8080 (only in the home network).
-   Next: reverse proxy with HTTPS to this address (docs/INSTALLATION.md), then sign in in the app.
-   Updates: server nightly at 04:00 (switch "only report" in the app under Settings → Maintenance),
-   Debian daily. More users: pct exec $CTID -- runuser -u audiojoe -- audiojoe-server user add NAME
+   audiojoe runs in container $CTID at http://$ADDR:8080 (home network only).
+   Updates: server nightly at 04:00 (app: Settings → Maintenance), Debian daily.
+   Install log in the container: /var/log/audiojoe-install.log
+   More users: pct exec $CTID -- runuser -u audiojoe -- audiojoe-server user add NAME
 EOF
+NPM_NOTE="Proxy address: $PROXY (already in /etc/audiojoe/config.toml)"
+[ -n "${PROXY:-}" ] || NPM_NOTE="No proxy address given: put the NPM address into trusted_proxies in /etc/audiojoe/config.toml (container $CTID), then: systemctl restart audiojoe-server"
+box "1;36" "NEXT: REVERSE PROXY WITH HTTPS (Nginx Proxy Manager)" "" \
+  "Hosts > Proxy Hosts > Add Proxy Host" \
+  "  Details  Domain Names           your domain, e.g. audiojoe.example.org" \
+  "           Scheme                 http" \
+  "           Forward Hostname / IP  $ADDR" \
+  "           Forward Port           8080" \
+  "           Websockets Support     not needed" \
+  "  SSL      SSL Certificate        Request a new Certificate" \
+  "           Force SSL              on" \
+  "           HTTP/2 Support         on" \
+  "" "$NPM_NOTE" "" \
+  "Then sign in with the app at https://<your domain>."
