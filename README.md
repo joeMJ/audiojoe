@@ -79,8 +79,8 @@ HTTP; caching happens on the devices only.
 | :--- | :--- | :--- |
 | **Server** (Debian 13, Ubuntu 24.04 / 26.04) | development | package, Proxmox script (container), Ubuntu script (VM) – [Install the server](docs/install-server.en.md#server) |
 | **Android** | development | signed APK |
-| **Linux (Ubuntu 24.04 / 26.04)** | development | `.deb` |
-| **Windows 10/11** | development | installer to follow |
+| **Linux (Ubuntu 24.04 / 26.04, Debian 13)** | development | `.deb` |
+| **Windows 10/11** | development | MSI, signed |
 | **Web player** | development | served by the server; built for the in-car browser |
 
 ## What it does

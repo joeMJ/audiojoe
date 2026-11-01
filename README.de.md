@@ -82,11 +82,11 @@ HTTP durch; zwischengespeichert wird nur auf den Geräten.
 | :--- | :--- | :--- |
 | **Server** (Debian 13, Ubuntu 24.04 / 26.04) | Entwicklung | Paket, Proxmox-Skript (Container), Ubuntu-Skript (VM) – [Server installieren](docs/install-server.md#server) |
 | **Android** | Entwicklung | signierte APK |
-| **Linux (Ubuntu 24.04 / 26.04)** | Entwicklung | `.deb` |
-| **Windows 10/11** | Entwicklung | Installationsprogramm folgt |
+| **Linux (Ubuntu 24.04 / 26.04, Debian 13)** | Entwicklung | `.deb` |
+| **Windows 10/11** | Entwicklung | MSI, signiert |
 | **Web-Player** | Entwicklung | liefert der Server aus; für den Browser im Auto gebaut |
 
-## Was das Programm kann
+## Was audiojoe kann
 
 - **Quellen:** Jellyfin, Emby, Plex und Audiobookshelf; die Zugangsschlüssel bleiben auf dem Server.
 - **Podcasts:** Abonnements per Suche ([fyyd](https://fyyd.de)) oder Feed-Adresse, OPML-Import
