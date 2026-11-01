@@ -2,7 +2,8 @@
 // published, downloads it through the server and checks it against the release's SHA256SUMS
 // before anything is installed. Like tvjoe (crates/tvjoe-gui/src/prefs.rs, offer/confirm_install/
 // restart): Linux installs with `pkexec apt-get install -y` and then offers a restart, Windows
-// closes and starts the MSI installer, Android hands the package to the system installer. The
+// closes, runs the MSI installer and starts again (tvjoe asks to reopen it by hand), Android
+// hands the package to the system installer. The
 // F-Droid build does nothing here.
 
 import 'dart:convert';
@@ -130,6 +131,18 @@ Future<File> downloadAppUpdate(AppUpdate u, void Function(int done, int? total) 
 List<String> installCommand(File f) =>
     Platform.isWindows ? ['msiexec', '/i', f.path, '/passive'] : ['pkexec', 'apt-get', 'install', '-y', f.path];
 
+/// Windows: waits until audiojoe has ended, runs the installer and starts audiojoe again when it
+/// succeeded (0, or 3010: done, Windows restart pending). PowerShell gets the script encoded
+/// (UTF-16LE, Base64), so paths with spaces or quotes need no further quoting.
+List<String> windowsInstallAndRestart(File f, String exe, int waitFor) {
+  String q(String s) => "'${s.replaceAll("'", "''")}'";
+  final script = 'Wait-Process -Id $waitFor -ErrorAction SilentlyContinue; '
+      '\$p = Start-Process -FilePath msiexec -ArgumentList ${q('/i "${f.path}" /passive')} -Wait -PassThru; '
+      'if (\$p.ExitCode -eq 0 -or \$p.ExitCode -eq 3010) { Start-Process -FilePath ${q(exe)} }';
+  final utf16 = <int>[for (final c in script.codeUnits) ...[c & 0xff, c >> 8]];
+  return ['powershell', '-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-EncodedCommand', base64.encode(utf16)];
+}
+
 /// Runs a command and waits; true when it succeeded. Replaceable in tests.
 Future<bool> Function(List<String> cmd) runCommand = (cmd) async {
   try {
@@ -202,17 +215,17 @@ Future<void> runAppUpdate(AppUpdate u, void Function(String) say, {Future<File> 
     return;
   }
   final cmd = installCommand(f);
-  // Windows: start the installer and end audiojoe so it can replace the files.
+  // Windows: end audiojoe so the installer can replace the files; it starts again afterwards.
   if (Platform.isWindows) {
     if (!await _ask(
         t('Installer checked'),
-        '${t('The checksum (SHA-256) matches. audiojoe closes and starts the installer:')}\n\n${cmd.join(' ')}\n\n${t('Then open audiojoe again.')}',
+        '${t('The checksum (SHA-256) matches. audiojoe closes and installs with:')}\n\n${cmd.join(' ')}\n\n${t('Then audiojoe starts again.')}',
         t('Cancel'),
         t('Install'))) {
       return;
     }
     try {
-      await startAndQuit(cmd);
+      await startAndQuit(windowsInstallAndRestart(f, Platform.resolvedExecutable, pid));
     } catch (e) {
       await _tell(t('Installation not started'), '$e');
     }

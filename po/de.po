@@ -727,11 +727,11 @@ msgstr "Download fehlgeschlagen"
 msgid "Installer checked"
 msgstr "Installer geprüft"
 
-msgid "The checksum (SHA-256) matches. audiojoe closes and starts the installer:"
-msgstr "Die Prüfsumme (SHA-256) stimmt. audiojoe beendet sich und startet den Installer:"
+msgid "The checksum (SHA-256) matches. audiojoe closes and installs with:"
+msgstr "Die Prüfsumme (SHA-256) stimmt. audiojoe beendet sich und installiert mit:"
 
-msgid "Then open audiojoe again."
-msgstr "Danach audiojoe wieder öffnen."
+msgid "Then audiojoe starts again."
+msgstr "Danach startet audiojoe wieder."
 
 msgid "Installation not started"
 msgstr "Installation nicht gestartet"

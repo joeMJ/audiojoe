@@ -45,10 +45,12 @@ Recommends: unattended-upgrades
 Installed-Size: $(du -sk "$ROOT" | cut -f1)
 Maintainer: joeMJ <1265358+joeMJ@users.noreply.github.com>
 Homepage: https://github.com/joeMJ/audiojoe
-Description: audiojoe server – all your audio, one source of truth
- Podcasts, audiobooks, music and radio from Jellyfin, Emby, Plex, Audiobookshelf
- and RSS, with playback positions synced across the audiojoe apps and the web
- player. Updates itself nightly (database backup, way back on failure).
+Description: audiojoe server - all your audio, one source of truth
+ Podcasts, audiobooks, music and internet radio from Jellyfin, Emby, Plex,
+ Audiobookshelf and podcast feeds, also played on Sonos, with playback
+ positions synced across the audiojoe apps and the web player;
+ gpodder.net-compatible sync for AntennaPod and other podcast apps.
+ Updates itself nightly (database backup, way back on failure).
 EOF
 
 cat > "$ROOT/DEBIAN/postinst" <<'EOF'

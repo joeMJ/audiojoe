@@ -75,6 +75,17 @@ void main() {
     expect(File('${tmp.path}/updates/${u.name}').existsSync(), isFalse);
   });
 
+  test('Windows: encoded PowerShell waits, installs, starts again only on success', () {
+    final cmd = windowsInstallAndRestart(File(r"C:\Users\Jo O'Neil\AppData\Local\updates\audiojoe.msi"),
+        r'C:\Program Files\audiojoe\audiojoe.exe', 4242);
+    expect(cmd.sublist(0, cmd.length - 1), ['powershell', '-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-EncodedCommand']);
+    final b = base64.decode(cmd.last);
+    final script = String.fromCharCodes([for (var i = 0; i < b.length; i += 2) b[i] | b[i + 1] << 8]);
+    expect(script, startsWith('Wait-Process -Id 4242 -ErrorAction SilentlyContinue; '));
+    expect(script, contains(r"""-ArgumentList '/i "C:\Users\Jo O''Neil\AppData\Local\updates\audiojoe.msi" /passive' -Wait -PassThru"""));
+    expect(script, endsWith(r"""if ($p.ExitCode -eq 0 -or $p.ExitCode -eq 3010) { Start-Process -FilePath 'C:\Program Files\audiojoe\audiojoe.exe' }"""));
+  });
+
   Future<void> show(WidgetTester tester) => tester.pumpWidget(
       MaterialApp(navigatorKey: appNavigator, theme: buildTheme(Brightness.light), home: const Scaffold(body: SizedBox())));
 

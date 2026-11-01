@@ -38,9 +38,10 @@ Architecture: amd64
 Depends: libgtk-3-0t64 | libgtk-3-0, libmpv2, libsecret-1-0
 Maintainer: joeMJ <1265358+joeMJ@users.noreply.github.com>
 Homepage: https://github.com/joeMJ/audiojoe
-Description: audiojoe client – all your audio, one source of truth
- Podcasts, audiobooks and music from Jellyfin, Audiobookshelf and RSS with
- playback positions synced across devices via an audiojoe server.
+Description: audiojoe client - all your audio, one source of truth
+ Podcasts, audiobooks, music and internet radio from Jellyfin, Emby, Plex,
+ Audiobookshelf and podcast feeds, also played on Sonos, with playback
+ positions synced across devices via an audiojoe server.
 EOF
 mkdir -p "$OUT"
 DEB="$OUT/audiojoe_${VERSION}_amd64.deb"

@@ -17,7 +17,7 @@ If you have installed it for one of them already, there is nothing more to do.
 **Settings → Maintenance** in the row **App**. **Download version …** downloads the MSI through your
 own server and checks it against `SHA256SUMS` of the same release; if the checksum does not match,
 nothing is installed. After **Install** audiojoe closes and starts the installer; the new MSI
-replaces the old one, then open audiojoe again. The app
+replaces the old one, then audiojoe starts again by itself. The app
 never asks GitHub for this, see [Privacy](DATENSCHUTZ.en.md#updates-only-with-the-server-package).
 By hand: install the new MSI over the old one.
 
