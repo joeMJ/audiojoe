@@ -73,6 +73,10 @@ class _SettingsViewState extends State<SettingsView> {
         const SizedBox(height: 8),
         const SonosSettings(),
         const SizedBox(height: 20),
+        Text(t('Sync with other podcast apps'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        GpodderSettings(key: ValueKey('gpodder$_gen')),
+        const SizedBox(height: 20),
         Text(t('Maintenance'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
         MaintenanceSettings(key: ValueKey('maint$_gen')),
@@ -441,6 +445,91 @@ class _MaintenanceSettingsState extends State<MaintenanceSettings> {
                   : t('{n} kept (before every server update), latest {ago}.', {'n': backups.length, 'ago': ago('${backups.first['at']}')}),
               style: muted,
             ),
+          ]);
+        },
+      );
+}
+
+/// gpodder-compatible sync (AntennaPod, Kasts …): an app password for those clients, shown
+/// once; the devices that synced so far; switching off ends their access.
+class GpodderSettings extends StatefulWidget {
+  const GpodderSettings({super.key});
+  @override
+  State<GpodderSettings> createState() => _GpodderSettingsState();
+}
+
+class _GpodderSettingsState extends State<GpodderSettings> {
+  int _gen = 0;
+
+  void _say(String s) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s)));
+
+  Future<void> _newPassword() async {
+    Map r;
+    try {
+      r = await api.call('POST', '/gpodder/password') as Map;
+    } catch (e) {
+      return _say('${t('Error')}: $e');
+    }
+    if (!mounted) return;
+    final host = Uri.parse(api.base).host;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(t('App password for podcast apps')),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(t('Enter these in the other app under gpodder.net sync (custom server). The password is shown only once.'),
+              style: TextStyle(color: context.tok.muted)),
+          const SizedBox(height: 12),
+          Text(t('Server'), style: const TextStyle(fontWeight: FontWeight.w700)),
+          SelectableText(host),
+          const SizedBox(height: 8),
+          Text(t('User name'), style: const TextStyle(fontWeight: FontWeight.w700)),
+          SelectableText('${r['username']}'),
+          const SizedBox(height: 8),
+          Text(t('Password'), style: const TextStyle(fontWeight: FontWeight.w700)),
+          SelectableText('${r['password']}', style: const TextStyle(fontFamily: 'monospace', fontSize: 18)),
+        ]),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text(t('Done')))],
+      ),
+    );
+    if (mounted) setState(() => _gen++);
+  }
+
+  Future<void> _off() async {
+    try {
+      await api.call('DELETE', '/gpodder/password');
+      _say(t('Sync switched off; the other apps are signed out.'));
+    } catch (e) {
+      _say('${t('Error')}: $e');
+    }
+    if (mounted) setState(() => _gen++);
+  }
+
+  @override
+  Widget build(BuildContext context) => Loader<Map>(
+        key: ValueKey('g$_gen'),
+        load: () async => await api.call('GET', '/gpodder') as Map,
+        builder: (context, g, reload) {
+          final muted = TextStyle(color: context.tok.muted);
+          final on = g['enabled'] == true;
+          final devices = ((g['devices'] as List?) ?? const []).cast<Map>();
+          return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(t('Subscriptions and listening positions shared with AntennaPod, Kasts and other apps that know gpodder.net sync. Those apps sign in with user name and a separate app password (no code from the authenticator).'),
+                style: muted),
+            const SizedBox(height: 8),
+            Text(
+              !on
+                  ? t('Switched off.')
+                  : devices.isEmpty
+                      ? t('Switched on; no app has synced yet.')
+                      : t('Switched on. Apps: {list}', {'list': devices.map((d) => (d['caption'] as String).isEmpty ? d['id'] : '${d['caption']} (${d['id']})').join(', ')}),
+              style: muted,
+            ),
+            const SizedBox(height: 8),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              FilledButton.icon(icon: const Icon(Icons.key), label: Text(on ? t('New app password') : t('Switch on, create app password')), onPressed: _newPassword),
+              if (on) OutlinedButton.icon(icon: const Icon(Icons.sync_disabled), label: Text(t('Switch off')), onPressed: _off),
+            ]),
           ]);
         },
       );

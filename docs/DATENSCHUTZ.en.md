@@ -80,6 +80,16 @@ feeds to a CDN), the server follows the redirect.
   Android asks before installing, Linux and Windows open the saved file (folder "Downloads").
   The F-Droid build does not check; the web player always comes from the server.
 
+## Sync with other podcast apps (only when switched on)
+
+With an app password (**Settings → Sync with other podcast apps**) the server offers the
+gpodder.net API under `/api/2/…` and `/subscriptions/…`. Through it the connected apps read and
+write subscriptions (feed addresses) and listening positions (episode, position, time, the
+app's device name). For that the server stores per user the Argon2id hash of the app password,
+the apps' device names, the subscription changes and the apps' actions (download, delete, new);
+positions go into the same table as those of the audiojoe apps. Nothing leaves the server; the
+apps connect to your own server. Without an app password these paths answer "unauthorized" only.
+
 ## What the server stores
 
 In the database (`/var/lib/audiojoe/audiojoe.db`):

@@ -115,7 +115,8 @@ The proxy forwards `https://audio.example.org` to `http://<listen address>`. Imp
 - **Reachability:** if you make the server reachable from the internet, limit access to known
   networks. Without signing in, only the web player's pages, the documentation under `/docs/`,
   `/api/v1/health` and `/api/v1/auth/login` are reachable; everything else needs a sign-in with
-  password and TOTP code.
+  password and TOTP code. The paths `/api/2/…` and `/subscriptions/…` (sync with other podcast
+  apps) need user name and app password; without an app password they answer "unauthorized" only.
 
 ### Sonos
 

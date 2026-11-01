@@ -117,7 +117,9 @@ Der Proxy leitet `https://audio.example.org` an `http://<listen-Adresse>` weiter
 - **Erreichbarkeit:** Wer den Server aus dem Internet erreichbar macht, sollte den Zugang auf
   bekannte Netze beschränken. Ohne Anmeldung erreichbar sind nur die Seiten des Web-Players, die
   Dokumentation unter `/docs/`, `/api/v1/health` und `/api/v1/auth/login`; alles andere verlangt
-  eine Anmeldung mit Passwort und TOTP-Code.
+  eine Anmeldung mit Passwort und TOTP-Code. Die Pfade `/api/2/…` und `/subscriptions/…` (Abgleich
+  mit anderen Podcast-Apps) verlangen Benutzername und App-Passwort; ohne App-Passwort antworten
+  sie nur mit „nicht angemeldet“.
 
 ### Sonos
 

@@ -711,3 +711,48 @@ msgstr "Version {v} installieren"
 
 msgid "Download version {v}"
 msgstr "Version {v} herunterladen"
+
+msgid "Sync with other podcast apps"
+msgstr "Abgleich mit anderen Podcast-Apps"
+
+msgid "App password for podcast apps"
+msgstr "App-Passwort für Podcast-Apps"
+
+msgid "Enter these in the other app under gpodder.net sync (custom server). The password is shown only once."
+msgstr "Diese Angaben in der anderen App unter gpodder.net-Abgleich (eigener Server) eintragen. Das Passwort wird nur einmal gezeigt."
+
+msgid "Server"
+msgstr "Server"
+
+msgid "User name"
+msgstr "Benutzername"
+
+msgid "Password"
+msgstr "Passwort"
+
+msgid "Done"
+msgstr "Fertig"
+
+msgid "Sync switched off; the other apps are signed out."
+msgstr "Abgleich abgeschaltet; die anderen Apps sind abgemeldet."
+
+msgid "Subscriptions and listening positions shared with AntennaPod, Kasts and other apps that know gpodder.net sync. Those apps sign in with user name and a separate app password (no code from the authenticator)."
+msgstr "Abonnements und Hörstände gemeinsam mit AntennaPod, Kasts und anderen Apps, die den gpodder.net-Abgleich kennen. Diese Apps melden sich mit Benutzername und einem eigenen App-Passwort an (ohne Code aus der Authenticator-App)."
+
+msgid "Switched off."
+msgstr "Abgeschaltet."
+
+msgid "Switched on; no app has synced yet."
+msgstr "Eingeschaltet; noch keine App hat abgeglichen."
+
+msgid "Switched on. Apps: {list}"
+msgstr "Eingeschaltet. Apps: {list}"
+
+msgid "New app password"
+msgstr "Neues App-Passwort"
+
+msgid "Switch on, create app password"
+msgstr "Einschalten, App-Passwort erzeugen"
+
+msgid "Switch off"
+msgstr "Abschalten"

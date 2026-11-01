@@ -7,6 +7,7 @@ mod config;
 mod db;
 mod docs;
 mod error;
+mod gpodder;
 mod jellyfin;
 mod lists;
 mod maintenance;
@@ -160,6 +161,10 @@ async fn main() -> Result<()> {
         .route("/api/v1/maintenance", get(maintenance::status).put(maintenance::set_mode))
         .route("/api/v1/maintenance/update", post(maintenance::request_update))
         .route("/api/v1/maintenance/app/{platform}", get(maintenance::app_download))
+        .route("/api/v1/gpodder", get(gpodder::info))
+        .route("/api/v1/gpodder/password", post(gpodder::new_password).delete(gpodder::drop_password))
+        // gpodder-compatible sync for other podcast apps (/api/2/…, /subscriptions/…).
+        .merge(gpodder::router())
         .route("/api/v1/sonos", get(sonos::list).post(sonos::add))
         .route("/api/v1/sonos/scan", post(sonos::scan))
         .route("/api/v1/sonos/setup", get(sonos::setup))

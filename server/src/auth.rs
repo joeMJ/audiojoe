@@ -33,7 +33,7 @@ use crate::{
 };
 
 const COOKIE: &str = "aj_session";
-const SESSION_DAYS: u32 = 180;
+pub(crate) const SESSION_DAYS: u32 = 180;
 /// Failed logins allowed per client IP and per user name within `FAIL_WINDOW`.
 const MAX_FAILS: u32 = 5;
 const FAIL_WINDOW: Duration = Duration::from_secs(15 * 60);
@@ -49,7 +49,7 @@ pub fn hash_password(password: &str) -> anyhow::Result<String> {
         .map_err(|e| anyhow::anyhow!("hashing failed: {e}"))
 }
 
-fn verify_password(hash: &str, password: &str) -> bool {
+pub(crate) fn verify_password(hash: &str, password: &str) -> bool {
     PasswordHash::new(hash)
         .map(|h| Argon2::default().verify_password(password.as_bytes(), &h).is_ok())
         .unwrap_or(false)
@@ -76,7 +76,7 @@ pub fn random_token() -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
 }
 
-fn token_hash(token: &str) -> String {
+pub(crate) fn token_hash(token: &str) -> String {
     format!("{:x}", Sha256::digest(token.as_bytes()))
 }
 
@@ -90,7 +90,7 @@ pub struct Guard {
 }
 
 impl Guard {
-    fn blocked(&self, key: &str) -> bool {
+    pub(crate) fn blocked(&self, key: &str) -> bool {
         let mut fails = self.fails.lock().unwrap();
         match fails.get(key) {
             Some((n, since)) if since.elapsed() < FAIL_WINDOW => *n >= MAX_FAILS,
@@ -102,7 +102,7 @@ impl Guard {
         }
     }
 
-    fn fail(&self, key: &str) {
+    pub(crate) fn fail(&self, key: &str) {
         let mut fails = self.fails.lock().unwrap();
         let e = fails.entry(key.to_string()).or_insert((0, Instant::now()));
         if e.1.elapsed() >= FAIL_WINDOW {
@@ -111,7 +111,7 @@ impl Guard {
         e.0 += 1;
     }
 
-    fn clear(&self, key: &str) {
+    pub(crate) fn clear(&self, key: &str) {
         self.fails.lock().unwrap().remove(key);
     }
 

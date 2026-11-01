@@ -20,6 +20,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0010_lists_unsubscribed.sql"),
     include_str!("../migrations/0011_libraries_music_chapters.sql"),
     include_str!("../migrations/0012_queue.sql"),
+    include_str!("../migrations/0013_gpodder.sql"),
 ];
 
 pub type Db = Arc<Mutex<Connection>>;

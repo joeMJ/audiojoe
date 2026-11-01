@@ -85,6 +85,17 @@ Server der Weiterleitung.
   gespeicherte Datei (Ordner „Downloads“). Die F-Droid-Fassung prüft nicht; der Web-Player
   kommt immer vom Server.
 
+## Abgleich mit anderen Podcast-Apps (nur wenn eingeschaltet)
+
+Mit einem App-Passwort (**Einstellungen → Abgleich mit anderen Podcast-Apps**) bietet der Server
+die gpodder.net-Schnittstelle unter `/api/2/…` und `/subscriptions/…` an. Darüber lesen und
+schreiben die verbundenen Apps Abonnements (Feed-Adressen) und Hörstände (Folge, Position,
+Zeitpunkt, Gerätename der App). Der Server speichert dazu je Benutzer den Argon2id-Hash des
+App-Passworts, die Gerätenamen der Apps, die Abonnementänderungen und die Aktionen der Apps
+(Herunterladen, Löschen, Neu); Hörstände landen in derselben Tabelle wie die der audiojoe-Apps.
+Nach außen geht dabei nichts; die Apps verbinden sich mit dem eigenen Server. Ohne App-Passwort
+antworten diese Pfade nur mit „nicht angemeldet“.
+
 ## Was der Server speichert
 
 In der Datenbank (`/var/lib/audiojoe/audiojoe.db`):

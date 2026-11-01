@@ -108,6 +108,16 @@ shown as text only.
   <em>Radio favourites in the web player</em>
 </p>
 
+## Sync with other podcast apps
+
+audiojoe speaks the gpodder.net API that AntennaPod, Kasts, gPodder and other podcast apps use
+for syncing: subscriptions and listening positions are then the same in both worlds. Those apps
+cannot enter a code from the authenticator app, so they get a separate **app password**: create
+it in the audiojoe app under **Settings → Sync with other podcast apps** (shown once). In the
+other app choose the **custom server** under gpodder.net sync and enter the address of your
+audiojoe server, your user name and the app password. The app password is valid for the sync
+only, for nothing else; **Switch off** signs all apps connected this way out.
+
 ## Settings
 
 Sources and libraries, music (album index, MusicBrainz), Sonos (speakers), maintenance (server and

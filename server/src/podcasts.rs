@@ -321,30 +321,45 @@ pub async fn subscribe_url(state: &AppState, user: i64, url: &str) -> ApiResult<
             return Err(e);
         }
     }
+    let url = url.to_string();
     with_db(&state.db, move |c| {
-        c.execute("INSERT OR IGNORE INTO subscription (user_id, podcast_id) VALUES (?1, ?2)", (user, id))?;
+        if c.execute("INSERT OR IGNORE INTO subscription (user_id, podcast_id) VALUES (?1, ?2)", (user, id))? > 0 {
+            crate::gpodder::log_change(c, user, &url, true)?;
+        }
         Ok(id)
     })
     .await
 }
 
+/// Removes a subscription inside a transaction/connection; false when there was none.
+/// Its episodes can no longer be played by this user, so they leave "continue"; podcasts
+/// nobody subscribes to any more are dropped (episodes cascade).
+pub fn unsubscribe_in(c: &rusqlite::Connection, user: i64, id: i64) -> rusqlite::Result<bool> {
+    let url: Option<String> = c.query_row("SELECT feed_url FROM podcast WHERE id = ?1", [id], |r| r.get(0)).optional()?;
+    let n = c.execute("DELETE FROM subscription WHERE user_id = ?1 AND podcast_id = ?2", (user, id))?;
+    if n == 0 {
+        return Ok(false);
+    }
+    if let Some(url) = url {
+        crate::gpodder::log_change(c, user, &url, false)?;
+    }
+    c.execute(
+        "DELETE FROM playback WHERE user_id = ?1 AND item_key IN (SELECT 'episode:' || id FROM episode WHERE podcast_id = ?2)",
+        (user, id),
+    )?;
+    c.execute(
+        "DELETE FROM list_entry WHERE user_id = ?1 AND item_key IN (SELECT 'episode:' || id FROM episode WHERE podcast_id = ?2)",
+        (user, id),
+    )?;
+    c.execute("DELETE FROM podcast WHERE id = ?1 AND NOT EXISTS (SELECT 1 FROM subscription WHERE podcast_id = ?1)", [id])?;
+    Ok(true)
+}
+
 pub async fn unsubscribe(State(state): State<AppState>, user: CurrentUser, Path(id): Path<i64>) -> ApiResult<Json<Value>> {
     with_db(&state.db, move |c| {
-        let n = c.execute("DELETE FROM subscription WHERE user_id = ?1 AND podcast_id = ?2", (user.id, id))?;
-        if n == 0 {
+        if !unsubscribe_in(c, user.id, id)? {
             return Err(ApiError::NotFound);
         }
-        // Its episodes can no longer be played by this user: drop them from "continue".
-        c.execute(
-            "DELETE FROM playback WHERE user_id = ?1 AND item_key IN (SELECT 'episode:' || id FROM episode WHERE podcast_id = ?2)",
-            (user.id, id),
-        )?;
-        c.execute(
-            "DELETE FROM list_entry WHERE user_id = ?1 AND item_key IN (SELECT 'episode:' || id FROM episode WHERE podcast_id = ?2)",
-            (user.id, id),
-        )?;
-        // Drop podcasts nobody subscribes to any more (episodes cascade).
-        c.execute("DELETE FROM podcast WHERE id = ?1 AND NOT EXISTS (SELECT 1 FROM subscription WHERE podcast_id = ?1)", [id])?;
         Ok(Json(json!({ "ok": true })))
     })
     .await

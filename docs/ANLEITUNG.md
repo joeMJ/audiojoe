@@ -111,6 +111,17 @@ rechts unten. Links in den Shownotes stehen nur als Text.
   <em>Radio-Favoriten im Web-Player</em>
 </p>
 
+## Abgleich mit anderen Podcast-Apps
+
+audiojoe spricht die gpodder.net-Schnittstelle, die AntennaPod, Kasts, gPodder und andere
+Podcast-Apps für den Abgleich kennen: Abonnements und Hörstände sind dann in beiden Welten
+dieselben. Diese Apps können keinen Code aus der Authenticator-App eingeben, deshalb bekommen
+sie ein eigenes **App-Passwort**: in der audiojoe-App unter **Einstellungen → Abgleich mit
+anderen Podcast-Apps** erzeugen (wird einmal gezeigt). In der anderen App unter
+gpodder.net-Abgleich den **eigenen Server** wählen, die Adresse des audiojoe-Servers,
+Benutzername und App-Passwort eintragen. Das App-Passwort gilt nur für den Abgleich, für nichts
+anderes; **Abschalten** meldet alle so verbundenen Apps ab.
+
 ## Einstellungen
 
 Quellen und Bibliotheken, Musik (Albenverzeichnis, MusicBrainz), Sonos (Lautsprecher), Pflege
