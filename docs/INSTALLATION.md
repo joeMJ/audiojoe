@@ -139,8 +139,9 @@ Lautsprecher eintragen: [Erste Schritte](ERSTE-SCHRITTE.md#sonos).
 - **Linux (Ubuntu 24.04 / 26.04):** im Ordner `clients/app` `flutter build linux --release`, dann
   `../../tools/build-deb.sh` – das erzeugt ein `.deb`. Die Wiedergabe braucht
   `libmpv2` vom System.
-- **Windows 10/11:** `flutter build windows --release`; ein Installationsprogramm folgt mit dem
-  ersten Release. Die Wiedergabe bringt `libmpv-2.dll` mit (LGPL, siehe
-  [Lizenzen Dritter](../THIRD_PARTY.md)).
+- **Windows 10/11:** MSI `audiojoe-<Version>-windows-x86_64.msi` (pro Benutzer, ohne
+  Administratorrechte, nach `%LOCALAPPDATA%\Programs\audiojoe`; ein neues MSI ersetzt das alte).
+  Gebaut unter Windows mit `tools\build-windows.ps1` (Flutter, WiX 3.14); es bringt
+  `libmpv-2.dll` mit (LGPL, siehe [Lizenzen Dritter](../THIRD_PARTY.md)).
 - **Web-Player:** keine Installation – die Server-Adresse im Browser öffnen, im Auto z. B. im
   Browser des Tesla. Er lässt sich als App auf dem Startbildschirm ablegen.
