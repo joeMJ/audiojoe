@@ -194,11 +194,11 @@ class Player extends ChangeNotifier {
     return AudioSource.uri(api.streamUri(it.key, part: part), headers: api.authHeaders, tag: tag);
   }
 
-  Future<void> _load(Item it) async {
+  Future<void> _load(Item it, {bool fromStart = false}) async {
     item = it;
     _cued = false;
     fromCache = downloads.isOffline(it.key);
-    final start = it.kind == 'radio' ? (ms: 0, from: null) : _startPosition(it);
+    final start = it.kind == 'radio' || fromStart ? (ms: 0, from: null) : _startPosition(it);
     takenOver = start.from == null ? null : (device: start.from!.device, at: start.from!.updatedAt);
     final parts = it.multiPart ? it.parts : const <Part>[];
     final (part, local) = _locate(start.ms, parts);
@@ -274,6 +274,9 @@ class Player extends ChangeNotifier {
       ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     if (cands.isEmpty || cands.first.finished) return (ms: 0, from: null);
     final best = cands.first;
+    // A position in the last seconds counts as heard (else the title ends at once and the next follows).
+    final length = best.durationMs ?? it.durationMs ?? 0;
+    if (length > 0 && best.positionMs >= length - 5000) return (ms: 0, from: null);
     return (ms: best.positionMs, from: best.device.isNotEmpty && best.device != api.device ? best : null);
   }
 
@@ -328,15 +331,17 @@ class Player extends ChangeNotifier {
     }
   }
 
-  Future<void> skip(int d) async {
+  /// [afterEnd]: the title has just been saved as heard; saving again would store its end
+  /// position as not heard. The next title of a queue starts at its beginning.
+  Future<void> skip(int d, {bool afterEnd = false}) async {
     final i = index + d;
     if (i < 0 || i >= queue.length) return;
-    await _persist();
+    if (!afterEnd) await _persist();
     index = i;
     final full = await meta(queue[i].key);
     if (full != null) queue[i] = full;
     _saveQueue();
-    await _load(queue[i]);
+    await _load(queue[i], fromStart: true);
     // just_audio's play() completes only when playback stops: do not wait for it.
     unawaited(audio.play());
   }
@@ -388,7 +393,7 @@ class Player extends ChangeNotifier {
     await _persist(finished: true);
     if (stopHere) return;
     if (more) {
-      await skip(1);
+      await skip(1, afterEnd: true);
     } else if (after != null) {
       await after();
     }

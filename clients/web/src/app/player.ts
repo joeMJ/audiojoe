@@ -109,7 +109,9 @@ async function startPosition(it: Item): Promise<{ ms: number; from?: Playback }>
   const local = await localPosition(it.key);
   const remote = it.playback ?? undefined;
   const best = [local, remote].filter((p): p is Playback => !!p).sort((a, b) => b.updated_at.localeCompare(a.updated_at))[0];
-  if (!best || best.finished) return { ms: 0 };
+  // A position in the last seconds counts as heard (else the title ends at once and the next follows).
+  const length = best?.duration_ms ?? it.duration_ms ?? 0;
+  if (!best || best.finished || (length > 0 && best.position_ms >= length - 5000)) return { ms: 0 };
   return { ms: best.position_ms, from: best.device && best.device !== myDevice ? best : undefined };
 }
 
@@ -196,7 +198,7 @@ function srcFor(it: Item, part: number): string {
   return `/api/v1/stream/${encodeURIComponent(it.key)}${multi ? `?part=${part}` : ""}`;
 }
 
-async function load(it: Item, autoplay: boolean, cue = false) {
+async function load(it: Item, autoplay: boolean, cue = false, fromStart = false) {
   state.item = it;
   keepCurrent(it.key);
   state.part = 0;
@@ -206,7 +208,7 @@ async function load(it: Item, autoplay: boolean, cue = false) {
   const off = cached ? await offlineEntry(it.key) : undefined;
   state.delivered = cached ? off?.delivered ?? it.quality : it.quality;
   state.transcoded = cached ? !!off?.transcoded : false;
-  const start = it.kind === "radio" ? { ms: 0 } : await startPosition(it);
+  const start = it.kind === "radio" || fromStart ? { ms: 0 } : await startPosition(it);
   state.takenOver = start.from ? { device: start.from.device, at: start.from.updated_at } : undefined;
   mediaSession(it);
   void dropPlayed();
@@ -291,10 +293,13 @@ export function nextRate() {
 export async function skip(d: 1 | -1) {
   const i = state.index + d;
   if (i < 0 || i >= state.queue.length) return;
-  await persist();
+  // At the end of a title "ended" has saved it as heard already; saving again would store the
+  // end position as not heard.
+  if (!audio.ended) await persist();
   state.index = i;
   saveQueue();
-  await load(state.queue[i], true);
+  // The next title of a queue starts at its beginning.
+  await load(state.queue[i], true, false, true);
 }
 
 async function persist(finished = false) {
