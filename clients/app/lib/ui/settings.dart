@@ -1,11 +1,13 @@
 // Settings: sources (Jellyfin, Audiobookshelf) and which of their libraries to show, music
 // (reading in the album directory, labels from MusicBrainz), podcast import/export (OPML),
-// signed-in devices, sign out.
+// signed-in devices, sign out, about.
 
 import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../api.dart';
 import '../l10n.dart';
@@ -100,6 +102,8 @@ class _SettingsViewState extends State<SettingsView> {
         ]),
         const SizedBox(height: 20),
         OutlinedButton.icon(icon: const Icon(Icons.logout), label: Text(t('Sign out this device')), onPressed: widget.onSignOut),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(icon: const Icon(Icons.info_outline), label: Text(t('About audiojoe')), onPressed: () => showAbout(context)),
       ]);
 
   void _say(String s) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s)));
@@ -321,4 +325,47 @@ class _MusicSettingsState extends State<MusicSettings> {
           ]);
         },
       );
+}
+
+/// Version of app and server, licence, and the manual and privacy notes the server delivers.
+Future<void> showAbout(BuildContext context) async {
+  final app = await PackageInfo.fromPlatform();
+  String server = '';
+  try {
+    server = ((await api.call('GET', '/health') as Map)['version'] ?? '') as String;
+  } catch (_) {}
+  if (!context.mounted) return;
+  Widget link(String label, String page) => TextButton.icon(
+        icon: const Icon(Icons.open_in_new, size: 18),
+        label: Text(label),
+        onPressed: () => launchUrl(Uri.parse('${api.base}/docs/${isDe ? 'de/' : ''}$page.html'), mode: LaunchMode.externalApplication),
+      );
+  showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Row(children: [
+        Image.asset('assets/icon.png', width: 48, height: 48),
+        const SizedBox(width: 12),
+        const Text('audiojoe'),
+      ]),
+      content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text([
+          t('App {v}', {'v': app.version}),
+          if (server.isNotEmpty) t('Server {v}', {'v': server}),
+        ].join(' · ')),
+        const SizedBox(height: 4),
+        Text(t('Licence: Apache 2.0'), style: TextStyle(color: context.tok.muted)),
+        const SizedBox(height: 8),
+        link(t('Manual'), 'manual'),
+        link(t('Privacy'), 'privacy'),
+      ]),
+      actions: [
+        TextButton(
+          onPressed: () => showLicensePage(context: context, applicationName: 'audiojoe', applicationVersion: app.version),
+          child: Text(t('Third-party licences')),
+        ),
+        FilledButton(onPressed: () => Navigator.pop(context), child: Text(t('Close'))),
+      ],
+    ),
+  );
 }

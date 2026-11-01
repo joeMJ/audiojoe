@@ -165,6 +165,8 @@ async fn main() -> Result<()> {
         .route("/api/v1/stream/{key}", get(media::stream))
         .route("/api/v1/playback", get(playback::list).post(playback::sync))
         .route("/api/v1/playback/{key}", get(playback::get).put(playback::put))
+        .route("/api/v1/queue", axum::routing::put(playback::put_queue))
+        .route("/api/v1/queue/{key}", get(playback::get_queue))
         .route("/api/v1/events", get(playback::events))
         .fallback_service(web)
         .layer(DefaultBodyLimit::max(64 * 1024))

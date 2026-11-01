@@ -127,14 +127,29 @@ class Player extends ChangeNotifier {
   }
 
   /// The queue (e.g. an album) on this device, so a restart continues it instead of one title.
-  void _saveQueue() => Stores.device.put('queue', {
-        'items': [for (final q in queue) q.toJson()],
-        'index': index,
-        'entry': entry == null ? null : {'list': entry!.list, 'key': entry!.key},
-      });
+  /// The server keeps it too, so another device taking over the title continues the queue.
+  void _saveQueue() {
+    final q = {
+      'items': [for (final q in queue) q.toJson()],
+      'index': index,
+      'entry': entry == null ? null : {'list': entry!.list, 'key': entry!.key},
+    };
+    Stores.device.put('queue', q);
+    if (api.online.value) unawaited(api.call('PUT', '/queue', body: q).catchError((_) => null));
+  }
 
-  bool _restoreQueue(Item it) {
-    final q = Stores.device.get('queue');
+  /// The queue another device left with `key` as its current title.
+  Future<Map?> _serverQueue(String key) async {
+    if (!api.online.value) return null;
+    try {
+      return await api.call('GET', '/queue/${Uri.encodeComponent(key)}') as Map;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool _restoreQueue(Item it, [Map? from]) {
+    final q = from ?? Stores.device.get('queue');
     try {
       final items = [for (final j in q?['items'] as List? ?? const []) Item.fromJson((j as Map).cast<String, dynamic>())];
       final i = q?['index'] as int? ?? -1;
@@ -154,9 +169,12 @@ class Player extends ChangeNotifier {
     // Episodes and books are list entries themselves; music only when played as an album entry.
     entry = from ?? entryOf(items[i]);
     final full = await meta(items[i].key);
+    // A single title another device played within an album: continue that album here.
+    final other = items.length == 1 && items[i].kind == 'track' ? await _serverQueue(items[i].key) : null;
     queue = [...items];
     if (full != null) queue[i] = full;
     index = i;
+    if (other != null) _restoreQueue(queue[i], other);
     _saveQueue();
     await _load(queue[i]);
     // just_audio's play() completes only when playback stops: do not wait for it.
@@ -227,7 +245,9 @@ class Player extends ChangeNotifier {
       if (it != null) break;
     }
     if (it == null || item != null) return;
-    if (!_restoreQueue(it)) {
+    final other = await _serverQueue(it.key);
+    if (item != null) return;
+    if (!_restoreQueue(it) && (other == null || !_restoreQueue(it, other))) {
       queue = [it];
       index = 0;
       entry = entryOf(it);

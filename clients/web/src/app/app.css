@@ -63,7 +63,13 @@ h2 { margin: 0 0 10px; font-size: 21px; }
 .fchip.cache { border-color: var(--accent); color: var(--accent); }
 .fchip.hi { border-color: var(--bad); color: var(--bad); background: var(--badBg); }
 .fchip.cd { border-color: var(--warn); color: var(--warn); background: var(--warnBg); }
-.np .title .count { color: var(--muted); font-weight: 600; }
+.np .count { color: var(--muted); font-weight: 600; }
+/* One flowing line instead of a cut-off one (see flow() in ui.ts) */
+.np .title { display: block; white-space: nowrap; text-overflow: ellipsis; }
+.np > * { min-width: 0; }
+.np .flowing { text-overflow: clip; }
+.np .flowing .run { display: inline-block; }
+.np .copy { margin-left: 48px; }
 main.dock { display: flex; flex-direction: column; overflow: hidden; }
 main.dock > .np { flex: 1; min-height: 0; overflow-y: auto; align-content: start; }
 .dockbar { flex: none; border-top: 1px solid var(--line); margin-top: 8px; }
@@ -187,3 +193,9 @@ main.dock > .np { flex: 1; min-height: 0; overflow-y: auto; align-content: start
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: 16px;
          padding: 10px 12px 10px 20px; border-radius: 14px; background: var(--panel); border: 2px solid var(--line); font-size: 17px; font-weight: 650;
          box-shadow: 0 6px 24px rgb(0 0 0 / 0.25); max-width: calc(100vw - 32px); }
+/* About (bottom of the Offline page) */
+.about { margin-top: 32px; border-top: 1px solid var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.about > div:nth-child(2) { display: flex; align-items: center; gap: 10px; font-weight: 750; }
+.about img { border-radius: 10px; }
+.about .links { display: flex; gap: 18px; }
+.about a { color: var(--accent); font-weight: 650; }

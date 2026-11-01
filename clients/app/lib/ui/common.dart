@@ -292,3 +292,100 @@ Widget emptyText(BuildContext context, String s) =>
     Padding(padding: const EdgeInsets.all(20), child: Text(s, style: TextStyle(color: context.tok.muted, fontSize: 16)));
 
 List<Item> itemsOf(dynamic list) => (list as List).map((e) => Item.fromJson((e as Map).cast<String, dynamic>())).toList();
+
+/// One line, centred when it fits; otherwise it flows to the left again and again, with a
+/// 2 s pause at the start of each round. Without animations (accessibility) it is cut off.
+class Marquee extends StatefulWidget {
+  final InlineSpan text;
+  final TextStyle style;
+  const Marquee(this.text, {super.key, required this.style});
+
+  @override
+  State<Marquee> createState() => _MarqueeState();
+}
+
+class _MarqueeState extends State<Marquee> with SingleTickerProviderStateMixin {
+  static const _gap = 48.0, _speed = 35.0; // px per second
+  late final AnimationController _c = AnimationController(vsync: this);
+  double _width = 0; // one round (text + gap); 0 when the text fits
+  int _round = 0; // a new text or size starts a new loop
+  bool _running = false;
+
+  @override
+  void didUpdateWidget(Marquee old) {
+    super.didUpdateWidget(old);
+    if (old.text != widget.text) _restart();
+  }
+
+  // Called while building: stopping does not notify, the offset is reset after the frame.
+  void _restart() {
+    _round++;
+    _running = false;
+    _c.stop();
+  }
+
+  @override
+  void dispose() {
+    _round++;
+    _c.dispose();
+    super.dispose();
+  }
+
+  Future<void> _run() async {
+    if (_running) return;
+    _running = true;
+    final round = _round;
+    while (mounted && round == _round && _width > 0) {
+      await Future.delayed(const Duration(seconds: 2));
+      if (!mounted || round != _round || _width == 0) break;
+      _c.duration = Duration(milliseconds: (_width / _speed * 1000).round());
+      try {
+        await _c.forward(from: 0).orCancel;
+      } on TickerCanceled {
+        break;
+      }
+      if (mounted && round == _round) _c.value = 0;
+    }
+    if (round == _round) _running = false;
+  }
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
+        final tp = TextPainter(
+          text: TextSpan(style: DefaultTextStyle.of(context).style.merge(widget.style), children: [widget.text]),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+          maxLines: 1,
+        )..layout();
+        final still = MediaQuery.of(context).disableAnimations;
+        final width = tp.width <= box.maxWidth || still ? 0.0 : tp.width + _gap;
+        if (width != _width) {
+          _width = width;
+          _restart();
+        }
+        if (width == 0) {
+          return Text.rich(widget.text, style: widget.style, textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis);
+        }
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          if (!_running && _c.value != 0) _c.value = 0;
+          _run();
+        });
+        final line = Text.rich(widget.text, style: widget.style, maxLines: 1, softWrap: false);
+        return SizedBox(
+          width: box.maxWidth,
+          height: tp.height,
+          child: ClipRect(
+            child: AnimatedBuilder(
+              animation: _c,
+              builder: (_, child) => OverflowBox(
+                alignment: Alignment.centerLeft,
+                maxWidth: double.infinity,
+                child: Transform.translate(offset: Offset(-_c.value * _width, 0), child: child),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [line, const SizedBox(width: _gap), line]),
+            ),
+          ),
+        );
+      });
+}

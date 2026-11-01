@@ -270,8 +270,8 @@ try {
   });
   check("progress, controls and toolbar docked at the bottom", dock >= 0 && dock <= 30, `${dock} px above the bottom`);
   // With chapters the right button goes to the next chapter.
-  const hasChapters = await page.evaluate(() => /\(\d+ von \d+\)$/.test(document.querySelector(".np .sub")?.innerText ?? ""));
-  if (hasChapters) console.log("  episode has chapters: " + await page.evaluate(() => document.querySelector(".np .sub")?.innerText));
+  const hasChapters = await page.evaluate(() => /\(\d+ von \d+\)$/.test(document.querySelector(".np .sub .txt")?.innerText ?? ""));
+  if (hasChapters) console.log("  episode has chapters: " + await page.evaluate(() => document.querySelector(".np .sub .txt")?.innerText));
   const tb = await page.evaluate(() => [...document.querySelector(".tools").children].map((c) => ({ t: c.innerText.trim(), w: c.offsetWidth, h: c.offsetHeight,
     inner: c.firstElementChild ? c.firstElementChild.offsetWidth : c.offsetWidth })));
   check("car toolbar: offline left, speed, next right; no sleep timer",
@@ -414,7 +414,7 @@ try {
         await page.goto(base, { waitUntil: "domcontentloaded" });
         await page.waitForSelector("nav");
         await clickText("Jetzt läuft", "nav");
-        await page.waitForFunction((x) => document.querySelector(".np .title")?.innerText === x, { timeout: 15000 }, lastU.title);
+        await page.waitForFunction((x) => document.querySelector(".np .title .txt")?.innerText.trim() === x, { timeout: 15000 }, lastU.title);
         await sleep(1500);
         const np = await page.evaluate(() => ({ play: document.querySelector(".ctrl .play").innerText, times: document.querySelector(".times").innerText }));
         const shown = np.times.split(/\s/)[0].split(":").reduce((n, x) => n * 60 + +x, 0);

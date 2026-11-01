@@ -549,3 +549,27 @@ msgstr "1 Position wartet auf den Server"
 
 msgid "({i} of {n})"
 msgstr "({i} von {n})"
+
+msgid "About audiojoe"
+msgstr "Über audiojoe"
+
+msgid "App {v}"
+msgstr "App {v}"
+
+msgid "Server {v}"
+msgstr "Server {v}"
+
+msgid "Licence: Apache 2.0"
+msgstr "Lizenz: Apache 2.0"
+
+msgid "Manual"
+msgstr "Anleitung"
+
+msgid "Privacy"
+msgstr "Datenschutz"
+
+msgid "Third-party licences"
+msgstr "Lizenzen Dritter"
+
+msgid "Close"
+msgstr "Schließen"

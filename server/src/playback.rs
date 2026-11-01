@@ -202,3 +202,51 @@ pub async fn events(State(state): State<AppState>, user: CurrentUser) -> Sse<imp
     });
     Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
 }
+
+#[derive(Deserialize)]
+pub struct Queue {
+    items: Vec<Value>,
+    index: usize,
+    #[serde(default)]
+    entry: Option<Value>,
+}
+
+/// Stores this device's queue; a queue of one title removes it.
+pub async fn put_queue(State(state): State<AppState>, user: CurrentUser, Json(q): Json<Queue>) -> ApiResult<Json<Value>> {
+    let current = q.items.get(q.index).and_then(|i| i["key"].as_str()).unwrap_or("").to_string();
+    if q.items.len() > 1000 || !valid_key(&current) {
+        return Err(ApiError::BadRequest("invalid queue".into()));
+    }
+    let data = json!({ "items": q.items, "index": q.index, "entry": q.entry }).to_string();
+    if data.len() > 2_000_000 {
+        return Err(ApiError::BadRequest("queue too large".into()));
+    }
+    let (uid, dev, single) = (user.id, user.device.clone(), q.items.len() < 2);
+    with_db(&state.db, move |c| {
+        if single {
+            c.execute("DELETE FROM queue WHERE user_id = ?1 AND device = ?2", (uid, &dev))?;
+        } else {
+            c.execute(
+                "INSERT INTO queue (user_id, device, current_key, data, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT (user_id, device) DO UPDATE SET current_key = excluded.current_key,
+                   data = excluded.data, updated_at = excluded.updated_at",
+                (uid, &dev, &current, &data, ts(Utc::now())),
+            )?;
+        }
+        Ok(Json(json!({ "ok": true })))
+    })
+    .await
+}
+
+/// The newest queue of any of the user's devices whose current item is `key`.
+pub async fn get_queue(State(state): State<AppState>, user: CurrentUser, Path(key): Path<String>) -> ApiResult<Json<Value>> {
+    with_db(&state.db, move |c| {
+        let data: String = c.query_row(
+            "SELECT data FROM queue WHERE user_id = ?1 AND current_key = ?2 ORDER BY updated_at DESC LIMIT 1",
+            (user.id, key),
+            |r| r.get(0),
+        )?;
+        Ok(Json(serde_json::from_str(&data).map_err(|e| ApiError::Internal(e.into()))?))
+    })
+    .await
+}

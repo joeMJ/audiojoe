@@ -1,4 +1,5 @@
-// Headless test: an album keeps its queue across a reload (⏮ ⏭ stay, the next title follows).
+// Headless test: an album keeps its queue across a reload (⏮ ⏭ stay, the next title follows),
+// a second device taking over the title gets the whole album, and a long title flows.
 //
 //   AUDIOJOE_URL=https://audio.example.org CRED=/path/credentials.json node tests/queue.test.mjs
 
@@ -34,7 +35,7 @@ await page.evaluateOnNewDocument(() => Object.defineProperty(navigator, "languag
 const text = () => page.evaluate(() => document.body.innerText.replace(/­/g, ""));
 const waitText = (s, timeout = 30000) => page.waitForFunction((x) => document.body.innerText.replace(/­/g, "").includes(x), { timeout, polling: 250 }, s);
 const nav = (l) => page.evaluate((l) => [...document.querySelectorAll("nav button")].find((b) => b.innerText.replace(/­/g, "").includes(l)).click(), l);
-const title = () => page.evaluate(() => document.querySelector(".np .title")?.innerText);
+const title = () => page.evaluate(() => document.querySelector(".np .title .txt")?.innerText);
 const ctrl = () => page.evaluate(() => ({ steps: document.querySelectorAll(".ctrl button:not(.skip):not(.play)").length,
   next: !document.querySelector(".tools .next")?.disabled }));
 try {
@@ -73,6 +74,39 @@ try {
   const second = await title();
   check("⏭ after the reload plays the next title of the album", second && second !== first, second);
   await page.evaluate(() => document.querySelector(".ctrl .play")?.innerText === "❚❚" && document.querySelector(".ctrl .play").click());
+  await sleep(1500);
+
+  // A long title flows (the count stays visible); the flow restarts on a resize.
+  const flows = await page.evaluate(async () => {
+    const txt = document.querySelector(".np .title .txt");
+    txt.firstChild.textContent = "A very long title that never fits into one line of the player view ".repeat(2);
+    dispatchEvent(new Event("resize"));
+    await new Promise((r) => setTimeout(r, 300));
+    const el = document.querySelector(".np .title");
+    return { flowing: el.classList.contains("flowing"), running: el.querySelector(".run").getAnimations().length };
+  });
+  check("a long title flows in one line", flows.flowing && flows.running === 1, JSON.stringify(flows));
+
+  // A second device (own session) takes over the paused title: the album comes along.
+  const other = await browser.createBrowserContext();
+  const p2 = await other.newPage();
+  await p2.setViewport({ width: 773, height: 601 });
+  await p2.evaluateOnNewDocument(() => Object.defineProperty(navigator, "language", { get: () => "de-DE" }));
+  await p2.goto(base, { waitUntil: "networkidle0" });
+  await sleep((30 - (Date.now() / 1000) % 30 + 1) * 1000);
+  const in2 = await p2.$$("form input");
+  await in2[0].type(cred.username);
+  await in2[1].type(cred.password);
+  await in2[2].type(totp(cred.totp_secret));
+  await p2.click("form button");
+  await p2.waitForFunction(() => document.body.innerText.includes("Server"), { timeout: 30000 });
+  await p2.evaluate(() => [...document.querySelectorAll("nav button")].find((b) => b.innerText.replace(/­/g, "").includes("Jetzt läuft")).click());
+  await p2.waitForSelector(".np .title .txt", { timeout: 20000 });
+  await sleep(1500);
+  const taken = await p2.evaluate(() => ({ title: document.querySelector(".np .title .txt")?.innerText,
+    steps: document.querySelectorAll(".ctrl button:not(.skip):not(.play)").length }));
+  check("another device taking over gets the album with ⏮ ⏭", taken.title === second && taken.steps === 2, JSON.stringify(taken));
+  await other.close();
 } catch (e) {
   check(`aborted: ${e.message}`, false);
 }

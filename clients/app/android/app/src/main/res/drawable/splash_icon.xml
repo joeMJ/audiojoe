@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ splash icon: the launcher foreground shrunk, so the circular mask of the
+     splash screen does not cut off the play triangle at the top left. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@mipmap/ic_launcher_foreground"
+    android:inset="17%" />

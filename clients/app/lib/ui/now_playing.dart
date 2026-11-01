@@ -57,14 +57,12 @@ class _PlaybackTab extends StatelessWidget {
         final out = sonos.output;
         final controls = Column(mainAxisSize: MainAxisSize.min, children: [
           // "(16 of 21)" after the title in a queue (an album), after the chapter name with chapters.
-          Text.rich(
+          // A long title flows, so the count stays visible.
+          Marquee(
               TextSpan(text: it.title, children: [
                 if (player.chapters.isEmpty && player.queue.length > 1)
                   TextSpan(text: ' ${_count(player.index, player.queue.length)}', style: TextStyle(color: k.muted, fontWeight: FontWeight.w600)),
               ]),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
           const SizedBox(height: 4),
           Text(it.subtitle, textAlign: TextAlign.center, maxLines: 1,
@@ -72,13 +70,10 @@ class _PlaybackTab extends StatelessWidget {
           if (player.chapter.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: Text.rich(
+              child: Marquee(
                   TextSpan(text: player.chapter, children: [
                     TextSpan(text: ' ${_count(player.chapterIndex, player.chapters.length)}', style: TextStyle(color: k.muted, fontWeight: FontWeight.w600)),
                   ]),
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
             ),
           const SizedBox(height: 12),

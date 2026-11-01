@@ -7,10 +7,10 @@ import 'l10n_de.g.dart';
 
 const _de = deStrings;
 
-final bool _isDe = PlatformDispatcher.instance.locale.languageCode == 'de';
+final bool isDe = PlatformDispatcher.instance.locale.languageCode == 'de';
 
 String t(String s, [Map<String, Object> vars = const {}]) {
-  var out = _isDe ? (_de[s] ?? s) : s;
+  var out = isDe ? (_de[s] ?? s) : s;
   vars.forEach((k, v) => out = out.replaceAll('{$k}', '$v'));
   return out;
 }

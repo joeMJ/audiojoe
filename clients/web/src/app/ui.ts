@@ -30,6 +30,34 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, props: Record<string, 
   return e;
 }
 
+/** One line that flows to the left again and again when it does not fit, with a 2 s pause at
+ *  the start of each round (none with reduced motion: then it is cut off). */
+function flow(el: HTMLElement, ...content: (string | HTMLElement)[]) {
+  const key = content.map((c) => (typeof c === "string" ? c : c.textContent)).join("\u0000");
+  if (el.dataset.flow === key) return;
+  el.dataset.flow = key;
+  el.replaceChildren(h("span", { className: "run" }, h("span", { className: "txt" }, ...content)));
+  requestAnimationFrame(() => fitFlow(el));
+}
+function fitFlow(el: HTMLElement) {
+  const run = el.firstElementChild as HTMLElement | null;
+  const txt = run?.firstElementChild as HTMLElement | null;
+  if (!run || !txt) return;
+  run.getAnimations().forEach((a) => a.cancel());
+  run.querySelector(".copy")?.remove();
+  el.classList.remove("flowing");
+  if (txt.offsetWidth <= el.clientWidth || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const gap = 48, round = txt.offsetWidth + gap, ms = 2000 + (round / 35) * 1000;
+  const copy = txt.cloneNode(true) as HTMLElement;
+  copy.className = "txt copy";
+  copy.setAttribute("aria-hidden", "true");
+  run.append(copy);
+  el.classList.add("flowing");
+  run.animate([{ transform: "translateX(0)" }, { transform: "translateX(0)", offset: 2000 / ms }, { transform: `translateX(-${round}px)` }],
+              { duration: ms, iterations: Infinity });
+}
+addEventListener("resize", () => document.querySelectorAll<HTMLElement>("[data-flow]").forEach(fitFlow));
+
 const icon = (path: string) => {
   const d = document.createElement("div");
   d.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">${path}</svg>`;
@@ -239,7 +267,7 @@ export function refresh(kind: "player" | "data" | "offline") {
 let npTab: "play" | "details" | "chapters" = "play";
 let npKey = "";
 let npRefs: { bar: HTMLElement; fill: HTMLElement; knob: HTMLElement; pos: HTMLElement; rest: HTMLElement; play: HTMLElement;
-              from: HTMLElement; rate: HTMLElement; here: HTMLElement; sub: HTMLElement; next: HTMLButtonElement; off: HTMLElement; count: HTMLElement } | null = null;
+              from: HTMLElement; rate: HTMLElement; here: HTMLElement; sub: HTMLElement; next: HTMLButtonElement; off: HTMLElement; title: HTMLElement } | null = null;
 
 /** Offline field of the player toolbar: save button, then live progress, then "in cache". */
 async function fillOffTool(box: HTMLElement) {
@@ -312,14 +340,16 @@ function renderNowPlaying() {
   const tools = h("div", { className: "tools" }, off, rate, next);
   void fillOffTool(off);
   // "(16 of 21)" after the title in a queue (an album); with chapters after the chapter name.
-  const count = h("span", { className: "count" });
+  // A long title (and chapter) flows, so the count stays visible.
+  const title = h("div", { className: "title" });
+  flow(title, it.title);
   // Cover and facts scroll when space is short; progress, controls and toolbar stay docked at
   // the bottom of the window.
   main.classList.add("dock");
   main.append(
     h("div", { className: "np" }, cover, h("div", {},
       h("div", { className: "kind" }, kind),
-      h("div", { className: "title" }, it.title, count),
+      title,
       sub,
       h("div", { className: "fmt" }, here))),
     h("div", { className: "dockbar" },
@@ -333,7 +363,7 @@ function renderNowPlaying() {
       player.isLive() ? null : tools,
       from),
   );
-  npRefs = { bar, fill, knob, pos, rest, play, from, rate, here, sub, next, off, count };
+  npRefs = { bar, fill, knob, pos, rest, play, from, rate, here, sub, next, off, title };
   updateNowPlaying();
 }
 
@@ -466,12 +496,10 @@ function updateNowPlaying() {
     npRefs.here.replaceChildren(qualityRow(s.delivered ?? s.item?.quality, s.fromCache, s.transcoded ? s.item?.quality : null));
   }
   const ci = player.chapterIndex();
-  if (s.item?.chapters?.length) {
-    const c = `${player.chapter()} ${t("({i} of {n})", { i: ci + 1, n: s.item.chapters.length })}`;
-    if (npRefs.sub.textContent !== c) npRefs.sub.textContent = c;
-  }
+  const count = (text: string) => h("span", { className: "count" }, text);
+  if (s.item?.chapters?.length) flow(npRefs.sub, player.chapter(), count(` ${t("({i} of {n})", { i: ci + 1, n: s.item.chapters.length })}`));
   const n = ci < 0 && s.queue.length > 1 ? ` ${t("({i} of {n})", { i: s.index + 1, n: s.queue.length })}` : "";
-  if (npRefs.count.textContent !== n) npRefs.count.textContent = n;
+  flow(npRefs.title, s.item?.title ?? "", count(n));
   npRefs.from.textContent = s.takenOver ? t("Taken over from {device} · {ago}", { device: s.takenOver.device, ago: ago(s.takenOver.at) }) : "";
 }
 
@@ -951,4 +979,18 @@ async function renderOffline() {
   }
   main.append(box);
   main.append(h("div", { style: "margin-top:24px" }, h("button", { className: "big sec", onclick: () => onLogout() }, t("Sign out this device"))));
+  main.append(about());
+}
+
+/** Version, licence, and the manual and privacy notes the server delivers. */
+function about() {
+  const ver = h("span", {});
+  void api<{ version: string }>("GET", "/health").then((r) => (ver.textContent = ` · ${t("Server {v}", { v: r.version })}`)).catch(() => undefined);
+  const de = navigator.language.startsWith("de") ? "de/" : "";
+  const link = (label: string, page: string) => h("a", { href: `/docs/${de}${page}.html`, target: "_blank", rel: "noopener" }, label);
+  return h("div", { className: "about" },
+    h("h2", {}, t("About audiojoe")),
+    h("div", {}, h("img", { src: "/icon-192.png", alt: "", width: 40, height: 40 }), h("span", {}, "audiojoe", ver)),
+    h("div", { className: "muted" }, t("Licence: Apache 2.0")),
+    h("div", { className: "links" }, link(t("Manual"), "manual"), link(t("Privacy"), "privacy")));
 }

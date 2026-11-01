@@ -116,14 +116,17 @@ async function startPosition(it: Item): Promise<{ ms: number; from?: Playback }>
 let nextAfter: ((e: Entry) => Promise<(() => Promise<void>) | null>) | null = null;
 export const setNextAfter = (f: typeof nextAfter) => void (nextAfter = f);
 
-/** The queue (e.g. an album) on this device, so a reload continues it instead of one title. */
+/** The queue (e.g. an album) on this device, so a reload continues it instead of one title.
+ *  The server keeps it too, so another device taking over the title continues the queue. */
 const QUEUE = "aj_queue";
+type Saved = { queue: Item[]; index: number; entry?: Entry };
 function saveQueue() {
   try {
     localStorage.setItem(QUEUE, JSON.stringify({ queue: state.queue, index: state.index, entry: state.entry ?? null }));
   } catch { /* private window or full: a reload then continues the title alone */ }
+  if (online) void api("PUT", "/queue", { items: state.queue, index: state.index, entry: state.entry ?? null }).catch(() => undefined);
 }
-function savedQueue(key: string): { queue: Item[]; index: number; entry?: Entry } | null {
+function savedQueue(key: string): Saved | null {
   try {
     const q = JSON.parse(localStorage.getItem(QUEUE) ?? "null") as { queue: Item[]; index: number; entry: Entry | null } | null;
     if (!q || q.queue?.[q.index]?.key !== key) return null;
@@ -132,16 +135,35 @@ function savedQueue(key: string): { queue: Item[]; index: number; entry?: Entry 
     return null;
   }
 }
+/** The queue another device left with `key` as its current title. */
+async function serverQueue(key: string): Promise<Saved | null> {
+  if (!online) return null;
+  try {
+    const q = await api<{ items: Item[]; index: number; entry: Entry | null }>("GET", `/queue/${encodeURIComponent(key)}`);
+    if (q.items?.[q.index]?.key !== key) return null;
+    return { queue: q.items, index: q.index, entry: q.entry ?? undefined };
+  } catch {
+    return null;
+  }
+}
 
 export async function play(queue: Item[], index = 0, entry?: Entry) {
   await persist();
+  // A single title another device played within an album: continue that album here.
+  const other = queue.length === 1 && queue[0].kind === "track" ? await serverQueue(queue[0].key) : null;
   state.queue = queue;
   state.index = index;
   const it = queue[index];
   // Episodes and books are list entries themselves; music only when played as an album entry.
   state.entry = entry ?? (it.kind === "episode" ? { list: "podcasts", key: it.key } : it.kind === "book" ? { list: "books", key: it.key } : undefined);
+  if (other) {
+    state.queue = other.queue;
+    state.queue[other.index] = it;
+    state.index = other.index;
+    state.entry = other.entry;
+  }
   saveQueue();
-  await load(queue[index], true);
+  await load(state.queue[state.index], true);
 }
 
 function partFor(ms: number): number {
@@ -227,7 +249,8 @@ export async function cueLast() {
     if (it) break;
   }
   if (!it || state.item) return;
-  const saved = savedQueue(it.key);
+  const saved = savedQueue(it.key) ?? (await serverQueue(it.key));
+  if (state.item) return;
   if (saved) {
     state.queue = saved.queue;
     state.queue[saved.index] = it;
