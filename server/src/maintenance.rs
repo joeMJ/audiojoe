@@ -12,7 +12,9 @@
 //!
 //! App updates: the script keeps the newest release (tag, page, files) in the status; from
 //! that `apps` names the installer of each platform, and `GET /maintenance/app/{platform}`
-//! relays its download – the apps never talk to GitHub themselves.
+//! relays its download – the apps never talk to GitHub themselves. `GET /maintenance/sums`
+//! relays the release's `SHA256SUMS` the same way; the apps check a download against it before
+//! they install it.
 
 use std::path::PathBuf;
 
@@ -85,6 +87,10 @@ fn asset_url(status: Option<&Value>, platform: &str) -> Option<(String, String)>
         .and_then(|a| Some((a["name"].as_str()?.to_string(), a["url"].as_str()?.to_string())))
 }
 
+fn sums_url(status: Option<&Value>) -> Option<String> {
+    status?["release"]["assets"].as_array()?.iter().find(|a| a["name"] == "SHA256SUMS")?["url"].as_str().map(str::to_string)
+}
+
 pub async fn status(State(state): State<AppState>, _user: CurrentUser) -> Json<Value> {
     let d = dir(&state);
     let status = read_status(&state);
@@ -136,6 +142,28 @@ pub async fn app_download(State(state): State<AppState>, _user: CurrentUser, Pat
     Ok((StatusCode::OK, headers, Body::from_stream(res.bytes_stream())).into_response())
 }
 
+/// `GET /api/v1/maintenance/sums`: `SHA256SUMS` of the newest release (text), relayed like the
+/// installers; 404 when the release has none.
+pub async fn sums(State(state): State<AppState>, _user: CurrentUser) -> ApiResult<Response> {
+    let url = sums_url(read_status(&state).as_ref()).ok_or(ApiError::NotFound)?;
+    let res = state
+        .http
+        .get(&url)
+        .header(header::ACCEPT, "application/octet-stream")
+        .timeout(std::time::Duration::from_secs(60))
+        .send()
+        .await
+        .map_err(|e| ApiError::BadGateway(format!("release download: {}", e.without_url())))?;
+    if !res.status().is_success() {
+        return Err(ApiError::BadGateway(format!("release download answered {}", res.status())));
+    }
+    let body = res.bytes().await.map_err(|e| ApiError::BadGateway(format!("release download: {}", e.without_url())))?;
+    if body.len() > 1024 * 1024 {
+        return Err(ApiError::BadGateway("SHA256SUMS too large".into()));
+    }
+    Ok(([(header::CONTENT_TYPE, HeaderValue::from_static("text/plain; charset=utf-8"))], body).into_response())
+}
+
 #[derive(Deserialize)]
 pub struct SetMode {
     mode: String,
@@ -179,6 +207,16 @@ mod tests {
         std::fs::write(d.join("update-request"), "now\n").unwrap();
         assert_eq!(request(&d), Some("now"));
         std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn sums_from_release_files() {
+        let st = json!({ "release": { "assets": [
+            { "name": "audiojoe_0.1.0_amd64.deb", "url": "u1" }, { "name": "SHA256SUMS", "url": "u2" },
+        ] } });
+        assert_eq!(sums_url(Some(&st)).as_deref(), Some("u2"));
+        assert_eq!(sums_url(Some(&json!({ "release": { "assets": [] } }))), None);
+        assert_eq!(sums_url(None), None);
     }
 
     #[test]

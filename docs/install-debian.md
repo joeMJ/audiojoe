@@ -49,9 +49,10 @@ Positionen, Offline-Titel und Einstellungen bleiben dabei in
 ## Updates
 
 Ist der Server aus dem Paket installiert, zeigt die App eine neue Version unter
-**Einstellungen → Pflege** in der Zeile **App** an. **Version … herunterladen** lädt das Paket über
-den eigenen Server in den Ordner „Downloads“ und öffnet es mit dem Programm, das der Desktop für
-`.deb`-Dateien vorsieht. Die App fragt dafür nie GitHub, siehe
+**Einstellungen → Pflege** in der Zeile **App** an. **Version … herunterladen** lädt das Paket über den
+eigenen Server und prüft es gegen `SHA256SUMS` desselben Releases; stimmt die Prüfsumme nicht,
+wird nichts installiert. Danach zeigt die App den Befehl `pkexec apt-get install -y …`, installiert
+nach **Installieren** (das System fragt nach dem Kennwort) und bietet **Neu starten** an. Die App fragt dafür nie GitHub, siehe
 [Datenschutz](DATENSCHUTZ.md#updates-nur-mit-dem-server-paket). Ebenso aktualisiert der
 Installationsbefehl oben.
 

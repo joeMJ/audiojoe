@@ -47,7 +47,9 @@ sign-in in the keyring.
 
 If the server is installed from the package, the app shows a new version under
 **Settings → Maintenance** in the row **App**. **Download version …** downloads the package through
-your own server into the folder "Downloads" and opens it with the system's software installer.
+your own server and checks it against `SHA256SUMS` of the same release; if the checksum does not
+match, nothing is installed. Then the app shows the command `pkexec apt-get install -y …`, installs
+after **Install** (the system asks for the password) and offers **Restart**.
 The app never asks GitHub for this, see [Privacy](DATENSCHUTZ.en.md#updates-only-with-the-server-package).
 The installation command above updates as well.
 

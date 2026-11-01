@@ -162,6 +162,7 @@ async fn main() -> Result<()> {
         .route("/api/v1/maintenance/update", post(maintenance::request_update))
         .route("/api/v1/maintenance/check", post(maintenance::request_check))
         .route("/api/v1/maintenance/app/{platform}", get(maintenance::app_download))
+        .route("/api/v1/maintenance/sums", get(maintenance::sums))
         .route("/api/v1/gpodder", get(gpodder::info))
         .route("/api/v1/gpodder/password", post(gpodder::new_password).delete(gpodder::drop_password))
         // gpodder-compatible sync for other podcast apps (/api/2/…, /subscriptions/…).

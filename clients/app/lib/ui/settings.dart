@@ -723,7 +723,7 @@ class _AppUpdateRowState extends State<_AppUpdateRow> {
                 child: FilledButton.icon(
                   icon: const Icon(Icons.download),
                   label: Text(Platform.isAndroid ? t('Install version {v}', {'v': u.latest}) : t('Download version {v}', {'v': u.latest})),
-                  onPressed: () => runAppUpdate(u, widget.say, t),
+                  onPressed: () => runAppUpdate(u, widget.say),
                 ),
               ),
           ]);

@@ -18,6 +18,7 @@ import 'package:audiojoe/main.dart' as app;
 import 'package:audiojoe/models.dart';
 import 'package:audiojoe/player.dart';
 import 'package:audiojoe/sonos.dart';
+import 'package:audiojoe/updates.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -164,6 +165,19 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
     expect(player.position > at, isTrue, reason: 'position advances from the offline file');
     await player.stop();
+
+    // ---------------------------------------------------------- app update: download + SHA-256
+    // The Linux installer of the newest release through the server, checked against its SHA256SUMS
+    // (only when the server knows a release; installing is not part of this test).
+    final apps = (await api.call('GET', '/maintenance') as Map)['apps'] as Map?;
+    if (apps?['linux'] != null) {
+      final u = AppUpdate(latest: '${apps!['latest']}', name: '${apps['linux']['name']}', platform: 'linux');
+      final f = await downloadAppUpdate(u, (_, _) {});
+      expect(f.lengthSync(), greaterThan(1000000), reason: 'the checked package is kept');
+      // ignore: avoid_print
+      print('app update: ${u.name} downloaded and checked (${f.lengthSync()} bytes)');
+      await f.delete();
+    }
 
     // ---------------------------------------------------------- cleanup
     await downloads.remove(ep.key);

@@ -709,11 +709,62 @@ msgstr "Herunterladen"
 msgid "Downloading version {v} …"
 msgstr "Version {v} wird geladen …"
 
-msgid "Saved as {file}. Opening the installer …"
-msgstr "Gespeichert als {file}. Installationsprogramm wird geöffnet …"
-
 msgid "Update failed"
 msgstr "Aktualisierung fehlgeschlagen"
+
+msgid "Release without SHA256SUMS – download refused"
+msgstr "Release ohne SHA256SUMS – Download abgelehnt"
+
+msgid "{name} is missing in SHA256SUMS"
+msgstr "{name} fehlt in SHA256SUMS"
+
+msgid "Checksum wrong (expected {expected}, got {actual})"
+msgstr "Prüfsumme falsch (erwartet {expected}, erhalten {actual})"
+
+msgid "Download failed"
+msgstr "Download fehlgeschlagen"
+
+msgid "Installer checked"
+msgstr "Installer geprüft"
+
+msgid "The checksum (SHA-256) matches. audiojoe closes and starts the installer:"
+msgstr "Die Prüfsumme (SHA-256) stimmt. audiojoe beendet sich und startet den Installer:"
+
+msgid "Then open audiojoe again."
+msgstr "Danach audiojoe wieder öffnen."
+
+msgid "Installation not started"
+msgstr "Installation nicht gestartet"
+
+msgid "Package checked"
+msgstr "Paket geprüft"
+
+msgid "The checksum (SHA-256) matches. Install with:"
+msgstr "Die Prüfsumme (SHA-256) stimmt. Installation mit:"
+
+msgid "Then restart audiojoe."
+msgstr "Danach audiojoe neu starten."
+
+msgid "OK"
+msgstr "OK"
+
+msgid "Installation not completed"
+msgstr "Installation nicht abgeschlossen"
+
+msgid "Cancelled or failed."
+msgstr "Abgebrochen oder fehlgeschlagen."
+
+msgid "Installed"
+msgstr "Installiert"
+
+msgid "Restart audiojoe now so the new version runs?"
+msgstr "audiojoe jetzt neu starten, damit die neue Fassung läuft?"
+
+msgid "Restart"
+msgstr "Neu starten"
+
+msgid "Restart not possible"
+msgstr "Neustart nicht möglich"
 
 msgid "App {v}"
 msgstr "App {v}"

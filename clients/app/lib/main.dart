@@ -88,7 +88,7 @@ class _AudiojoeAppState extends State<AudiojoeApp> {
         FilledButton(
           onPressed: () {
             m.hideCurrentMaterialBanner();
-            unawaited(runAppUpdate(update, say, t));
+            unawaited(runAppUpdate(update, say));
           },
           child: Text(Platform.isAndroid ? t('Install') : t('Download')),
         ),
@@ -114,6 +114,7 @@ class _AudiojoeAppState extends State<AudiojoeApp> {
       builder: (context, mode, _) => MaterialApp(
         title: 'audiojoe',
         scaffoldMessengerKey: messenger,
+        navigatorKey: appNavigator,
         debugShowCheckedModeBanner: false,
         theme: buildTheme(Brightness.light),
         darkTheme: buildTheme(Brightness.dark),
