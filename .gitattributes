@@ -1,0 +1,2 @@
+# Flutter writes these with LF on every platform; keep them so on Windows checkouts too.
+clients/app/*/flutter/generated_plugin* text eol=lf
