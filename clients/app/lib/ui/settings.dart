@@ -164,7 +164,17 @@ class _SettingsViewState extends State<SettingsView> {
             SettingsGroup(children: [Align(alignment: Alignment.centerLeft, child: _signOut())]),
           ],
         5 => [SettingsGroup(children: [MaintenanceSettings(key: ValueKey('maint$_gen'))])],
-        _ => [const SettingsGroup(children: [AboutPanel()])],
+        _ => [
+            const SettingsGroup(children: [AboutPanel()]),
+            // As in tvjoe (prefs.rs, group "Mitwirkende").
+            SettingsGroup(title: t('Contributors'), children: [
+              const ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('John Lose (joeMJ)', style: TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: Text('© 2026 John Lose · Apache-2.0'),
+              ),
+            ]),
+          ],
       };
 
   Widget _desktop(BuildContext context) {

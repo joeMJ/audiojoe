@@ -32,6 +32,9 @@ msgstr "Abbrechen"
 msgid "Code from the authenticator app"
 msgstr "Code aus der Authenticator-App"
 
+msgid "Contributors"
+msgstr "Mitwirkende"
+
 msgid "Continue"
 msgstr "Weiter­hören"
 

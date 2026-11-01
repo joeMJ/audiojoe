@@ -37,6 +37,7 @@ const deStrings = <String, String>{
   "Code from the authenticator app": "Code aus der Authenticator-App",
   "Contact for MusicBrainz (e-mail or web address)": "Kontakt für MusicBrainz (E-Mail oder Webadresse)",
   "Continue": "Weiter­hören",
+  "Contributors": "Mitwirkende",
   "Daily": "Täglich",
   "Dark mode: off": "Dunkelmodus: aus",
   "Dark mode: on": "Dunkelmodus: an",
