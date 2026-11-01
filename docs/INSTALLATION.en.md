@@ -24,22 +24,26 @@ itself speaks plain HTTP and should listen in the home network only.
 On the Proxmox host as `root`:
 
 ```bash
-curl -fsSL -o audiojoe-lxc.sh https://raw.githubusercontent.com/joeMJ/audiojoe/main/packaging/proxmox/audiojoe-lxc.sh
-less audiojoe-lxc.sh
-bash audiojoe-lxc.sh
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/joeMJ/audiojoe/main/packaging/proxmox/audiojoe-lxc.sh)"
 ```
 
-The script asks for the container ID, storage, network (fixed address or DHCP), size, the address
-of the proxy and the name of the first user; Enter keeps the proposal. Then it:
+To read the script first: download it with `curl -fsSL -o audiojoe-lxc.sh …`, look at it, then
+`bash audiojoe-lxc.sh`.
 
-- creates an **unprivileged Debian 13 container** (2 cores, 2 GB RAM, 8 GB disk, starts with the
-  host),
+The script asks in dialogs (similar to the Proxmox helper scripts), first for the resources –
+**optimal** (2 cores, 2 GB RAM, 16 GB disk, recommended) or **minimum** (1 core, 1 GB RAM, 8 GB
+disk) –, then for the container ID, name, storage, bridge, network (fixed address or DHCP),
+gateway, DNS server (empty: like the host), the address of the proxy, Sonos and the name of the
+first user; Enter keeps the proposal. A summary shows everything before the container is created.
+Then it:
+
+- creates an **unprivileged Debian 13 container** (starts with the host),
 - installs the server package from the newest release (checksum from `SHA256SUMS`),
 - writes `/etc/audiojoe/config.toml` with the container's address (port 8080, Sonos 8081),
 - sets up the **self-maintenance** (see [Updates and maintenance](#updates-and-maintenance)),
 - creates the **first user** and shows password and TOTP secret once.
 
-Without questions, e.g. to repeat it:
+Without questions, e.g. to repeat it (`PRESET=minimal` for the small resources):
 `CTID=120 IP=10.0.0.20/24 GW=10.0.0.1 DNS=10.0.0.1 PROXY=10.0.0.10 ADMIN=anna bash audiojoe-lxc.sh --yes`.
 `DRY_RUN=1` only shows what would be done.
 

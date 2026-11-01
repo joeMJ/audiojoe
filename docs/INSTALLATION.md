@@ -24,22 +24,26 @@ spricht selbst nur HTTP und soll nur im Heimnetz lauschen.
 Auf dem Proxmox-Host als `root`:
 
 ```bash
-curl -fsSL -o audiojoe-lxc.sh https://raw.githubusercontent.com/joeMJ/audiojoe/main/packaging/proxmox/audiojoe-lxc.sh
-less audiojoe-lxc.sh
-bash audiojoe-lxc.sh
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/joeMJ/audiojoe/main/packaging/proxmox/audiojoe-lxc.sh)"
 ```
 
-Das Skript fragt nach Container-Nummer, Speicher, Netz (feste Adresse oder DHCP), Größe, der
-Adresse des Proxys und dem Namen des ersten Benutzers; Enter übernimmt den Vorschlag. Dann:
+Wer das Skript vorher lesen will: mit `curl -fsSL -o audiojoe-lxc.sh …` laden, ansehen, dann
+`bash audiojoe-lxc.sh`.
 
-- legt es einen **unprivilegierten Debian-13-Container** an (2 Kerne, 2 GB RAM, 8 GB Platte,
-  Start mit dem Host),
+Das Skript fragt in Dialogen (ähnlich den Proxmox Helper Scripts) zuerst nach den Ressourcen –
+**optimal** (2 Kerne, 2 GB RAM, 16 GB Platte, empfohlen) oder **Minimum** (1 Kern, 1 GB RAM,
+8 GB Platte) –, dann nach Container-Nummer, Name, Speicher, Bridge, Netz (feste Adresse oder
+DHCP), Gateway, DNS-Server (leer: wie der Host), der Adresse des Proxys, Sonos und dem Namen des
+ersten Benutzers; Enter übernimmt den Vorschlag. Eine Zusammenfassung zeigt alles vor dem
+Anlegen. Dann:
+
+- legt es einen **unprivilegierten Debian-13-Container** an (Start mit dem Host),
 - installiert das Server-Paket aus dem neuesten Release (Prüfsumme aus `SHA256SUMS`),
 - schreibt `/etc/audiojoe/config.toml` mit der Adresse des Containers (Port 8080, Sonos 8081),
 - richtet die **Selbstpflege** ein (siehe [Updates und Pflege](#updates-und-pflege)),
 - legt den **ersten Benutzer** an und zeigt Passwort und TOTP-Schlüssel einmal an.
 
-Ohne Rückfragen, z. B. für Wiederholungen:
+Ohne Rückfragen, z. B. für Wiederholungen (`PRESET=minimal` für die kleinen Ressourcen):
 `CTID=120 IP=10.0.0.20/24 GW=10.0.0.1 DNS=10.0.0.1 PROXY=10.0.0.10 ADMIN=anna bash audiojoe-lxc.sh --yes`.
 `DRY_RUN=1` zeigt nur, was geschehen würde.
 

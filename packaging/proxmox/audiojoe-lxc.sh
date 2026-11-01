@@ -3,14 +3,20 @@
 # the audiojoe server in it (package from the newest release), with nightly server updates,
 # daily Debian updates and the first user with TOTP. Run on the Proxmox host as root:
 #
-#   bash audiojoe-lxc.sh                  asks for the values (Enter keeps the proposal)
+#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/joeMJ/audiojoe/main/packaging/proxmox/audiojoe-lxc.sh)"
+#
+# With a terminal and whiptail it asks in dialogs (like the Proxmox helper scripts): resources
+# (minimum or optimal), container ID, host name, storage, bridge, IP, gateway, DNS, proxy, Sonos,
+# first user; then a summary to confirm. Without whiptail it asks on the console.
+#
 #   CTID=120 IP=10.0.0.20/24 GW=10.0.0.1 ADMIN=anna bash audiojoe-lxc.sh --yes
 #   DRY_RUN=1 bash audiojoe-lxc.sh        only shows what would be done
 #
-# Values (environment): CTID, HOSTNAME_CT (audiojoe), STORAGE (local-lvm), TEMPLATE_STORAGE
-# (local), BRIDGE (vmbr0), IP (dhcp or address/prefix), GW, DNS (empty: like the host), CORES (2),
-# RAM (2048 MB), DISK (8 GB),
-# PROXY (address of the reverse proxy, optional), ADMIN (first user), SONOS (yes: stream port 8081).
+# Values (environment): PRESET (optimal: 2 cores, 2048 MB, 16 GB; minimal: 1 core, 1024 MB, 8 GB),
+# CTID, HOSTNAME_CT (audiojoe), STORAGE (local-lvm), TEMPLATE_STORAGE (local), BRIDGE (vmbr0),
+# IP (dhcp or address/prefix), GW, DNS (empty: like the host), CORES, RAM (MB), DISK (GB) – these
+# three override the preset –, PROXY (address of the reverse proxy, optional), ADMIN (first user),
+# SONOS (yes: stream port 8081).
 # RELEASE_API: release source (default: the GitHub repository), RELEASE_TOKEN_FILE: file with an
 # access token for a private repository (tests only).
 set -Eeuo pipefail
@@ -19,20 +25,55 @@ DEFAULT_API="https://api.github.com/repos/joeMJ/audiojoe"
 RELEASE_API="${RELEASE_API:-$DEFAULT_API}"
 YES=no; [ "${1:-}" = --yes ] && YES=yes
 DRY="${DRY_RUN:-0}"
+TITLE="audiojoe – Proxmox container"
 
 say() { printf '\033[1;36m== %s\033[0m\n' "$*"; }
 die() { printf '\033[1;31m✖ %s\033[0m\n' "$*" >&2; exit 1; }
 run() { if [ "$DRY" = 1 ]; then printf '   %s\n' "$*"; else "$@"; fi; }
-ask() { # name proposal question
+
+# Dialogs only when someone sits at a terminal; otherwise environment values and proposals.
+ASKING=no; [ "$YES" = no ] && [ -t 0 ] && [ -t 1 ] && ASKING=yes
+UI=console; [ "$ASKING" = yes ] && command -v whiptail >/dev/null && UI=whiptail
+wt() { whiptail --title "$TITLE" "$@" 3>&1 1>&2 2>&3; }
+
+ask() { # name proposal question – a value from the environment is kept, Enter keeps the proposal
   local v="${!1:-}"
-  if [ -z "$v" ] && [ "$YES" = no ] && [ -t 0 ]; then read -r -p "$3 [$2]: " v; fi
+  if [ -z "$v" ] && [ "$ASKING" = yes ]; then
+    if [ "$UI" = whiptail ]; then v="$(wt --inputbox "$3" 10 72 "$2")" || die "cancelled"
+    else read -r -p "$3 [$2]: " v; fi
+  fi
   printf -v "$1" '%s' "${v:-$2}"
+}
+ask_yes() { # name question – yes/no, proposal yes
+  local v="${!1:-}"
+  if [ -z "$v" ] && [ "$ASKING" = yes ]; then
+    if [ "$UI" = whiptail ]; then
+      if wt --yesno "$2" 10 72; then v=yes; else [ $? = 1 ] && v=no || die "cancelled"; fi
+    else read -r -p "$2 (yes/no) [yes]: " v; fi
+  fi
+  printf -v "$1" '%s' "${v:-yes}"
 }
 
 [ "$(id -u)" = 0 ] || die "run as root on the Proxmox host"
 command -v pct >/dev/null && command -v pveam >/dev/null || die "pct/pveam missing – this is not a Proxmox VE host"
 
 say "Settings"
+if [ -z "${PRESET:-}" ] && [ "$ASKING" = yes ]; then
+  if [ "$UI" = whiptail ]; then
+    PRESET="$(wt --menu "Resources for the container" 12 72 2 \
+      optimal "2 cores, 2048 MB RAM, 16 GB disk (recommended)" \
+      minimal "1 core, 1024 MB RAM, 8 GB disk (minimum)")" || die "cancelled"
+  else
+    read -r -p "Resources: optimal (2 cores, 2048 MB, 16 GB) or minimal (1 core, 1024 MB, 8 GB) [optimal]: " PRESET
+  fi
+fi
+PRESET="${PRESET:-optimal}"
+case "$PRESET" in
+  optimal) CORES="${CORES:-2}" RAM="${RAM:-2048}" DISK="${DISK:-16}" ;;
+  minimal) CORES="${CORES:-1}" RAM="${RAM:-1024}" DISK="${DISK:-8}" ;;
+  *) die "PRESET must be optimal or minimal" ;;
+esac
+
 ask CTID "$(pvesh get /cluster/nextid)" "Container ID"
 ask HOSTNAME_CT audiojoe "Host name"
 ask STORAGE local-lvm "Storage for the disk"
@@ -41,25 +82,29 @@ ask BRIDGE vmbr0 "Network bridge"
 ask IP dhcp "IPv4 address with prefix (e.g. 10.0.0.20/24) or dhcp"
 [ "$IP" = dhcp ] || ask GW "" "Gateway"
 ask DNS "" "DNS server (empty: like the host)"
-ask CORES 2 "CPU cores"
-ask RAM 2048 "RAM in MB"
-ask DISK 8 "Disk in GB"
 ask PROXY "" "Address of the reverse proxy (empty: none yet)"
-ask SONOS yes "Sonos stream port 8081 (yes/no)"
+ask_yes SONOS "Sonos speakers in the home network? (opens stream port 8081)"
 ask ADMIN "" "Name of the first user (empty: later by hand)"
 
 pct status "$CTID" >/dev/null 2>&1 && die "container $CTID exists already"
 [[ "$CTID" =~ ^[0-9]+$ ]] || die "container ID must be a number"
 [[ "$IP" = dhcp || "$IP" =~ ^[0-9.]+/[0-9]+$ ]] || die "IP must be dhcp or address/prefix"
+[ -z "${GW:-}" ] || [[ "$GW" =~ ^[0-9.]+$ ]] || die "gateway must be an IPv4 address"
+[ -z "${DNS:-}" ] || [[ "$DNS" =~ ^[0-9.]+$ ]] || die "DNS server must be an IPv4 address"
+[[ "$SONOS" =~ ^(yes|no)$ ]] || die "SONOS must be yes or no"
 [ -z "${ADMIN:-}" ] || [[ "$ADMIN" =~ ^[a-z][a-z0-9_-]{0,31}$ ]] || die "user name: lower-case letters, digits, - and _"
 
-cat <<EOF
-   container $CTID "$HOSTNAME_CT", unprivileged Debian 13, $CORES cores, $RAM MB, $DISK GB on $STORAGE
-   network $BRIDGE, ${IP}${GW:+ via $GW}${DNS:+, DNS $DNS}; reverse proxy: ${PROXY:-none}; Sonos: $SONOS; first user: ${ADMIN:-none}
-   server package from: $RELEASE_API
-EOF
-if [ "$YES" = no ] && [ "$DRY" != 1 ] && [ -t 0 ]; then
-  read -r -p "Create? [y/N]: " ok; [[ "$ok" =~ ^[yYjJ]$ ]] || die "cancelled"
+SUMMARY="Container $CTID \"$HOSTNAME_CT\", unprivileged Debian 13
+Resources: $PRESET – CPU cores $CORES, RAM $RAM MB, disk $DISK GB on $STORAGE
+Network: $BRIDGE, ${IP}${GW:+ via $GW}, DNS ${DNS:-like the host}
+Reverse proxy: ${PROXY:-none}; Sonos: $SONOS; first user: ${ADMIN:-none}
+Server package from: $RELEASE_API"
+printf '%s\n' "$SUMMARY" | sed 's/^/   /'
+if [ "$ASKING" = yes ] && [ "$DRY" != 1 ]; then
+  if [ "$UI" = whiptail ]; then wt --yesno "$SUMMARY
+
+Create the container?" 16 76 || die "cancelled"
+  else read -r -p "Create? [y/N]: " ok; [[ "$ok" =~ ^[yYjJ]$ ]] || die "cancelled"; fi
 fi
 
 say "Template"
