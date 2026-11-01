@@ -5,17 +5,22 @@
 //     --dart-define=PASS=… --dart-define=TOTP_SECRET=…
 //
 // Signs in through the UI, opens podcasts, plays an episode, checks that the position
-// reaches the server, saves it offline and plays it from the offline copy.
+// reaches the server, saves it offline and plays it from the offline copy. With
+// --dart-define=SHOTS=DIR also screenshots of player and settings, light and dark (X screen,
+// ImageMagick "import"); Sonos only as state shown, nothing is sent to a speaker.
 
-import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:audiojoe/api.dart';
+import 'package:audiojoe/appearance.dart';
 import 'package:audiojoe/downloads.dart';
 import 'package:audiojoe/main.dart' as app;
 import 'package:audiojoe/models.dart';
 import 'package:audiojoe/player.dart';
+import 'package:audiojoe/sonos.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
@@ -24,6 +29,21 @@ const user = String.fromEnvironment('USER');
 const pass = String.fromEnvironment('PASS');
 const secret = String.fromEnvironment('TOTP_SECRET');
 const feed = 'https://feeds.lagedernation.org/feeds/ldn-mp3.xml';
+const shots = String.fromEnvironment('SHOTS');
+
+/// The X screen in light and dark as SHOTS/NAME-light.png and -dark.png.
+Future<void> shot(WidgetTester tester, String name) async {
+  if (shots.isEmpty) return;
+  for (final mode in [ThemeMode.light, ThemeMode.dark]) {
+    appearance.value = mode;
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 250));
+    }
+    final r = await Process.run('import', ['-window', 'root', '$shots/$name-${mode.name}.png']);
+    expect(r.exitCode, 0, reason: '${r.stderr}');
+  }
+  appearance.value = ThemeMode.system;
+}
 
 String totp(String base32, DateTime now) {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -71,7 +91,7 @@ void main() {
     await tester.enterText(fields.at(3), totp(secret, DateTime.now()));
     await tester.enterText(fields.at(4), 'Linux (Test)');
     await tester.tap(find.byType(FilledButton));
-    await waitFor(tester, find.text('Server reachable'));
+    await waitFor(tester, find.byTooltip('Server reachable'));
 
     // ---------------------------------------------------------- podcast
     final sub = await api.call('POST', '/podcasts', body: {'feed_url': feed}) as Map;
@@ -94,6 +114,45 @@ void main() {
     final pb = await api.call('GET', '/playback/${Uri.encodeComponent(ep.key)}') as Map;
     expect(pb['device'], 'Linux (Test)');
     expect((pb['position_ms'] as int) >= 120000 && (pb['position_ms'] as int) < 130000, isTrue, reason: 'position ${pb['position_ms']}');
+
+    // ---------------------------------------------------------- desktop layout, title bar
+    // The window answers "dark" (GTK header bar follows the moon button).
+    await const MethodChannel('io.github.joemj.audiojoe/window').invokeMethod('dark', true);
+    await const MethodChannel('io.github.joemj.audiojoe/window').invokeMethod('dark', false);
+    await tester.tap(find.text('Now playing').first);
+    await waitFor(tester, find.byTooltip('Play'));
+    // No volume of this device on the desktop.
+    expect(find.byWidgetPredicate((w) => w is Semantics && w.properties.label == 'Volume'), findsNothing);
+    await shot(tester, 'player');
+    // Sonos as shown state only (no request to a speaker): one room, then a group with rooms open.
+    Future<void> again() async {
+      await tester.tap(find.text('Continue').first);
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(find.text('Now playing').first);
+      await tester.pump(const Duration(milliseconds: 500));
+    }
+    final rooms = [
+      for (final (i, n) in ['Wohnzimmer', 'Küche', 'Bad'].indexed)
+        Room(i + 1, n, 'One', true, true, 'PAUSED_PLAYBACK', 35 - 10 * i, group: 'g', groupName: 'Wohnzimmer + 2', groupRooms: const [1, 2, 3]),
+    ];
+    sonos.output = Room(1, 'Wohnzimmer', 'One', true, true, 'PAUSED_PLAYBACK', 35);
+    await again();
+    await shot(tester, 'player-sonos');
+    sonos.all = rooms;
+    sonos.output = rooms.first;
+    await again();
+    await tester.tap(find.text('Rooms (3)'));
+    await shot(tester, 'player-sonos-group');
+    sonos.output = null;
+    sonos.all = [];
+    await tester.tap(find.text('Settings').first);
+    await waitFor(tester, find.text('Add source'));
+    await shot(tester, 'settings-sources');
+    for (final (i, name) in [(1, 'podcasts'), (4, 'devices'), (5, 'maintenance'), (6, 'about')]) {
+      await tester.tap(find.byKey(ValueKey('settings-page-$i')));
+      await tester.pump(const Duration(seconds: 2));
+      await shot(tester, 'settings-$name');
+    }
 
     // ---------------------------------------------------------- offline copy
     await downloads.add([ep]);

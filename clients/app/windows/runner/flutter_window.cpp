@@ -1,8 +1,15 @@
 #include "flutter_window.h"
 
+#include <dwmapi.h>
+#include <flutter/standard_method_codec.h>
+
 #include <optional>
 
 #include "flutter/generated_plugin_registrant.h"
+
+#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
+#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+#endif
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -25,6 +32,25 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+
+  window_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(),
+          "io.github.joemj.audiojoe/window",
+          &flutter::StandardMethodCodec::GetInstance());
+  window_channel_->SetMethodCallHandler(
+      [this](const flutter::MethodCall<flutter::EncodableValue>& call,
+             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+                 result) {
+        const auto* dark = std::get_if<bool>(call.arguments());
+        if (call.method_name() != "dark" || dark == nullptr) {
+          result->NotImplemented();
+          return;
+        }
+        dark_ = *dark;
+        ApplyDark();
+        result->Success();
+      });
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -39,7 +65,15 @@ bool FlutterWindow::OnCreate() {
   return true;
 }
 
+void FlutterWindow::ApplyDark() {
+  if (!dark_) return;
+  BOOL value = *dark_ ? TRUE : FALSE;
+  DwmSetWindowAttribute(GetHandle(), DWMWA_USE_IMMERSIVE_DARK_MODE, &value,
+                        sizeof(value));
+}
+
 void FlutterWindow::OnDestroy() {
+  window_channel_ = nullptr;
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
@@ -65,6 +99,12 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
       break;
+    case WM_DWMCOLORIZATIONCOLORCHANGED: {
+      // The base class sets the system's choice; the app's choice wins.
+      LRESULT r = Win32Window::MessageHandler(hwnd, message, wparam, lparam);
+      ApplyDark();
+      return r;
+    }
   }
 
   return Win32Window::MessageHandler(hwnd, message, wparam, lparam);

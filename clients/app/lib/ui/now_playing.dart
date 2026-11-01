@@ -1,6 +1,7 @@
 // Now playing: large cover, format chips right above the controls, −15 / play / +30; at the
 // bottom the volume and a fixed footer (sleep timer, speed, output, offline); tabs for
-// details and chapters.
+// details and chapters. On a wide desktop window the cover takes the left third and buttons,
+// Sonos volume and footer sit at the bottom of the right two thirds; no volume of this device.
 
 import 'package:flutter/material.dart';
 
@@ -52,10 +53,9 @@ class _PlaybackTab extends StatelessWidget {
   Widget build(BuildContext context) => LayoutBuilder(builder: (context, c) {
         final k = context.tok;
         final wide = c.maxWidth >= 720;
-        final size = wide ? 300.0 : [c.maxWidth - 32, c.maxHeight * 0.36, 420.0].reduce((a, b) => a < b ? a : b);
-        final cover = CoverThumb(image: it.image, label: it.subtitle.isEmpty ? it.title : it.subtitle, size: size);
         final out = sonos.output;
-        final controls = Column(mainAxisSize: MainAxisSize.min, children: [
+        // Title, subtitle, chapter, format chips.
+        final head = [
           // "(16 of 21)" after the title in a queue (an album), after the chapter name with chapters.
           // A long title flows, so the count stays visible.
           Marquee(
@@ -78,7 +78,9 @@ class _PlaybackTab extends StatelessWidget {
             ),
           const SizedBox(height: 12),
           _FormatChips(it),
-          const SizedBox(height: 4),
+        ];
+        // Progress (or "Live") and the buttons.
+        final play = [
           if (player.live)
             Padding(padding: const EdgeInsets.symmetric(vertical: 14), child: Badge2(t('Live'), kind: 'ok'))
           else
@@ -90,7 +92,46 @@ class _PlaybackTab extends StatelessWidget {
               child: Text(t('Taken over from {device} · {ago}', {'device': player.takenOver!.device, 'ago': ago(player.takenOver!.at)}),
                   textAlign: TextAlign.center, style: TextStyle(color: k.muted)),
             ),
-        ]);
+        ];
+        if (desktop && wide) {
+          // Cover in the left third; on the right the title at the top, below it the buttons, the
+          // Sonos volume (only with Sonos) and the footer.
+          const pad = EdgeInsets.fromLTRB(16, 16, 16, 12);
+          final side = [(c.maxWidth - pad.horizontal) / 3, c.maxHeight - pad.vertical].reduce((a, b) => a < b ? a : b);
+          return Padding(
+            padding: pad,
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              CoverThumb(image: it.image, label: it.subtitle.isEmpty ? it.title : it.subtitle, size: side),
+              const SizedBox(width: 24),
+              Expanded(
+                // Title at the top, the rest at the bottom. When the window is too low (a group
+                // with its rooms open) it scrolls from the bottom: the title gives way, the footer
+                // stays in view.
+                child: LayoutBuilder(
+                  builder: (context, rc) => SingleChildScrollView(
+                    reverse: true,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(minHeight: rc.maxHeight),
+                      child: Column(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                        Column(mainAxisSize: MainAxisSize.min, children: head),
+                        Column(mainAxisSize: MainAxisSize.min, children: [
+                          const SizedBox(height: 4),
+                          ...play,
+                          if (out != null) const Padding(padding: EdgeInsets.only(top: 10), child: _Volume()),
+                          const SizedBox(height: 12),
+                          _Toolbar(it),
+                        ]),
+                      ]),
+                    ),
+                  ),
+                ),
+              ),
+            ]),
+          );
+        }
+        final size = wide ? 300.0 : [c.maxWidth - 32, c.maxHeight * 0.36, 420.0].reduce((a, b) => a < b ? a : b);
+        final cover = CoverThumb(image: it.image, label: it.subtitle.isEmpty ? it.title : it.subtitle, size: size);
+        final controls = Column(mainAxisSize: MainAxisSize.min, children: [...head, const SizedBox(height: 4), ...play]);
         return Column(children: [
           Expanded(
             child: SingleChildScrollView(
@@ -109,7 +150,11 @@ class _PlaybackTab extends StatelessWidget {
               constraints: const BoxConstraints(maxWidth: 720),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                child: Column(mainAxisSize: MainAxisSize.min, children: [const _Volume(), const SizedBox(height: 8), _Toolbar(it)]),
+                // No volume of this device on the desktop (the system has its own).
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  if (!desktop || out != null) ...[const _Volume(), const SizedBox(height: 8)],
+                  _Toolbar(it),
+                ]),
               ),
             ),
           ),
@@ -167,7 +212,7 @@ class _VolumeState extends State<_Volume> {
   @override
   void initState() {
     super.initState();
-    localVolume.start();
+    if (!desktop) localVolume.start();
   }
 
   @override
@@ -177,6 +222,7 @@ class _VolumeState extends State<_Volume> {
   Widget _build(BuildContext context) {
     final out = sonos.output;
     if (out == null) {
+      if (desktop) return const SizedBox.shrink();
       // Phones have about 15 steps; a smaller step would often not change anything.
       return _VolumeRow(value: localVolume.level, label: t('Volume'), onChanged: localVolume.set, step: 7, big: true);
     }
@@ -201,6 +247,11 @@ class _VolumeState extends State<_Volume> {
               SizedBox(width: 100, child: Text(r.name, overflow: TextOverflow.ellipsis, style: TextStyle(color: k.muted))),
               Expanded(child: _VolumeRow(value: r.volume ?? 0, label: r.name, onChanged: (v) => sonos.setVolume(v, room: r))),
             ]),
+        if (open && desktop)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+            child: Align(alignment: Alignment.centerLeft, child: Text(t('Group'), style: TextStyle(color: k.muted, fontWeight: FontWeight.w600))),
+          ),
       ],
       _VolumeRow(value: sonos.level, label: out.grouped ? t('Group volume') : t('Volume'), onChanged: (v) => sonos.setVolume(v), big: true),
     ]);

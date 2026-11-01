@@ -118,6 +118,11 @@ class _AudiojoeAppState extends State<AudiojoeApp> {
         theme: buildTheme(Brightness.light),
         darkTheme: buildTheme(Brightness.dark),
         themeMode: mode,
+        // Below the app the platform brightness is known: the title bar follows the moon button.
+        builder: (context, child) {
+          syncTitleBar(isDark(context));
+          return child!;
+        },
         home: signedIn ? Shell(onSignOut: _signOut) : LoginView(onDone: () => setState(() => signedIn = true)),
       ),
     );

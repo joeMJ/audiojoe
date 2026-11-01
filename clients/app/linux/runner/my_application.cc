@@ -1,5 +1,7 @@
 #include "my_application.h"
 
+#include <cstring>
+
 #include <flutter_linux/flutter_linux.h>
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
@@ -10,9 +12,46 @@
 struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
+  FlMethodChannel* window_channel;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
+
+// The GTK theme as the system set it, and the light one set here instead of a "-dark" theme.
+static gchar* system_theme = nullptr;
+static gchar* own_theme = nullptr;
+
+// "dark" from the app (the moon button): the header bar follows. Dark: the dark variant of the
+// system theme; light: also replaces a "-dark" theme (Yaru-dark, Adwaita-dark) by its light one.
+static void window_call_cb(FlMethodChannel* channel, FlMethodCall* call,
+                           gpointer user_data) {
+  FlValue* args = fl_method_call_get_args(call);
+  if (strcmp(fl_method_call_get_name(call), "dark") != 0 || args == nullptr ||
+      fl_value_get_type(args) != FL_VALUE_TYPE_BOOL) {
+    fl_method_call_respond_not_implemented(call, nullptr);
+    return;
+  }
+  gboolean dark = fl_value_get_bool(args);
+  GtkSettings* settings = gtk_settings_get_default();
+  g_autofree gchar* current = nullptr;
+  g_object_get(settings, "gtk-theme-name", &current, nullptr);
+  // A theme not set here comes from the system (also when it changes while running).
+  if (g_strcmp0(current, own_theme) != 0) {
+    g_free(system_theme);
+    system_theme = g_strdup(current);
+  }
+  g_autofree gchar* want = g_strdup(system_theme);
+  if (!dark && want != nullptr && g_str_has_suffix(want, "-dark")) {
+    want[strlen(want) - strlen("-dark")] = '\0';
+  }
+  if (want != nullptr && g_strcmp0(want, current) != 0) {
+    g_object_set(settings, "gtk-theme-name", want, nullptr);
+    g_free(own_theme);
+    own_theme = g_strdup(want);
+  }
+  g_object_set(settings, "gtk-application-prefer-dark-theme", dark, nullptr);
+  fl_method_call_respond_success(call, nullptr, nullptr);
+}
 
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
@@ -75,6 +114,13 @@ static void my_application_activate(GApplication* application) {
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 
+  g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
+  self->window_channel = fl_method_channel_new(
+      fl_engine_get_binary_messenger(fl_view_get_engine(view)),
+      "io.github.joemj.audiojoe/window", FL_METHOD_CODEC(codec));
+  fl_method_channel_set_method_call_handler(self->window_channel,
+                                            window_call_cb, self, nullptr);
+
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
 
@@ -121,6 +167,7 @@ static void my_application_shutdown(GApplication* application) {
 static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
+  g_clear_object(&self->window_channel);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }
 

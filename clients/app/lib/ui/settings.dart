@@ -1,6 +1,6 @@
 // Settings: sources (Jellyfin, Audiobookshelf) and which of their libraries to show, music
 // (reading in the album directory, labels from MusicBrainz), Sonos speakers, podcast import/export (OPML),
-// signed-in devices, sign out, about.
+// signed-in devices, sign out, about. Phones: one list; desktop: pages on the left, groups on the right.
 
 import 'dart:convert';
 import 'dart:io';
@@ -24,27 +24,26 @@ class SettingsView extends StatefulWidget {
 
 class _SettingsViewState extends State<SettingsView> {
   int _gen = 0;
+  int _page = 0;
 
-  @override
-  Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(12), children: [
-        Row(children: [
-          Text(t('Sources'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-          const Spacer(),
-          FilledButton.icon(
-            icon: const Icon(Icons.add),
-            label: Text(t('Add source')),
-            onPressed: () async {
-              if (await showDialog<bool>(context: context, builder: (_) => const AddSourceDialog()) == true) setState(() => _gen++);
-            },
-          ),
-        ]),
-        const SizedBox(height: 8),
-        Loader<List>(
-          key: ValueKey('src$_gen'),
-          load: () async => await api.call('GET', '/sources') as List,
-          builder: (context, list, reload) => Column(children: [
-            if (list.isEmpty) emptyText(context, t('No sources yet. Add one in the settings.')),
-            for (final s in list.cast<Map>()) ...[
+  static Widget _h(String s) => Text(s, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800));
+
+  Widget _addSource() => FilledButton.icon(
+        icon: const Icon(Icons.add),
+        label: Text(t('Add source')),
+        onPressed: () async {
+          if (await showDialog<bool>(context: context, builder: (_) => const AddSourceDialog()) == true) setState(() => _gen++);
+        },
+      );
+
+  /// Each source with its libraries; on the desktop each in its own group.
+  Widget _sources({bool grouped = false}) => Loader<List>(
+        key: ValueKey('src$_gen'),
+        load: () async => await api.call('GET', '/sources') as List,
+        builder: (context, list, reload) => Column(children: [
+          if (list.isEmpty) emptyText(context, t('No sources yet. Add one in the settings.')),
+          for (final s in list.cast<Map>())
+            _maybeGroup(grouped, [
               ItemRow(
                 leading: Icon(s['kind'] == 'audiobookshelf' ? Icons.menu_book : Icons.library_music, size: 32),
                 title: '${s['name']}',
@@ -61,64 +60,155 @@ class _SettingsViewState extends State<SettingsView> {
                 ],
               ),
               Libraries(source: s['id'] as int),
-            ],
-          ]),
-        ),
+            ]),
+        ]),
+      );
+
+  Widget _maybeGroup(bool grouped, List<Widget> children) =>
+      grouped ? SettingsGroup(children: children) : Column(children: children);
+
+  Widget _devices() => Loader<List>(
+        key: ValueKey('dev$_gen'),
+        load: () async => await api.call('GET', '/sessions') as List,
+        builder: (context, list, reload) => Column(children: [
+          for (final s in list.cast<Map>())
+            ItemRow(
+              leading: const Icon(Icons.devices, size: 32),
+              title: '${s['device']}${s['current'] == true ? ' (${t('this device')})' : ''}',
+              subtitle: t('last seen {ago}', {'ago': ago('${s['last_seen']}')}),
+              trailing: [
+                if (s['current'] != true)
+                  TextButton(
+                    onPressed: () async {
+                      await api.call('DELETE', '/sessions/${s['id']}');
+                      reload();
+                    },
+                    child: Text(t('Sign out')),
+                  ),
+              ],
+            ),
+        ]),
+      );
+
+  Widget _opml() => Wrap(spacing: 8, runSpacing: 8, children: [
+        OutlinedButton.icon(icon: const Icon(Icons.file_upload_outlined), label: Text(t('Import OPML')), onPressed: _import),
+        OutlinedButton.icon(icon: const Icon(Icons.file_download_outlined), label: Text(t('Export OPML')), onPressed: _export),
+      ]);
+
+  Widget _signOut() => OutlinedButton.icon(icon: const Icon(Icons.logout), label: Text(t('Sign out this device')), onPressed: widget.onSignOut);
+
+  @override
+  Widget build(BuildContext context) => desktop ? _desktop(context) : _phone(context);
+
+  Widget _phone(BuildContext context) => ListView(padding: const EdgeInsets.all(12), children: [
+        Row(children: [_h(t('Sources')), const Spacer(), _addSource()]),
+        const SizedBox(height: 8),
+        _sources(),
         const SizedBox(height: 20),
-        Text(t('Music'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+        _h(t('Music')),
         const SizedBox(height: 8),
         MusicSettings(key: ValueKey('music$_gen')),
         const SizedBox(height: 20),
-        Text(t('Sonos'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+        _h(t('Sonos')),
         const SizedBox(height: 8),
         const SonosSettings(),
         const SizedBox(height: 20),
-        Text(t('Sync with other podcast apps'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+        _h(t('Sync with other podcast apps')),
         const SizedBox(height: 8),
         GpodderSettings(key: ValueKey('gpodder$_gen')),
         const SizedBox(height: 20),
-        Text(t('Maintenance'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+        _h(t('Maintenance')),
         const SizedBox(height: 8),
         MaintenanceSettings(key: ValueKey('maint$_gen')),
         const SizedBox(height: 20),
-        Text(t('Devices'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+        _h(t('Devices')),
         const SizedBox(height: 8),
-        Loader<List>(
-          key: ValueKey('dev$_gen'),
-          load: () async => await api.call('GET', '/sessions') as List,
-          builder: (context, list, reload) => Column(children: [
-            for (final s in list.cast<Map>())
-              ItemRow(
-                leading: const Icon(Icons.devices, size: 32),
-                title: '${s['device']}${s['current'] == true ? ' (${t('this device')})' : ''}',
-                subtitle: t('last seen {ago}', {'ago': ago('${s['last_seen']}')}),
-                trailing: [
-                  if (s['current'] != true)
-                    TextButton(
-                      onPressed: () async {
-                        await api.call('DELETE', '/sessions/${s['id']}');
-                        reload();
-                      },
-                      child: Text(t('Sign out')),
-                    ),
-                ],
-              ),
-          ]),
-        ),
+        _devices(),
         const SizedBox(height: 20),
-        Text(t('Podcasts'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+        _h(t('Podcasts')),
         const SizedBox(height: 4),
         Text(t('Subscriptions as OPML file, the format other podcast apps read and write.'), style: TextStyle(color: context.tok.muted)),
         const SizedBox(height: 8),
-        Wrap(spacing: 8, runSpacing: 8, children: [
-          OutlinedButton.icon(icon: const Icon(Icons.file_upload_outlined), label: Text(t('Import OPML')), onPressed: _import),
-          OutlinedButton.icon(icon: const Icon(Icons.file_download_outlined), label: Text(t('Export OPML')), onPressed: _export),
-        ]),
+        _opml(),
         const SizedBox(height: 20),
-        OutlinedButton.icon(icon: const Icon(Icons.logout), label: Text(t('Sign out this device')), onPressed: widget.onSignOut),
+        _signOut(),
         const SizedBox(height: 8),
         OutlinedButton.icon(icon: const Icon(Icons.info_outline), label: Text(t('About audiojoe')), onPressed: () => showAbout(context)),
       ]);
+
+  /// Desktop: the pages on the left, the chosen page on the right in groups.
+  List<(IconData, String)> get _pages => [
+        (Icons.storage, t('Sources')),
+        (Icons.podcasts, t('Podcasts')),
+        (Icons.library_music, t('Music')),
+        (Icons.speaker, t('Sonos')),
+        (Icons.devices, t('Devices')),
+        (Icons.system_update_alt, t('Maintenance')),
+        (Icons.info_outline, t('About')),
+      ];
+
+  List<Widget> _pageContent(BuildContext context) => switch (_page) {
+        0 => [_sources(grouped: true)],
+        1 => [
+            SettingsGroup(
+              title: 'OPML',
+              desc: t('Subscriptions as OPML file, the format other podcast apps read and write.'),
+              children: [_opml()],
+            ),
+            SettingsGroup(title: t('Sync with other podcast apps'), children: [GpodderSettings(key: ValueKey('gpodder$_gen'))]),
+          ],
+        2 => [SettingsGroup(children: [MusicSettings(key: ValueKey('music$_gen'))])],
+        3 => [const SettingsGroup(children: [SonosSettings()])],
+        4 => [
+            SettingsGroup(children: [_devices()]),
+            SettingsGroup(children: [Align(alignment: Alignment.centerLeft, child: _signOut())]),
+          ],
+        5 => [SettingsGroup(children: [MaintenanceSettings(key: ValueKey('maint$_gen'))])],
+        _ => [const SettingsGroup(children: [AboutPanel()])],
+      };
+
+  Widget _desktop(BuildContext context) {
+    final k = context.tok, scheme = Theme.of(context).colorScheme;
+    return Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Container(
+        width: 200,
+        decoration: BoxDecoration(color: scheme.surface, border: Border(right: BorderSide(color: k.line))),
+        child: ListView(padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8), children: [
+          for (final (i, (icon, label)) in _pages.indexed)
+            Padding(
+              key: ValueKey('settings-page-$i'),
+              padding: const EdgeInsets.only(bottom: 2),
+              child: Material(
+                color: i == _page ? k.panel2 : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => setState(() => _page = i),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                    child: Row(children: [
+                      Icon(icon, size: 20, color: i == _page ? scheme.primary : null),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(label, overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 15, fontWeight: i == _page ? FontWeight.w700 : FontWeight.w500, color: i == _page ? scheme.primary : null)),
+                      ),
+                    ]),
+                  ),
+                ),
+              ),
+            ),
+        ]),
+      ),
+      Expanded(
+        child: ListView(key: PageStorageKey('settings$_page'), padding: const EdgeInsets.fromLTRB(20, 16, 20, 16), children: [
+          Row(children: [_h(_pages[_page].$2), const Spacer(), if (_page == 0) _addSource()]),
+          const SizedBox(height: 12),
+          ..._pageContent(context),
+        ]),
+      ),
+    ]);
+  }
 
   void _say(String s) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s)));
 
@@ -695,6 +785,86 @@ class _SonosSettingsState extends State<SonosSettings> {
 }
 
 /// Version of app and server, licence, and the manual and privacy notes the server delivers.
+/// A framed group on a settings page (desktop): optional title and one sentence, then the rows.
+class SettingsGroup extends StatelessWidget {
+  final String? title, desc;
+  final List<Widget> children;
+  const SettingsGroup({super.key, this.title, this.desc, required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    final k = context.tok;
+    // Material, not a coloured box: list tiles inside paint their ink on it.
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: Theme.of(context).colorScheme.surface,
+        shape: RoundedRectangleBorder(side: BorderSide(color: k.line), borderRadius: BorderRadius.circular(12)),
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            if (title != null) Text(title!, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            if (desc != null) Padding(padding: const EdgeInsets.only(top: 2), child: Text(desc!, style: TextStyle(color: k.muted))),
+            if (title != null || desc != null) const SizedBox(height: 10),
+            ...children,
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// Versions, manual, privacy and licences: the page "About" on the desktop, the dialog on phones.
+class AboutPanel extends StatelessWidget {
+  const AboutPanel({super.key});
+
+  static Future<(String, String)> _versions() async {
+    final app = (await PackageInfo.fromPlatform()).version;
+    String server = '';
+    try {
+      server = ((await api.call('GET', '/health') as Map)['version'] ?? '') as String;
+    } catch (_) {}
+    return (app, server);
+  }
+
+  static Widget _link(String label, String page) => TextButton.icon(
+        icon: const Icon(Icons.open_in_new, size: 18),
+        label: Text(label),
+        onPressed: () => launchUrl(Uri.parse('${api.base}/docs/${isDe ? 'de/' : ''}$page.html'), mode: LaunchMode.externalApplication),
+      );
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder(
+        future: _versions(),
+        builder: (context, snap) {
+          final (app, server) = snap.data ?? ('', '');
+          return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Image.asset('assets/icon.png', width: 48, height: 48),
+              const SizedBox(width: 12),
+              const Text('audiojoe', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+            ]),
+            const SizedBox(height: 10),
+            Text([
+              if (app.isNotEmpty) t('App {v}', {'v': app}),
+              if (server.isNotEmpty) t('Server {v}', {'v': server}),
+            ].join(' · ')),
+            const SizedBox(height: 4),
+            Text(t('Licence: Apache 2.0'), style: TextStyle(color: context.tok.muted)),
+            const SizedBox(height: 8),
+            _link(t('Manual'), 'manual'),
+            _link(t('Privacy'), 'privacy'),
+            TextButton.icon(
+              icon: const Icon(Icons.description_outlined, size: 18),
+              label: Text(t('Third-party licences')),
+              onPressed: () => showLicensePage(context: context, applicationName: 'audiojoe', applicationVersion: app),
+            ),
+          ]);
+        },
+      );
+}
+
 Future<void> showAbout(BuildContext context) async {
   final app = await PackageInfo.fromPlatform();
   String server = '';

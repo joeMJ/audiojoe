@@ -1,7 +1,10 @@
 // Appearance per device: dark mode on or off; without a choice the system decides. Kept in the
-// device store, so signing out does not reset it.
+// device store, so signing out does not reset it. On Linux and Windows the title bar follows.
+
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'store.dart';
 
@@ -22,4 +25,13 @@ bool isDark(BuildContext context) =>
 void toggleDark(BuildContext context) {
   appearance.value = isDark(context) ? ThemeMode.light : ThemeMode.dark;
   Stores.device.put('appearance', {'mode': appearance.value.name});
+}
+
+bool? _titleBarDark;
+
+/// Tells the window (GTK header bar, Windows title bar) whether to be dark; only on change.
+void syncTitleBar(bool dark) {
+  if (!(Platform.isLinux || Platform.isWindows) || dark == _titleBarDark) return;
+  _titleBarDark = dark;
+  const MethodChannel('io.github.joemj.audiojoe/window').invokeMethod('dark', dark).catchError((_) => null);
 }

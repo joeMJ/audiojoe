@@ -1,5 +1,7 @@
 // Theme from the shared design tokens and small shared widgets.
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../api.dart';
@@ -9,6 +11,10 @@ import '../l10n.dart';
 import '../models.dart';
 import '../sync.dart';
 import '../tokens.g.dart';
+
+/// Linux and Windows: player buttons at the bottom right next to the cover, no volume of this
+/// device, settings on pages. Tests set it.
+bool desktop = Platform.isLinux || Platform.isWindows;
 
 /// Colours beyond the Material scheme (status colours, secondary surfaces).
 class Tok extends ThemeExtension<Tok> {

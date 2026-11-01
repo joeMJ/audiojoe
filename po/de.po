@@ -454,6 +454,9 @@ msgstr "(Ziel: {q})"
 msgid "Volume"
 msgstr "Lautstärke"
 
+msgid "Group"
+msgstr "Gruppe"
+
 msgid "Group volume"
 msgstr "Lautstärke der Gruppe"
 
@@ -549,6 +552,9 @@ msgstr "1 Position wartet auf den Server"
 
 msgid "({i} of {n})"
 msgstr "({i} von {n})"
+
+msgid "About"
+msgstr "Über"
 
 msgid "About audiojoe"
 msgstr "Über audiojoe"

@@ -2,9 +2,12 @@
 #define RUNNER_FLUTTER_WINDOW_H_
 
 #include <flutter/dart_project.h>
+#include <flutter/encodable_value.h>
 #include <flutter/flutter_view_controller.h>
+#include <flutter/method_channel.h>
 
 #include <memory>
+#include <optional>
 
 #include "win32_window.h"
 
@@ -28,6 +31,11 @@ class FlutterWindow : public Win32Window {
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
+
+  // "dark" from the app (the moon button): the title bar follows instead of the system.
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> window_channel_;
+  std::optional<bool> dark_;
+  void ApplyDark();
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_
