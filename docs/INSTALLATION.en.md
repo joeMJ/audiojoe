@@ -40,7 +40,7 @@ of the proxy and the name of the first user; Enter keeps the proposal. Then it:
 - creates the **first user** and shows password and TOTP secret once.
 
 Without questions, e.g. to repeat it:
-`CTID=120 IP=10.0.0.20/24 GW=10.0.0.1 PROXY=10.0.0.10 ADMIN=anna bash audiojoe-lxc.sh --yes`.
+`CTID=120 IP=10.0.0.20/24 GW=10.0.0.1 DNS=10.0.0.1 PROXY=10.0.0.10 ADMIN=anna bash audiojoe-lxc.sh --yes`.
 `DRY_RUN=1` only shows what would be done.
 
 ### Debian package

@@ -40,7 +40,7 @@ Adresse des Proxys und dem Namen des ersten Benutzers; Enter übernimmt den Vors
 - legt den **ersten Benutzer** an und zeigt Passwort und TOTP-Schlüssel einmal an.
 
 Ohne Rückfragen, z. B. für Wiederholungen:
-`CTID=120 IP=10.0.0.20/24 GW=10.0.0.1 PROXY=10.0.0.10 ADMIN=anna bash audiojoe-lxc.sh --yes`.
+`CTID=120 IP=10.0.0.20/24 GW=10.0.0.1 DNS=10.0.0.1 PROXY=10.0.0.10 ADMIN=anna bash audiojoe-lxc.sh --yes`.
 `DRY_RUN=1` zeigt nur, was geschehen würde.
 
 ### Debian-Paket

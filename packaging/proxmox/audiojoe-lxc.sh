@@ -8,7 +8,8 @@
 #   DRY_RUN=1 bash audiojoe-lxc.sh        only shows what would be done
 #
 # Values (environment): CTID, HOSTNAME_CT (audiojoe), STORAGE (local-lvm), TEMPLATE_STORAGE
-# (local), BRIDGE (vmbr0), IP (dhcp or address/prefix), GW, CORES (2), RAM (2048 MB), DISK (8 GB),
+# (local), BRIDGE (vmbr0), IP (dhcp or address/prefix), GW, DNS (empty: like the host), CORES (2),
+# RAM (2048 MB), DISK (8 GB),
 # PROXY (address of the reverse proxy, optional), ADMIN (first user), SONOS (yes: stream port 8081).
 # RELEASE_API: release source (default: the GitHub repository), RELEASE_TOKEN_FILE: file with an
 # access token for a private repository (tests only).
@@ -39,6 +40,7 @@ ask TEMPLATE_STORAGE local "Storage for the template"
 ask BRIDGE vmbr0 "Network bridge"
 ask IP dhcp "IPv4 address with prefix (e.g. 10.0.0.20/24) or dhcp"
 [ "$IP" = dhcp ] || ask GW "" "Gateway"
+ask DNS "" "DNS server (empty: like the host)"
 ask CORES 2 "CPU cores"
 ask RAM 2048 "RAM in MB"
 ask DISK 8 "Disk in GB"
@@ -53,7 +55,7 @@ pct status "$CTID" >/dev/null 2>&1 && die "container $CTID exists already"
 
 cat <<EOF
    container $CTID "$HOSTNAME_CT", unprivileged Debian 13, $CORES cores, $RAM MB, $DISK GB on $STORAGE
-   network $BRIDGE, ${IP}${GW:+ via $GW}; reverse proxy: ${PROXY:-none}; Sonos: $SONOS; first user: ${ADMIN:-none}
+   network $BRIDGE, ${IP}${GW:+ via $GW}${DNS:+, DNS $DNS}; reverse proxy: ${PROXY:-none}; Sonos: $SONOS; first user: ${ADMIN:-none}
    server package from: $RELEASE_API
 EOF
 if [ "$YES" = no ] && [ "$DRY" != 1 ] && [ -t 0 ]; then
@@ -70,7 +72,7 @@ say "Container"
 NET="name=eth0,bridge=$BRIDGE,ip=$IP${GW:+,gw=$GW}"
 run pct create "$CTID" "$TEMPLATE_STORAGE:vztmpl/$TEMPLATE" --hostname "$HOSTNAME_CT" --unprivileged 1 \
   --features nesting=1 --cores "$CORES" --memory "$RAM" --swap 512 --rootfs "$STORAGE:$DISK" \
-  --net0 "$NET" --onboot 1 --timezone host --tags audiojoe --description "audiojoe server"
+  --net0 "$NET" ${DNS:+--nameserver "$DNS"} --onboot 1 --timezone host --tags audiojoe --description "audiojoe server"
 run pct start "$CTID"
 
 if [ "$DRY" != 1 ]; then
