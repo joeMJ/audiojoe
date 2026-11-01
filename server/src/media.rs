@@ -174,6 +174,9 @@ pub async fn stream_for(state: &AppState, user: &CurrentUser, key: &str, part: u
     if let Some((rate, depth)) = conversion(&src, profile)? {
         return transcode_flac(&r, src, rate, depth, start_ms);
     }
+    if let Some(uuid) = key.strip_prefix("radio:") {
+        crate::radio::count_click(state, uuid);
+    }
     let extra: Vec<(header::HeaderName, String)> = r.auth.iter().cloned().collect();
     let mut res = crate::stream::relay(&state.http, &r.url, headers, &extra).await;
     set_quality(&mut res, json!({ "source": src, "delivered": src, "transcoded": false }));

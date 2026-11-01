@@ -5,6 +5,7 @@ mod auth;
 mod cli;
 mod config;
 mod db;
+mod docs;
 mod error;
 mod jellyfin;
 mod lists;
@@ -168,6 +169,9 @@ async fn main() -> Result<()> {
         .route("/api/v1/queue", axum::routing::put(playback::put_queue))
         .route("/api/v1/queue/{key}", get(playback::get_queue))
         .route("/api/v1/events", get(playback::events))
+        .route("/docs/{file}", get(docs::english))
+        .route("/docs/de/{file}", get(docs::german))
+        .route("/docs/screenshots/{file}", get(docs::screenshot))
         .fallback_service(web)
         .layer(DefaultBodyLimit::max(64 * 1024))
         .layer(middleware::from_fn_with_state(state.clone(), access::log))

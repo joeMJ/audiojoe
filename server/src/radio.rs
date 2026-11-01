@@ -179,8 +179,7 @@ pub async fn remove_favorite(State(state): State<AppState>, user: CurrentUser, P
     .await
 }
 
-/// Stream URL and metadata of a station; counts the click in the directory (as asked by
-/// Radio Browser) without waiting for it.
+/// Stream URL and metadata of a station.
 pub async fn resolve(state: &AppState, user: i64, uuid: &str) -> ApiResult<(String, Value)> {
     if !valid_uuid(uuid) {
         return Err(ApiError::NotFound);
@@ -192,11 +191,19 @@ pub async fn resolve(state: &AppState, user: i64, uuid: &str) -> ApiResult<(Stri
         Ok((url, meta))
     })
     .await?;
+    Ok((url, meta))
+}
+
+/// Counts playing a station as a click in the directory, as Radio Browser asks, without
+/// waiting for it. Only when the stream starts, not when the station is merely shown.
+pub fn count_click(state: &AppState, uuid: &str) {
+    if !valid_uuid(uuid) {
+        return;
+    }
     let (http, u) = (state.http.clone(), uuid.to_string());
     tokio::spawn(async move {
         let _ = directory(&http, &format!("/json/url/{u}"), &[]).await;
     });
-    Ok((url, meta))
 }
 
 pub async fn image(state: &AppState, uuid: &str) -> ApiResult<Response> {

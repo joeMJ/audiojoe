@@ -64,6 +64,7 @@ try {
   await page.evaluate(() => document.querySelector(".ctrl .play").click()); // pause, position saved
   await sleep(1500);
   await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => [...document.querySelectorAll("nav button")].some((b) => b.innerText.includes("Jetzt läuft")), { timeout: 20000 });
   await nav("Jetzt läuft");
   await page.waitForSelector(".np .title", { timeout: 20000 });
   await sleep(1000);

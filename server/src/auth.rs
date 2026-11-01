@@ -226,6 +226,8 @@ pub async fn login(
              VALUES (?1, ?2, ?3, strftime('%Y-%m-%dT%H:%M:%SZ', 'now', ?4))",
             (user_id, th, dev, format!("+{SESSION_DAYS} days")),
         )?;
+        // Expired sessions of all users are removed here, so they do not pile up.
+        c.execute("DELETE FROM session WHERE expires_at <= strftime('%Y-%m-%dT%H:%M:%SZ', 'now')", [])?;
         Ok(())
     })
     .await?;

@@ -64,6 +64,7 @@ h2 { margin: 0 0 10px; font-size: 21px; }
 .fchip.hi { border-color: var(--bad); color: var(--bad); background: var(--badBg); }
 .fchip.cd { border-color: var(--warn); color: var(--warn); background: var(--warnBg); }
 .np .count { color: var(--muted); font-weight: 600; }
+.np .sub .count { font-weight: inherit; }
 /* One flowing line instead of a cut-off one (see flow() in ui.ts) */
 .np .title { display: block; white-space: nowrap; text-overflow: ellipsis; }
 .np > * { min-width: 0; }
