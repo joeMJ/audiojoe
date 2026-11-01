@@ -175,7 +175,9 @@ $msi = Join-Path $Out $msiName
 Ausfuehren 'candle' { & $candle -nologo -arch x64 -ext WixUtilExtension "-dVersion=$Version" "-dIconFile=$ico" -out "$obj\" $wxs $filesWxs }
 # ICE91: Dateien im Benutzerprofil bei einer Installation pro Benutzer (gewollt).
 # ICE61: Dieselbe Version ersetzt sich selbst (AllowSameVersionUpgrades; gewollt).
-Ausfuehren 'light' { & $light -nologo -spdb -ext WixUtilExtension -sice:ICE91 -sice:ICE61 -out $msi "$obj\audiojoe.wixobj" "$obj\files.wixobj" }
+# ICE60: Flutters Symbolschriften (MaterialIcons, CupertinoIcons) ohne Sprachangabe; die App lädt
+#        sie als Dateien, Windows Installer registriert sie nicht als Schrift (ohne Folgen).
+Ausfuehren 'light' { & $light -nologo -spdb -ext WixUtilExtension -sice:ICE91 -sice:ICE61 -sice:ICE60 -out $msi "$obj\audiojoe.wixobj" "$obj\files.wixobj" }
 
 if (-not $NoSign) {
     Schritt 'MSI signieren'
