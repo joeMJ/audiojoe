@@ -445,12 +445,16 @@ class _MusicSettingsState extends State<MusicSettings> {
 /// `audiojoe-update` on the server last reported them.
 class MaintenanceSettings extends StatefulWidget {
   const MaintenanceSettings({super.key});
+
+  /// How long "Check for updates" waits for the script's answer, and how often it asks.
+  static Duration checkWait = const Duration(seconds: 90), checkEvery = const Duration(seconds: 2);
   @override
   State<MaintenanceSettings> createState() => _MaintenanceSettingsState();
 }
 
 class _MaintenanceSettingsState extends State<MaintenanceSettings> {
   int _gen = 0;
+  bool _checking = false;
 
   void _say(String s) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s)));
 
@@ -462,6 +466,33 @@ class _MaintenanceSettingsState extends State<MaintenanceSettings> {
       _say('${t('Error')}: $e');
     }
     if (mounted) setState(() => _gen++);
+  }
+
+  /// "Check for updates": the script looks for the newest release now (server and apps); the
+  /// view waits until the status shows the new check, then shows it (button "Install now" when
+  /// the server is behind, the app row offers a newer app).
+  Future<void> _check(Map m) async {
+    final before = (m['status'] as Map?)?['checked_at'];
+    setState(() => _checking = true);
+    try {
+      await api.call('POST', '/maintenance/check');
+      final end = DateTime.now().add(MaintenanceSettings.checkWait);
+      var done = false;
+      while (!done && DateTime.now().isBefore(end) && mounted) {
+        await Future.delayed(MaintenanceSettings.checkEvery);
+        final n = await api.call('GET', '/maintenance') as Map;
+        done = n['request'] == null && n['requested'] != true && (n['status'] as Map?)?['checked_at'] != before;
+      }
+      if (!done) _say(t('The check takes longer; the result appears here later.'));
+    } catch (e) {
+      _say('${t('Error')}: $e');
+    }
+    if (mounted) {
+      setState(() {
+        _checking = false;
+        _gen++;
+      });
+    }
   }
 
   String _server(Map st) {
@@ -501,6 +532,7 @@ class _MaintenanceSettingsState extends State<MaintenanceSettings> {
           final deb = (st['debian'] as Map?) ?? const {};
           final backups = ((st['backups'] as List?) ?? const []).cast<Map>();
           final newer = st['latest'] != null && st['latest'] != st['installed'] && st['result'] != 'ok';
+          final installRequested = m['request'] == 'now' || (m['request'] == null && m['requested'] == true);
           return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(t('Server {v}', {'v': '${st['installed']}'}), style: const TextStyle(fontWeight: FontWeight.w700)),
             Text('${_server(st)} ${t('Checked {ago}.', {'ago': ago('${st['checked_at']}')})}', style: muted),
@@ -515,14 +547,23 @@ class _MaintenanceSettingsState extends State<MaintenanceSettings> {
                 selected: {'${m['mode']}'},
                 onSelectionChanged: (v) => _call('PUT', '/maintenance', {'mode': v.first}),
               ),
-              if (newer)
+              // Older servers only know "requested" (then always "install now").
+              if (installRequested)
+                FilledButton.icon(icon: const Icon(Icons.system_update_alt), label: Text(t('Update requested')), onPressed: null)
+              else if (_checking || m['request'] == 'check')
+                FilledButton.tonalIcon(
+                  icon: const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2.5)),
+                  label: Text(t('Checking …')),
+                  onPressed: null,
+                )
+              else if (newer)
                 FilledButton.icon(
                   icon: const Icon(Icons.system_update_alt),
-                  label: Text(m['requested'] == true ? t('Update requested') : t('Update now')),
-                  onPressed: m['requested'] == true
-                      ? null
-                      : () => _call('POST', '/maintenance/update', null, t('Update started; the server restarts briefly.')),
-                ),
+                  label: Text(t('Install now')),
+                  onPressed: () => _call('POST', '/maintenance/update', null, t('Update started; the server restarts briefly.')),
+                )
+              else
+                FilledButton.tonalIcon(icon: const Icon(Icons.refresh), label: Text(t('Check for updates')), onPressed: () => _check(m)),
             ]),
             const SizedBox(height: 12),
             _app(m, muted),

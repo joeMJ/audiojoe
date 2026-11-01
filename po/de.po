@@ -652,8 +652,17 @@ msgstr "Nur melden"
 msgid "Update requested"
 msgstr "Aktualisierung angefordert"
 
-msgid "Update now"
-msgstr "Jetzt aktualisieren"
+msgid "Check for updates"
+msgstr "Nach Updates suchen"
+
+msgid "Checking …"
+msgstr "Sucht …"
+
+msgid "Install now"
+msgstr "Jetzt installieren"
+
+msgid "The check takes longer; the result appears here later."
+msgstr "Die Prüfung dauert länger; das Ergebnis erscheint später hier."
 
 msgid "Update started; the server restarts briefly."
 msgstr "Aktualisierung gestartet; der Server startet kurz neu."

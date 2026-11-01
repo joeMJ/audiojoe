@@ -20,7 +20,8 @@ class Api {
   Api._();
   static final instance = Api._();
 
-  final client = http.Client();
+  /// Replaced in tests by a mock client.
+  http.Client client = http.Client();
   String base = '';
   String? token;
   String device = '';

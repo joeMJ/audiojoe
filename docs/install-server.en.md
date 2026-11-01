@@ -145,8 +145,11 @@ the state.
   the last 5 are kept), then the new package is installed after checking its checksum. If the
   server does not answer with the new version within 60 seconds, **the previous package and the
   backup are put back**; that version is not tried again at night.
+- **Check now:** **Check for updates** asks for the newest release at once, for server and app
+  together. If the server is not up to date, the button becomes **Install now**; a newer app is
+  offered for installing or downloading in the row **App**.
 - **Only report:** in the app "Update at 04:00" can be switched to "Only report"; the app then
-  shows the new version and **Update now** installs it.
+  shows the new version and **Install now** installs it.
 - **Ubuntu** (set up by the Ubuntu script): like Debian, with the Ubuntu package sources
   (`/etc/apt/apt.conf.d/52audiojoe-upgrades`, written by the script).
 - **Debian** (set up by the Proxmox script): `unattended-upgrades` installs all Debian updates

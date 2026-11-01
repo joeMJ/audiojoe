@@ -146,8 +146,11 @@ Stand.
   Prüfsumme installiert. Antwortet der Server nicht innerhalb von 60 Sekunden mit der neuen
   Version, kommen **das vorige Paket und die Sicherung zurück**; diese Version wird nachts nicht
   noch einmal versucht.
+- **Sofort prüfen:** **Nach Updates suchen** fragt sofort nach dem neuesten Release, für Server
+  und App zugleich. Ist der Server nicht aktuell, wird der Knopf zu **Jetzt installieren**; eine
+  neuere App bietet die Zeile **App** zum Installieren bzw. Herunterladen an.
 - **Nur melden:** In der App lässt sich „Um 04:00 aktualisieren“ auf „Nur melden“ umstellen; dann
-  zeigt die App die neue Version und **Jetzt aktualisieren** spielt sie ein.
+  zeigt die App die neue Version und **Jetzt installieren** spielt sie ein.
 - **Ubuntu** (vom Ubuntu-Skript eingerichtet): wie Debian, mit den Ubuntu-Paketquellen
   (`/etc/apt/apt.conf.d/52audiojoe-upgrades`, vom Skript geschrieben).
 - **Debian** (vom Proxmox-Skript eingerichtet): `unattended-upgrades` spielt täglich alle

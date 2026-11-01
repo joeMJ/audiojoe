@@ -7,7 +7,8 @@
 //! - `update-status.json` – written by the script: last check, installed and newest version,
 //!   result of the last update, Debian updates, database backups. Shown as it is.
 //! - `update-mode` – written here: `auto` (install at night) or `notify` (only report).
-//! - `update-request` – written here: "install now"; the path unit starts the script.
+//! - `update-request` – written here: `now` (install now) or `check` (only look for a newer
+//!   version now); the path unit starts the script, which removes the file.
 //!
 //! App updates: the script keeps the newest release (tag, page, files) in the status; from
 //! that `apps` names the installer of each platform, and `GET /maintenance/app/{platform}`
@@ -94,8 +95,17 @@ pub async fn status(State(state): State<AppState>, _user: CurrentUser) -> Json<V
         "managed": status.is_some(),
         "apps": apps_of(status.as_ref()),
         "status": status,
-        "requested": d.join("update-request").exists(),
+        // `now` or `check` while the script has not taken the request yet.
+        "requested": request(&d).is_some(),
+        "request": request(&d),
     }))
+}
+
+fn request(d: &std::path::Path) -> Option<&'static str> {
+    match std::fs::read_to_string(d.join("update-request")).ok()?.trim() {
+        "check" => Some("check"),
+        _ => Some("now"),
+    }
 }
 
 /// `GET /api/v1/maintenance/app/{android|windows|linux}`: the newest installer, relayed from
@@ -142,12 +152,34 @@ pub async fn set_mode(State(state): State<AppState>, _user: CurrentUser, Json(b)
 /// Asks the update script to install the newest version now (also in mode `notify`).
 pub async fn request_update(State(state): State<AppState>, _user: CurrentUser) -> ApiResult<Json<Value>> {
     std::fs::write(dir(&state).join("update-request"), b"now\n").map_err(|e| ApiError::Internal(e.into()))?;
-    Ok(Json(json!({ "requested": true })))
+    Ok(Json(json!({ "requested": true, "request": "now" })))
+}
+
+/// Asks the update script to look for a newer version now, without installing it. A pending
+/// "install now" is kept.
+pub async fn request_check(State(state): State<AppState>, _user: CurrentUser) -> ApiResult<Json<Value>> {
+    let d = dir(&state);
+    if request(&d).is_none() {
+        std::fs::write(d.join("update-request"), b"check\n").map_err(|e| ApiError::Internal(e.into()))?;
+    }
+    Ok(Json(json!({ "requested": true, "request": request(&d) })))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn request_kinds() {
+        let d = std::env::temp_dir().join(format!("audiojoe-req-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        assert_eq!(request(&d), None);
+        std::fs::write(d.join("update-request"), "check\n").unwrap();
+        assert_eq!(request(&d), Some("check"));
+        std::fs::write(d.join("update-request"), "now\n").unwrap();
+        assert_eq!(request(&d), Some("now"));
+        std::fs::remove_dir_all(&d).unwrap();
+    }
 
     #[test]
     fn apps_from_release_files() {

@@ -5,9 +5,10 @@
 #   audiojoe-update --check    only check and report
 #   audiojoe-update --now      install a newer version now (also in mode "notify")
 #
-# Started nightly at 04:00 by audiojoe-update.timer and, when someone presses "Update now" in
-# an app, by audiojoe-update.path. Source of new versions: SOURCE in /etc/audiojoe/update.conf
-# (the GitHub repository; for tests a Gitea repository with the same release layout).
+# Started nightly at 04:00 by audiojoe-update.timer and, when someone presses "Install now" or
+# "Check for updates" in an app, by audiojoe-update.path (request file `now` or `check`).
+# Source of new versions: SOURCE in /etc/audiojoe/update.conf (the GitHub repository; for tests
+# a Gitea repository with the same release layout).
 #
 # Before an update the database is backed up (/var/backups/audiojoe, the last 5 are kept).
 # If the new version does not answer within 60 seconds, the previous package and the backup
@@ -39,7 +40,12 @@ conf() { [ -r "$CONF" ] && sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p
 SOURCE="$(conf SOURCE)"; SOURCE="${SOURCE:-https://api.github.com/repos/joeMJ/audiojoe}"
 TOKEN_FILE="$(conf TOKEN_FILE)"
 
-[ "$action" = now ] && rm -f "$STATE/update-request"
+# A request from an app: "check" only looks for a newer version, anything else installs it.
+if [ "$action" = now ]; then
+  request="$(tr -d '[:space:]' 2>/dev/null < "$STATE/update-request" || true)"
+  rm -f "$STATE/update-request"
+  [ "$request" = check ] && action=check
+fi
 mode="$(tr -d '[:space:]' 2>/dev/null < "$STATE/update-mode" || true)"
 [ "$mode" = notify ] || mode=auto
 
