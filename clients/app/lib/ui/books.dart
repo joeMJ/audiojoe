@@ -74,16 +74,14 @@ class _BooksViewState extends State<BooksView> {
   Series? series; // an opened series
   final search = TextEditingController();
 
+  /// The audiobook libraries of all sources (Audiobookshelf, Jellyfin, Emby, Plex); a source
+  /// that does not answer is left out here and reported in the settings.
   Future<List<({int source, String lib, String title})>> _libs() async {
-    final out = <({int source, String lib, String title})>[];
-    final sources = (await api.call('GET', '/sources') as List).cast<Map>().where((s) => s['kind'] == 'audiobookshelf');
-    for (final s in sources) {
-      final res = await api.call('GET', '/sources/${s['id']}/browse');
-      for (final l in itemsOf(res['items'])) {
-        out.add((source: s['id'] as int, lib: l.key.split(':')[2], title: l.title));
-      }
-    }
-    return out;
+    final libs = (await api.call('GET', '/books/libraries') as List).cast<Map>();
+    return [
+      for (final l in libs)
+        if (l['lib'] != null) (source: l['source'] as int, lib: l['lib'] as String, title: l['title'] as String),
+    ];
   }
 
   Future<Shelf> _load() async {

@@ -2,6 +2,9 @@
 //! cover URLs. The token stays on the server.
 //!
 //! Item keys: `plex:<source>:<ratingKey>`; music sections are browsed as `s<sectionKey>`.
+//! Audiobooks: Plex has no audiobook type; a music section counts as audiobooks when it uses
+//! the Audnexus agent or its name says so (see `is_book_section`). Album = book
+//! (`pbook:<source>:<ratingKey>`), album artist = author; no series, no narrator.
 //! Tested against Plex Media Server 1.43 (tools/dev/e2e.py, PLEX_URL).
 
 use std::time::Duration;
@@ -163,6 +166,127 @@ pub async fn browse(state: &AppState, src: i64, q: &Browse) -> ApiResult<Value> 
     Ok(json!({ "items": list, "total": list.len() }))
 }
 
+// ---------------------------------------------------------------- audiobooks
+
+/// A music section holding audiobooks: Audnexus agent, or a name like „Hörbücher“/"Audiobooks".
+pub fn is_book_section(d: &Value) -> bool {
+    if d["type"] != "artist" {
+        return false;
+    }
+    let agent = d["agent"].as_str().unwrap_or("").to_lowercase();
+    let title = d["title"].as_str().unwrap_or("").to_lowercase();
+    agent.contains("audnexus") || ["hörbuch", "hörbücher", "hoerbuch", "hoerbuecher", "audiobook", "audio book"].iter().any(|w| title.contains(w))
+}
+
+/// Audiobook sections of a source: (section key, name).
+pub async fn book_sections(state: &AppState, src: i64) -> ApiResult<Vec<(String, String)>> {
+    let p = source(state, src).await?;
+    let v = p.get(&state.http, "/library/sections", &[]).await?;
+    Ok(v["MediaContainer"]["Directory"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter(|d| is_book_section(d))
+                .filter_map(|d| Some((format!("s{}", d["key"].as_str()?), d["title"].as_str().unwrap_or("").to_string())))
+                .collect()
+        })
+        .unwrap_or_default())
+}
+
+/// All albums of a section, page by page.
+async fn all_albums(p: &Plex, state: &AppState, sec: &str) -> ApiResult<Vec<Value>> {
+    let mut out: Vec<Value> = Vec::new();
+    loop {
+        let v = p
+            .get(&state.http, &format!("/library/sections/{sec}/all"), &[
+                ("type", "9".to_string()),
+                ("X-Plex-Container-Start", out.len().to_string()),
+                ("X-Plex-Container-Size", "500".to_string()),
+            ])
+            .await?;
+        let page = v["MediaContainer"]["Metadata"].as_array().cloned().unwrap_or_default();
+        let n = page.len();
+        out.extend(page);
+        let total = v["MediaContainer"]["totalSize"].as_u64().unwrap_or(0) as usize;
+        if n < 500 || out.len() >= total || out.len() >= 20_000 {
+            return Ok(out);
+        }
+    }
+}
+
+fn book_json(src: i64, m: &Value, progress: &std::collections::HashMap<String, (i64, bool)>) -> Value {
+    let id = m["ratingKey"].as_str().unwrap_or_default();
+    let key = format!("pbook:{src}:{id}");
+    let author = m["parentTitle"].as_str().unwrap_or("").trim().to_string();
+    let (pos, fin) = progress.get(&key).copied().unwrap_or((0, false));
+    json!({
+        "key": key, "kind": "book", "title": m["title"].as_str().unwrap_or(""), "subtitle": author,
+        "year": m["year"].as_i64(), "duration_ms": m["duration"].as_i64(),
+        "image": m["thumb"].as_str().map(|_| format!("/api/v1/image/pbook:{src}:{id}")), "quality": null,
+        "author": author, "narrator": "", "series": null, "sequence": null, "volume": null,
+        "added": m["addedAt"].as_i64().map(|s| s * 1000), "position_ms": pos, "finished": fin,
+    })
+}
+
+/// `/api/v1/sources/{id}/books?parent=s<section>` for Plex.
+pub async fn library(state: &AppState, user: i64, src: i64, lib: &str) -> ApiResult<Value> {
+    let Some(sec) = lib.strip_prefix('s').filter(|s| valid_id(s)) else {
+        return Err(ApiError::BadRequest("invalid library".into()));
+    };
+    let p = source(state, src).await?;
+    let albums = all_albums(&p, state, sec).await?;
+    let prefix = format!("pbook:{src}:");
+    let progress: std::collections::HashMap<String, (i64, bool)> = with_db(&state.db, move |c| {
+        let mut st = c.prepare("SELECT item_key, position_ms, finished FROM playback WHERE user_id = ?1 AND item_key LIKE ?2 || '%'")?;
+        let rows = st.query_map((user, &prefix), |r| Ok((r.get::<_, String>(0)?, (r.get::<_, i64>(1)?, r.get::<_, bool>(2)?))))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    })
+    .await?;
+    let mut books: Vec<Value> = albums.iter().map(|m| book_json(src, m, &progress)).collect();
+    books.sort_by(|a, b| crate::audiobookshelf::natural_cmp(a["title"].as_str().unwrap_or(""), b["title"].as_str().unwrap_or("")));
+    let mut authors: std::collections::BTreeMap<String, (String, usize)> = Default::default();
+    for b in books.iter().filter(|b| !b["author"].as_str().unwrap_or("").is_empty()) {
+        let name = b["author"].as_str().unwrap_or("");
+        authors.entry(name.to_lowercase()).or_insert_with(|| (name.to_string(), 0)).1 += 1;
+    }
+    let authors: Vec<Value> = authors.into_values().map(|(name, n)| json!({ "name": name, "books": n })).collect();
+    Ok(json!({ "books": books, "authors": authors, "series": [] }))
+}
+
+/// A book (album) for playing: metadata with parts (one per track) and the tracks' URLs.
+pub async fn book(state: &AppState, p: &Plex, id: &str) -> ApiResult<(Value, Vec<String>)> {
+    if !valid_id(id) {
+        return Err(ApiError::NotFound);
+    }
+    let album = p.get(&state.http, &format!("/library/metadata/{id}"), &[]).await?;
+    let m = &album["MediaContainer"]["Metadata"][0];
+    let v = p.get(&state.http, &format!("/library/metadata/{id}/children"), &[]).await?;
+    let tracks = v["MediaContainer"]["Metadata"].as_array().cloned().unwrap_or_default();
+    if m.is_null() || tracks.is_empty() {
+        return Err(ApiError::NotFound);
+    }
+    let mut parts = Vec::new();
+    let mut urls = Vec::new();
+    let mut offset = 0i64;
+    for (i, t) in tracks.iter().enumerate() {
+        let Some(k) = t["Media"][0]["Part"][0]["key"].as_str() else { continue };
+        let dur = t["duration"].as_i64().unwrap_or(0);
+        parts.push(json!({ "index": i, "start_ms": offset, "duration_ms": dur, "title": t["title"].as_str().unwrap_or("") }));
+        urls.push(format!("{}{k}", p.base));
+        offset += dur;
+    }
+    let chapters: Vec<Value> = parts.iter().map(|c| json!({ "title": c["title"], "start_ms": c["start_ms"],
+        "end_ms": c["start_ms"].as_i64().unwrap_or(0) + c["duration_ms"].as_i64().unwrap_or(0) })).collect();
+    let mut meta = book_json(p.source_id, m, &Default::default());
+    meta["duration_ms"] = json!(offset);
+    meta["description"] = json!(m["summary"].as_str().filter(|s| !s.is_empty()).map(crate::podcasts::plain_text));
+    meta["notes"] = json!(m["summary"].as_str().map(crate::notes::html).filter(|s| !s.is_empty()));
+    meta["quality"] = quality(&tracks[0]);
+    meta["parts"] = json!(parts);
+    meta["chapters"] = json!(chapters);
+    Ok((meta, urls))
+}
+
 pub async fn image(state: &AppState, src: i64, item: &str) -> ApiResult<Response> {
     if !valid_id(item) {
         return Err(ApiError::NotFound);
@@ -179,6 +303,14 @@ pub async fn image(state: &AppState, src: i64, item: &str) -> ApiResult<Response
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn book_sections_by_agent_or_name() {
+        assert!(is_book_section(&json!({ "type": "artist", "agent": "com.plexapp.agents.audnexus", "title": "Books" })));
+        assert!(is_book_section(&json!({ "type": "artist", "agent": "tv.plex.agents.music", "title": "Hörbücher" })));
+        assert!(!is_book_section(&json!({ "type": "artist", "agent": "tv.plex.agents.music", "title": "Musik" })));
+        assert!(!is_book_section(&json!({ "type": "movie", "agent": "x", "title": "Audiobooks" })));
+    }
 
     #[test]
     fn track_from_plex_json() {

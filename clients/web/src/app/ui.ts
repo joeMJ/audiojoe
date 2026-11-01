@@ -110,6 +110,8 @@ type ListName = player.Entry["list"];
 interface ListEntry { key: string; title: string; subtitle: string; position_ms: number; duration_ms: number | null; device: string; updated_at: string | null }
 
 const listOf = (it: Item): ListName => (it.kind === "episode" ? "podcasts" : it.kind === "book" ? "books" : "music");
+/** Keys of audiobooks: Audiobookshelf, Jellyfin/Emby folders, Plex albums. */
+const isBookKey = (k: string) => k.startsWith("abs:") || k.startsWith("jbook:") || k.startsWith("pbook:");
 
 /** "Next": appends the item (an album as one entry) at the end of its continue list. */
 function nextButton(it: Item) {
@@ -546,8 +548,8 @@ async function renderContinue() {
   }
   if (!entries) {
     // Offline: what this device knows (started, unfinished).
-    const prefix = list === "podcasts" ? "episode:" : list === "books" ? "abs:" : "-";
-    entries = (await idbAll<Playback>("positions")).filter((p) => p.key.startsWith(prefix) && !p.finished && p.position_ms > 0)
+    const mine = (k: string) => (list === "podcasts" ? k.startsWith("episode:") : list === "books" && isBookKey(k));
+    entries = (await idbAll<Playback>("positions")).filter((p) => mine(p.key) && !p.finished && p.position_ms > 0)
       .sort((a, b) => b.updated_at.localeCompare(a.updated_at)).map((p) => ({ ...p, duration_ms: p.duration_ms ?? null }));
   }
   if (!entries.length) return void main.append(h("div", { className: "empty" }, list === "music" ? t("Nothing here yet. Add albums with Next.") : t("Nothing to continue.")));
@@ -851,11 +853,9 @@ function bookView(): string {
 
 async function loadShelf(): Promise<Shelf | null> {
   if (!bookLibs) {
-    const libs: { source: number; lib: string; title: string }[] = [];
-    for (const src of (await api<{ id: number; kind: string }[]>("GET", "/sources")).filter((x) => x.kind === "audiobookshelf")) {
-      for (const l of (await api<{ items: Item[] }>("GET", `/sources/${src.id}/browse`)).items) libs.push({ source: src.id, lib: l.key.split(":")[2], title: l.title });
-    }
-    bookLibs = libs;
+    // The audiobook libraries of all sources (Audiobookshelf, Jellyfin, Emby, Plex).
+    const libs = await api<{ source: number; lib?: string; title?: string }[]>("GET", "/books/libraries");
+    bookLibs = libs.filter((l) => l.lib).map((l) => ({ source: l.source, lib: l.lib!, title: l.title ?? "" }));
   }
   const l = bookLibs[Math.min(bookLib, bookLibs.length - 1)];
   if (!l) return null;
@@ -871,7 +871,7 @@ async function renderBooks() {
   try {
     const data = await loadShelf();
     if (!data) {
-      main.append(h("h2", {}, t("Audiobooks")), h("div", { className: "empty" }, t("No audiobook sources. Add Audiobookshelf in the desktop or phone app.")));
+      main.append(h("h2", {}, t("Audiobooks")), h("div", { className: "empty" }, t("No audiobook sources. Add Audiobookshelf, Jellyfin, Emby or Plex in the desktop or phone app.")));
       return;
     }
     const byKey = new Map(data.books.map((b) => [b.key, b]));

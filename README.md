@@ -78,8 +78,8 @@ HTTP; caching happens on the devices only.
   export, latest episodes, show notes, chapters; feeds are refreshed every hour.
 - **Internet radio:** station search via [Radio Browser](https://www.radio-browser.info),
   favourites in your own order.
-- **Audiobooks** (Audiobookshelf): by author, series ("heard x of y", next volume), title; books
-  made of several files; progress kept in sync with Audiobookshelf.
+- **Audiobooks** (Audiobookshelf, Jellyfin, Emby, Plex): by author, series ("heard x of y", next
+  volume), title; books made of several files; progress kept in sync with Audiobookshelf.
 - **Music:** the server's own album index per library with albums, artists, samplers, genres,
   years, recently added and labels (from the tags, from Plex or, if you like, from
   [MusicBrainz](https://musicbrainz.org)); libraries can be hidden per user.

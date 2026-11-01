@@ -234,21 +234,30 @@ pub async fn library(state: &AppState, user: i64, src: i64, lib: &str) -> ApiRes
     Ok(json!({ "books": out, "authors": authors, "series": series_out }))
 }
 
+/// Book libraries of a source: (id, name).
+pub async fn book_libraries(state: &AppState, src: i64) -> ApiResult<Vec<(String, String)>> {
+    let abs = source(state, src).await?;
+    let libs = abs.get(&state.http, "/api/libraries", &[]).await?;
+    Ok(libs["libraries"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter(|l| l["mediaType"] == "book")
+                .filter_map(|l| Some((l["id"].as_str()?.to_string(), l["name"].as_str().unwrap_or("").to_string())))
+                .collect()
+        })
+        .unwrap_or_default())
+}
+
 pub async fn browse(state: &AppState, src: i64, q: &Browse) -> ApiResult<Value> {
     let abs = source(state, src).await?;
     let Some(lib) = q.parent.clone() else {
         // Top level: the book libraries.
-        let libs = abs.get(&state.http, "/api/libraries", &[]).await?;
-        let items: Vec<Value> = libs["libraries"]
-            .as_array()
-            .map(|a| {
-                a.iter()
-                    .filter(|l| l["mediaType"] == "book")
-                    .map(|l| json!({ "key": format!("abs:{src}:{}", l["id"].as_str().unwrap_or("")), "kind": "folder",
-                                     "title": l["name"], "subtitle": "", "image": null, "quality": null }))
-                    .collect()
-            })
-            .unwrap_or_default();
+        let items: Vec<Value> = book_libraries(state, src)
+            .await?
+            .into_iter()
+            .map(|(id, name)| json!({ "key": format!("abs:{src}:{id}"), "kind": "folder", "title": name, "subtitle": "", "image": null, "quality": null }))
+            .collect();
         return Ok(json!({ "items": items, "total": items.len() }));
     };
     if !valid_id(&lib) {

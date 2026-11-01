@@ -81,8 +81,9 @@ HTTP durch; zwischengespeichert wird nur auf den Geräten.
   und -Export, neueste Folgen, Shownotes, Kapitel; Feeds werden stündlich aktualisiert.
 - **Internetradio:** Sendersuche über [Radio Browser](https://www.radio-browser.info), Favoriten
   in eigener Reihenfolge.
-- **Hörbücher** (Audiobookshelf): nach Autor, Serie („x von y gehört“, nächster Band), Titel;
-  Hörbücher aus mehreren Dateien; Hörfortschritt mit Audiobookshelf abgeglichen.
+- **Hörbücher** (Audiobookshelf, Jellyfin, Emby, Plex): nach Autor, Serie („x von y gehört“,
+  nächster Band), Titel; Hörbücher aus mehreren Dateien; Hörfortschritt mit Audiobookshelf
+  abgeglichen.
 - **Musik:** eigenes Albenverzeichnis je Bibliothek mit Alben, Künstlern, Samplern, Genres,
   Jahren, Neuzugängen und Labels (aus den Tags, von Plex oder auf Wunsch von
   [MusicBrainz](https://musicbrainz.org)); Bibliotheken je Benutzer ausblendbar.

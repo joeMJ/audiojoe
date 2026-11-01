@@ -34,6 +34,9 @@ class ListEntry {
 
 String listOf(Item it) => it.kind == 'episode' ? 'podcasts' : it.kind == 'book' ? 'books' : 'music';
 
+/// Keys of audiobooks: Audiobookshelf, Jellyfin/Emby folders, Plex albums.
+bool isBookKey(String key) => key.startsWith('abs:') || key.startsWith('jbook:') || key.startsWith('pbook:');
+
 Future<List<ListEntry>> loadList(String list) async =>
     [for (final j in await api.call('GET', '/lists/$list') as List) ListEntry((j as Map).cast<String, dynamic>())];
 
@@ -141,9 +144,8 @@ class _ContinueViewState extends State<ContinueView> {
       if (mounted && l == list) setState(() => (entries = got, error = null));
     } catch (e) {
       // Offline: what this device knows (started, unfinished).
-      final prefix = l == 'podcasts' ? 'episode:' : l == 'books' ? 'abs:' : '-';
       final local = Stores.positions.data.entries
-          .where((x) => x.key.startsWith(prefix))
+          .where((x) => l == 'podcasts' ? x.key.startsWith('episode:') : l == 'books' && isBookKey(x.key))
           .map((x) => Playback.fromJson(x.value, key: x.key))
           .where((p) => !p.finished && p.positionMs > 0)
           .toList()

@@ -80,8 +80,8 @@ msgstr "Name"
 msgid "New"
 msgstr "Neu"
 
-msgid "No audiobook sources. Add Audiobookshelf in the desktop or phone app."
-msgstr "Keine Hörbuch-Quelle. Audiobookshelf in der Desktop- oder Telefon-App hinzufügen."
+msgid "No audiobook sources. Add Audiobookshelf, Jellyfin, Emby or Plex in the desktop or phone app."
+msgstr "Keine Hörbuch-Quelle. Audiobookshelf, Jellyfin, Emby oder Plex in der Desktop- oder Telefon-App hinzufügen."
 
 msgid "No podcasts subscribed yet."
 msgstr "Noch keine Podcasts abonniert."

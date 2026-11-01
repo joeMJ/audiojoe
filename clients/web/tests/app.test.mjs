@@ -357,6 +357,44 @@ try {
   const outputChip = await page.evaluate(() => [...document.querySelectorAll("main .chip")].some((b) => b.innerText.includes("Dieses Gerät")));
   check("no output selection in the web app", !outputChip);
 
+  // ------------------------------------------------------------ audiobooks from Emby/Jellyfin (optional)
+  // EMBY_TEST_FILE: {url, api_key} of an Emby with an "Audiobooks" library (one folder per book).
+  if (process.env.EMBY_TEST_FILE) {
+    const ec = JSON.parse(readFileSync(process.env.EMBY_TEST_FILE, "utf8"));
+    let emby = (await call("GET", "/sources")).body.find((s) => s.kind === "emby" && s.url === ec.url);
+    if (!emby) emby = (await call("POST", "/sources", { kind: "emby", name: "Emby (Test)", url: ec.url, api_key: ec.api_key })).body;
+    const libs = (await call("GET", "/books/libraries")).body;
+    const elib = libs.find((l) => l.source === emby.id && l.lib);
+    check("books: Emby audiobook library listed next to the others", !!elib && libs.every((l) => !l.error), libs.map((l) => `${l.kind}:${l.title ?? l.error}`).join(", "));
+    if (elib) {
+      const shelf = (await call("GET", `/sources/${emby.id}/books?parent=${elib.lib}`)).body;
+      const authors = shelf.authors.map((a) => `${a.name} (${a.books})`).join(", ");
+      check("books: Emby shelf has books grouped by folder, authors from the album artist, no series",
+        shelf.books.length >= 2 && shelf.books.every((b) => b.key.startsWith("jbook:") && b.kind === "book" && b.author) && shelf.series.length === 0 && shelf.authors.length >= 1, `${shelf.books.length} books; ${authors}`);
+      const b0 = shelf.books[0];
+      const m = (await call("GET", `/items/${encodeURIComponent(b0.key)}`)).body;
+      const sum = (m.parts ?? []).reduce((a, p) => a + p.duration_ms, 0);
+      check("books: Emby book has one part per file, chapters alike, total duration", m.kind === "book" && m.parts?.length >= 2 && m.chapters?.length === m.parts.length && sum === m.duration_ms, `${m.title}: ${m.parts?.length} parts, ${m.duration_ms} ms`);
+      const st = await call("PUT", `/playback/${encodeURIComponent(b0.key)}`, { position_ms: 25000, duration_ms: m.duration_ms, finished: false, title: m.title, subtitle: m.subtitle, updated_at: new Date().toISOString() });
+      const list = (await call("GET", "/lists/books")).body;
+      const again = (await call("GET", `/sources/${emby.id}/books?parent=${elib.lib}`)).body.books.find((b) => b.key === b0.key);
+      check("books: a started Emby book joins the continue list and shows its position on the shelf",
+        st.status === 200 && list.some((e) => e.key === b0.key) && again?.position_ms === 25000, `list: ${list.map((e) => e.key).join(" ")}; shelf ${again?.position_ms}`);
+      await call("PUT", `/playback/${encodeURIComponent(b0.key)}`, { position_ms: 0, duration_ms: m.duration_ms, finished: true, title: m.title, subtitle: m.subtitle, updated_at: new Date(Date.now() + 1000).toISOString() });
+      await call("DELETE", `/lists/books/${encodeURIComponent(b0.key)}`);
+      if (libs.length > 1) {
+        await clickText("Hörbücher");
+        await waitText("Autoren");
+        const chips = await page.evaluate(() => [...document.querySelectorAll("main .chips.wrap .chip")].map((b) => b.innerText));
+        check("books: library chips offer the Emby library", chips.includes(elib.title), chips.join(", "));
+        await page.evaluate((name) => [...document.querySelectorAll("main .chips.wrap .chip")].find((b) => b.innerText === name).click(), elib.title);
+        await page.waitForFunction((n) => document.querySelectorAll("main .list .item").length === n, { timeout: 15000 }, shelf.authors.length);
+        await shot("09d-emby-hoerbuecher");
+        check("books: Emby library shows its authors", true, authors);
+      }
+    }
+  }
+
   // ------------------------------------------------------------ audiobooks (optional)
   if (process.env.ABS_TEST_FILE) {
     const absc = JSON.parse(readFileSync(process.env.ABS_TEST_FILE, "utf8"));

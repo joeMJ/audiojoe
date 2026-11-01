@@ -23,11 +23,16 @@ fn check(list: &str) -> ApiResult<()> {
     if LISTS.contains(&list) { Ok(()) } else { Err(ApiError::NotFound) }
 }
 
+/// Keys of audiobooks: Audiobookshelf, Jellyfin/Emby folders, Plex albums.
+pub fn is_book_key(key: &str) -> bool {
+    key.starts_with("abs:") || key.starts_with("jbook:") || key.starts_with("pbook:")
+}
+
 /// The list an item joins by itself when it is started; None for music and radio.
 pub fn auto_list(key: &str) -> Option<&'static str> {
     if key.starts_with("episode:") {
         Some("podcasts")
-    } else if key.starts_with("abs:") {
+    } else if is_book_key(key) {
         Some("books")
     } else {
         None
@@ -169,10 +174,12 @@ mod tests {
         follow(&c, 1, "episode:2", false, 5000, "B", "").unwrap();
         follow(&c, 1, "episode:1", false, 9000, "A", "").unwrap(); // already in: stays
         follow(&c, 1, "abs:1:x", false, 100, "Book", "").unwrap();
+        follow(&c, 1, "jbook:3:21", false, 100, "Emby book", "").unwrap();
+        follow(&c, 1, "pbook:4:9", false, 100, "Plex book", "").unwrap();
         follow(&c, 1, "jellyfin:1:t", false, 100, "Track", "").unwrap();
         follow(&c, 1, "episode:3", false, 0, "C", "").unwrap(); // not started
         assert_eq!(keys(&c, "podcasts"), ["episode:2", "episode:1"]);
-        assert_eq!(keys(&c, "books"), ["abs:1:x"]);
+        assert_eq!(keys(&c, "books"), ["pbook:4:9", "jbook:3:21", "abs:1:x"]);
         assert!(keys(&c, "music").is_empty());
         follow(&c, 1, "episode:2", true, 0, "", "").unwrap();
         assert_eq!(keys(&c, "podcasts"), ["episode:1"]);

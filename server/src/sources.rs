@@ -1,4 +1,5 @@
-//! Media sources (Jellyfin, Audiobookshelf): management, browsing and cover images.
+//! Media sources (Jellyfin, Emby, Plex, Audiobookshelf): management, browsing, audiobook
+//! libraries and cover images.
 //! The source's credentials stay on the server.
 
 use axum::{
@@ -117,16 +118,48 @@ pub async fn books(
     Path(id): Path<i64>,
     Query(q): Query<Browse>,
 ) -> ApiResult<Json<Value>> {
+    let lib = q.parent.ok_or_else(|| ApiError::BadRequest("parent (library) required".into()))?;
     match kind(&state, id).await?.as_str() {
-        "audiobookshelf" => {
-            let lib = q.parent.ok_or_else(|| ApiError::BadRequest("parent (library) required".into()))?;
-            audiobookshelf::library(&state, user.id, id, &lib).await.map(Json)
-        }
+        "audiobookshelf" => audiobookshelf::library(&state, user.id, id, &lib).await.map(Json),
+        "jellyfin" | "emby" => jellyfin::library(&state, user.id, id, &lib).await.map(Json),
+        "plex" => plex::library(&state, user.id, id, &lib).await.map(Json),
         _ => Err(ApiError::NotFound),
     }
 }
 
-/// `/api/v1/image/{key}` for `jellyfin:<src>:<item>` and `abs:<src>:<item>`.
+/// `GET /api/v1/books/libraries`: the audiobook libraries of all sources, without the ones this
+/// user has hidden. A source that does not answer is reported, not skipped silently.
+pub async fn book_libraries(State(state): State<AppState>, user: CurrentUser) -> ApiResult<Json<Value>> {
+    let sources: Vec<(i64, String, String)> = with_db(&state.db, |c| {
+        let mut st = c.prepare("SELECT id, kind, name FROM source ORDER BY name")?;
+        let rows = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    })
+    .await?;
+    let mut out = Vec::new();
+    for (id, kind, name) in sources {
+        let libs = match kind.as_str() {
+            "audiobookshelf" => audiobookshelf::book_libraries(&state, id).await,
+            "jellyfin" | "emby" => jellyfin::book_libraries(&state, id).await,
+            "plex" => plex::book_sections(&state, id).await,
+            _ => Ok(Vec::new()),
+        };
+        let libs = match libs {
+            Ok(l) => l,
+            Err(e) => {
+                out.push(json!({ "source": id, "kind": kind, "name": name, "error": format!("{e:?}") }));
+                continue;
+            }
+        };
+        let hidden = hidden_libraries(&state, user.id, id).await?;
+        for (lib, title) in libs.into_iter().filter(|(lib, _)| !hidden.contains(lib)) {
+            out.push(json!({ "source": id, "kind": kind, "name": name, "lib": lib, "title": title }));
+        }
+    }
+    Ok(Json(Value::Array(out)))
+}
+
+/// `/api/v1/image/{key}` for `jellyfin:<src>:<item>`, `emby:…`, `plex:…`, `abs:…`, `jbook:…`, `pbook:…`.
 pub async fn image(State(state): State<AppState>, user: CurrentUser, Path(key): Path<String>) -> ApiResult<Response> {
     if let Some(uuid) = key.strip_prefix("radio:") {
         return crate::radio::image(&state, uuid).await;
@@ -143,8 +176,8 @@ pub async fn image(State(state): State<AppState>, user: CurrentUser, Path(key): 
     };
     let src: i64 = src.parse().map_err(|_| ApiError::NotFound)?;
     match k {
-        "jellyfin" | "emby" => jellyfin::image(&state, src, item).await,
-        "plex" => plex::image(&state, src, item).await,
+        "jellyfin" | "emby" | "jbook" => jellyfin::image(&state, src, item).await,
+        "plex" | "pbook" => plex::image(&state, src, item).await,
         "abs" => audiobookshelf::image(&state, src, item).await,
         _ => Err(ApiError::NotFound),
     }

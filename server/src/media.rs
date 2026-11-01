@@ -1,6 +1,8 @@
 //! Items across sources: metadata with audio quality and the stream endpoint.
 //!
-//! Item keys: `episode:<id>` (podcast episode) and `jellyfin:<source>:<item>`.
+//! Item keys: `episode:<id>` (podcast episode), `jellyfin:<source>:<item>`, `emby:…`, `plex:…`,
+//! `abs:…` (Audiobookshelf book), `jbook:<source>:<folder>` and `pbook:<source>:<album>`
+//! (audiobooks from Jellyfin/Emby and Plex, several files = parts), `radio:<uuid>`.
 //! `GET /api/v1/stream/{key}?profile=…` relays the original (Range passed through) or, if
 //! the profile requires it, converts on the fly with ffmpeg – nothing is stored.
 //! Profiles: `original` (default) and `tesla-offline` (hi-res FLAC → FLAC 48 kHz, because
@@ -30,6 +32,8 @@ enum Key {
     Abs(i64, String),
     Radio(String),
     Plex(i64, String),
+    JBook(i64, String),
+    PBook(i64, String),
 }
 
 fn parse_key(key: &str) -> ApiResult<Key> {
@@ -45,6 +49,12 @@ fn parse_key(key: &str) -> ApiResult<Key> {
         }
         (Some("abs"), Some(src), Some(item)) if audiobookshelf::valid_id(item) => {
             Ok(Key::Abs(src.parse().map_err(|_| ApiError::NotFound)?, item.to_string()))
+        }
+        (Some("jbook"), Some(src), Some(item)) if jellyfin::valid_id(item) => {
+            Ok(Key::JBook(src.parse().map_err(|_| ApiError::NotFound)?, item.to_string()))
+        }
+        (Some("pbook"), Some(src), Some(item)) if plex::valid_id(item) => {
+            Ok(Key::PBook(src.parse().map_err(|_| ApiError::NotFound)?, item.to_string()))
         }
         _ => Err(ApiError::NotFound),
     }
@@ -109,6 +119,18 @@ async fn resolve(state: &AppState, user: &CurrentUser, key: &str, part: usize) -
             let (meta, parts) = audiobookshelf::item(state, &abs, &item).await?;
             let url = parts.get(part).map(|p| p.url.clone()).ok_or(ApiError::NotFound)?;
             Ok(Resolved { url, auth: Some((header::AUTHORIZATION, abs.auth_header())), meta })
+        }
+        Key::JBook(src, item) => {
+            let jf = jellyfin::source(state, src).await?;
+            let (meta, urls) = jellyfin::book(state, &jf, &item).await?;
+            let url = urls.get(part).cloned().ok_or(ApiError::NotFound)?;
+            Ok(Resolved { url, auth: Some(jf.auth()), meta })
+        }
+        Key::PBook(src, item) => {
+            let p = plex::source(state, src).await?;
+            let (meta, urls) = plex::book(state, &p, &item).await?;
+            let url = urls.get(part).cloned().ok_or(ApiError::NotFound)?;
+            Ok(Resolved { url, auth: Some(p.auth()), meta })
         }
     }
 }

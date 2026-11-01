@@ -139,6 +139,7 @@ async fn main() -> Result<()> {
         .route("/api/v1/sources/{id}", delete(sources::delete))
         .route("/api/v1/sources/{id}/browse", get(sources::browse))
         .route("/api/v1/sources/{id}/books", get(sources::books))
+        .route("/api/v1/books/libraries", get(sources::book_libraries))
         .route("/api/v1/sources/{id}/libraries", get(sources::libraries))
         .route("/api/v1/sources/{id}/music", get(music::albums))
         .route("/api/v1/sources/{id}/music/refresh", post(music::refresh))

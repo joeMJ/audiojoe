@@ -46,8 +46,11 @@ plays live; it cannot be saved offline.
 
 ## Audiobooks and music
 
-- **Audiobooks** (Audiobookshelf): by author, series ("heard x of y", next volume), title or
-  recently added; search by title, author, series and narrator.
+- **Audiobooks** (Audiobookshelf, Jellyfin, Emby, Plex): by author, series ("heard x of y", next
+  volume), title or recently added; search by title, author, series and narrator. With Jellyfin
+  ("Books" library), Emby ("Audiobooks") and Plex (a music library with the Audnexus agent or
+  "Audiobooks" in its name) a folder is a book and the album artist the author; these sources
+  know no series or narrators.
 - **Music** (Jellyfin, Emby, Plex): albums, artists, samplers, genres, years, recently added and
   labels; search by title, artist, genre and label. **Play album** plays the whole album; ⏮ ⏭ jump
   between its titles.

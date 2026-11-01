@@ -47,8 +47,11 @@ live; es lässt sich nicht offline speichern.
 
 ## Hörbücher und Musik
 
-- **Hörbücher** (Audiobookshelf): nach Autor, Serie („x von y gehört“, nächster Band), Titel oder
-  zuletzt hinzugefügt; Suche nach Titel, Autor, Serie und Sprecher.
+- **Hörbücher** (Audiobookshelf, Jellyfin, Emby, Plex): nach Autor, Serie („x von y gehört“,
+  nächster Band), Titel oder zuletzt hinzugefügt; Suche nach Titel, Autor, Serie und Sprecher.
+  Bei Jellyfin („Bücher“-Bibliothek), Emby („Hörbücher“) und Plex (Musikbibliothek mit dem
+  Audnexus-Agenten oder mit „Hörbücher“/„Audiobooks“ im Namen) ist ein Ordner ein Buch, der
+  Albuminterpret der Autor; Serien und Sprecher kennen diese Quellen nicht.
 - **Musik** (Jellyfin, Emby, Plex): Alben, Künstler, Sampler, Genres, Jahre, Neu hinzugefügt und
   Labels; Suche nach Titel, Künstler, Genre und Label. **Album abspielen** spielt das ganze Album;
   ⏮ ⏭ springen zwischen den Titeln.
