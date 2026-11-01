@@ -17,7 +17,8 @@
     C:\Program Files (x86)\WiX Toolset v3.14\bin).
 
 .PARAMETER Thumbprint
-    Fingerabdruck des Signaturzertifikats in Cert:\CurrentUser\My (mit privatem Schlüssel).
+    Fingerabdruck des Signaturzertifikats in Cert:\CurrentUser\My (mit privatem Schlüssel);
+    Vorgabe: Umgebungsvariable AUDIOJOE_SIGN_THUMBPRINT.
 
 .PARAMETER TimestampUrl
     Zeitstempeldienst (RFC 3161).
@@ -30,7 +31,7 @@
 #>
 param(
     [string]$WixDir = '',
-    [string]$Thumbprint = '',
+    [string]$Thumbprint = $env:AUDIOJOE_SIGN_THUMBPRINT,
     [string]$TimestampUrl = 'http://timestamp.digicert.com',
     [switch]$NoSign,
     [switch]$NoMsi
@@ -73,6 +74,7 @@ if (-not $NoSign) {
     $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" -ErrorAction SilentlyContinue |
         Sort-Object { [version]$_.Directory.Parent.Name } -Descending | Select-Object -First 1 -ExpandProperty FullName
     if (-not $signtool) { Fehler 'signtool.exe nicht gefunden.' 'Windows SDK installieren oder -NoSign.' }
+    if (-not $Thumbprint) { Fehler 'Kein Signaturzertifikat angegeben.' '-Thumbprint <Fingerabdruck> angeben oder AUDIOJOE_SIGN_THUMBPRINT setzen, oder -NoSign.' }
     $cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object Thumbprint -eq $Thumbprint
     if (-not $cert) { Fehler "Zertifikat $Thumbprint fehlt in Cert:\CurrentUser\My." 'Zertifikat mit privatem Schlüssel einspielen oder -Thumbprint angeben.' }
     if (-not $cert.HasPrivateKey) { Fehler "Zum Zertifikat $Thumbprint fehlt der private Schlüssel." }
@@ -80,8 +82,8 @@ if (-not $NoSign) {
 
 if (-not $NoMsi) {
     if (-not $WixDir) {
-        # Umgebungsvariable WIX (Ordner mit candle.exe bzw. dessen bin), sonst die ausgepackten
-        # wix314-binaries (wie bei tvjoe/remotejoe), sonst der Installationsordner von WiX.
+        # Umgebungsvariable WIX (Ordner mit candle.exe bzw. dessen bin, z. B. die ausgepackten
+        # wix314-binaries), sonst der Installationsordner von WiX.
         $kandidaten = @()
         if ($env:WIX) { $kandidaten += @((Join-Path $env:WIX 'bin'), $env:WIX) }
         $kandidaten += @('C:\Program Files (x86)\WiX Toolset v3.14\bin')
