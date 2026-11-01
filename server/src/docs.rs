@@ -16,8 +16,16 @@ const PAGES: &[(&str, &str, &str, &[&str])] = &[
      &["ERSTE-SCHRITTE.md", "ERSTE-SCHRITTE.en.md"]),
     ("manual", include_str!("../../docs/ANLEITUNG.md"), include_str!("../../docs/ANLEITUNG.en.md"),
      &["ANLEITUNG.md", "ANLEITUNG.en.md"]),
-    ("install", include_str!("../../docs/INSTALLATION.md"), include_str!("../../docs/INSTALLATION.en.md"),
-     &["INSTALLATION.md", "INSTALLATION.en.md"]),
+    ("install", include_str!("../../docs/install-server.md"), include_str!("../../docs/install-server.en.md"),
+     &["install-server.md", "install-server.en.md"]),
+    ("install-ubuntu", include_str!("../../docs/install-ubuntu.md"), include_str!("../../docs/install-ubuntu.en.md"),
+     &["install-ubuntu.md", "install-ubuntu.en.md"]),
+    ("install-debian", include_str!("../../docs/install-debian.md"), include_str!("../../docs/install-debian.en.md"),
+     &["install-debian.md", "install-debian.en.md"]),
+    ("install-windows", include_str!("../../docs/install-windows.md"), include_str!("../../docs/install-windows.en.md"),
+     &["install-windows.md", "install-windows.en.md"]),
+    ("install-android", include_str!("../../docs/install-android.md"), include_str!("../../docs/install-android.en.md"),
+     &["install-android.md", "install-android.en.md"]),
     ("privacy", include_str!("../../docs/DATENSCHUTZ.md"), include_str!("../../docs/DATENSCHUTZ.en.md"),
      &["DATENSCHUTZ.md", "DATENSCHUTZ.en.md"]),
     ("third-party", include_str!("../../THIRD_PARTY.md"), include_str!("../../THIRD_PARTY.md"),
@@ -75,7 +83,7 @@ fn render(md: &str, de: bool) -> (String, String) {
             _ => {}
         })
         .collect();
-    // Anchors like GitHub's, so links such as `INSTALLATION.md#sonos` work here as well.
+    // Anchors like GitHub's, so links such as `install-server.md#sonos` work here as well.
     for i in 0..events.len() {
         if let Event::Start(Tag::Heading { id: None, .. }) = &events[i] {
             let mut text = String::new();

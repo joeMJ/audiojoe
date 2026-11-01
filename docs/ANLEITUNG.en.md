@@ -121,7 +121,7 @@ only, for nothing else; **Switch off** signs all apps connected this way out.
 ## Settings
 
 Sources and libraries, music (album index, MusicBrainz), Sonos (speakers), maintenance (server and
-Debian updates, backups, this app's version; see [Installation](INSTALLATION.en.md#updates-and-maintenance)),
+Debian updates, backups, this app's version; see [Installation](install-server.en.md#updates-and-maintenance)),
 podcasts (OPML), devices
 (signed-in devices, sign out each one), **Sign out this device** and **About audiojoe** with
 version, manual, privacy and the third-party licences. In the web player signing out and

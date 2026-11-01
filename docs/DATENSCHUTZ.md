@@ -73,6 +73,8 @@ Server der Weiterleitung.
   `systemctl disable --now audiojoe-update.timer audiojoe-update.path`.
 - **Debian** (nur vom Proxmox-Skript eingerichtet): `unattended-upgrades` fragt täglich die
   Debian-Paketquellen (`deb.debian.org`, `security.debian.org`) und lädt Updates von dort.
+- **Ubuntu** (nur vom Ubuntu-Skript eingerichtet): `unattended-upgrades` fragt täglich die
+  Ubuntu-Paketquellen (`archive.ubuntu.com`, `security.ubuntu.com`) und lädt Updates von dort.
 - **Pflege-Übersicht:** Was die App unter **Einstellungen → Pflege** zeigt (Versionen, letzte
   Debian-Updates, Sicherungen), liegt nur auf dem Server
   (`/var/lib/audiojoe/update-status.json`); Sicherungen der Datenbank in
@@ -145,4 +147,4 @@ was zu ihm gehört.
 - Eine Anmeldung gilt 180 Tage. Unter **Einstellungen → Geräte** siehst du alle Anmeldungen und
   kannst jede einzeln abmelden.
 - Der Server spricht selbst nur HTTP; HTTPS übernimmt der vorgeschaltete Proxy
-  ([Installation](INSTALLATION.md)).
+  ([Installation](install-server.md)).

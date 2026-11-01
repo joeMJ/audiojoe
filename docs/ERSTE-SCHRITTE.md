@@ -1,6 +1,6 @@
 # Erste Schritte
 
-Voraussetzung ist ein laufender audiojoe-Server ([Installation](INSTALLATION.md)) und eine
+Voraussetzung ist ein laufender audiojoe-Server ([Installation](install-server.md)) und eine
 Authenticator-App auf dem Telefon (z. B. Aegis, 2FAS, FreeOTP oder die des Passwortmanagers).
 
 ## Benutzer anlegen
@@ -79,7 +79,7 @@ Kontaktadresse nötig, die MusicBrainz verlangt – siehe [Datenschutz](DATENSCH
 ## Sonos
 
 Sonos braucht einen zweiten, nur im Heimnetz erreichbaren Port des Servers
-([Installation](INSTALLATION.md#sonos)). Lautsprecher kommen unter **Einstellungen → Sonos** dazu:
+([Installation](install-server.md#sonos)). Lautsprecher kommen unter **Einstellungen → Sonos** dazu:
 die IP-Adresse eintragen und **Lautsprecher hinzufügen**, oder – wenn in der Konfiguration ein
 Bereich `[sonos] scan` steht – diesen Bereich durchsuchen. Dort lassen sie sich auch wieder
 entfernen; Lautsprecher gelten für alle Benutzer des Servers. Danach stehen die Räume im Player

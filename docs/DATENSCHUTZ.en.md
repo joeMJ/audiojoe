@@ -70,6 +70,8 @@ feeds to a CDN), the server follows the redirect.
   `systemctl disable --now audiojoe-update.timer audiojoe-update.path`.
 - **Debian** (set up by the Proxmox script only): `unattended-upgrades` asks the Debian package
   sources (`deb.debian.org`, `security.debian.org`) daily and downloads updates from there.
+- **Ubuntu** (set up by the Ubuntu script only): `unattended-upgrades` asks the Ubuntu package
+  sources (`archive.ubuntu.com`, `security.ubuntu.com`) daily and downloads updates from there.
 - **Maintenance overview:** what the app shows under **Settings → Maintenance** (versions, last
   Debian updates, backups) stays on the server (`/var/lib/audiojoe/update-status.json`); database
   backups in `/var/backups/audiojoe/` (the last 5).
@@ -135,4 +137,4 @@ from it, deleting a user (`audiojoe-server user delete NAME`) everything belongi
 - A sign-in is valid for 180 days. **Settings → Devices** lists all sign-ins; each can be signed out
   on its own.
 - The server itself only speaks HTTP; HTTPS is done by the proxy in front of it
-  ([Installation](INSTALLATION.en.md)).
+  ([Installation](install-server.en.md)).

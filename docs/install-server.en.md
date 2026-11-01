@@ -1,8 +1,8 @@
-# Installation
+# Install the server
 
 audiojoe consists of the **server** (one program with an SQLite database, meant for a Linux
-container in the home network) and the **apps**: Android, Linux and Windows, plus the web player
-the server serves itself.
+container or a VM in the home network) and the **apps** for Ubuntu, Debian, Windows and Android
+(own pages, see [Apps](#apps)), plus the web player the server serves itself.
 
 > [!NOTE]
 > The packages and the Proxmox script fetch the server from the GitHub releases; those exist from
@@ -10,11 +10,12 @@ the server serves itself.
 
 ## Server
 
-Three ways, from the simplest:
+Four ways, from the simplest:
 
 1. **Proxmox:** a script creates a ready container (recommended).
-2. **Debian package** on an existing Debian 13 or Ubuntu 24.04/26.04.
-3. **From source.**
+2. **Ubuntu Server 24.04 / 26.04:** a script sets up audiojoe in an existing VM.
+3. **Debian package** on an existing Debian 13 or Ubuntu 24.04/26.04.
+4. **From source.**
 
 A reverse proxy with HTTPS goes in front (e.g. Nginx Proxy Manager, Caddy, Nginx); the server
 itself speaks plain HTTP and should listen in the home network only.
@@ -27,8 +28,14 @@ On the Proxmox host as `root`:
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/joeMJ/audiojoe/main/packaging/proxmox/audiojoe-lxc.sh)"
 ```
 
-To read the script first: download it with `curl -fsSL -o audiojoe-lxc.sh …`, look at it, then
-`bash audiojoe-lxc.sh`.
+**Read first, then run** (recommended): the one-liner above runs the script without showing it
+to you first. If you do not want that, download it, read it and then start it:
+
+```bash
+curl -fsSL -o audiojoe-lxc.sh https://raw.githubusercontent.com/joeMJ/audiojoe/main/packaging/proxmox/audiojoe-lxc.sh
+less audiojoe-lxc.sh
+bash audiojoe-lxc.sh
+```
 
 The script asks in dialogs (similar to the Proxmox helper scripts), first for the resources –
 **optimal** (2 cores, 2 GB RAM, 16 GB disk, recommended) or **minimum** (1 core, 1 GB RAM, 8 GB
@@ -48,6 +55,42 @@ Then it:
 Without questions, e.g. to repeat it (`PRESET=minimal` for the small resources):
 `CTID=120 IP=10.0.0.20/24 GW=10.0.0.1 DNS=10.0.0.1 PROXY=10.0.0.10 ADMIN=anna bash audiojoe-lxc.sh --yes`.
 `DRY_RUN=1` only shows what would be done.
+
+### Ubuntu Server 24.04 / 26.04 (VM by script)
+
+In an Ubuntu Server VM (24.04 or 26.04, the minimal edition too) with a fixed address in the
+home network, as a user with `sudo`:
+
+```bash
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/joeMJ/audiojoe/main/packaging/ubuntu/audiojoe-ubuntu.sh)"
+```
+
+**Read first, then run** (recommended): the one-liner above runs the script without showing it
+to you first. If you do not want that, download it, read it and then start it:
+
+```bash
+curl -fsSL -o audiojoe-ubuntu.sh https://raw.githubusercontent.com/joeMJ/audiojoe/main/packaging/ubuntu/audiojoe-ubuntu.sh
+less audiojoe-ubuntu.sh
+sudo bash audiojoe-ubuntu.sh
+```
+
+The script asks in the same dialogs as the Proxmox script for the address audiojoe listens on in
+the home network (proposal: the VM's address), the IP address of the **reverse proxy** that
+publishes audiojoe (not a proxy for downloads), Sonos and the name of the first user. If `whiptail`
+is missing (minimal edition), it installs the Ubuntu package for it first. A summary shows
+everything before it sets up. Then it:
+
+- updates Ubuntu and installs the server package from the newest release (checksum from
+  `SHA256SUMS`),
+- writes `/etc/audiojoe/config.toml` (port 8080, Sonos 8081),
+- sets up the **self-maintenance**, for Ubuntu with the Ubuntu package sources (see
+  [Updates and maintenance](#updates-and-maintenance)),
+- creates the **first user** and shows password and TOTP secret once,
+- shows the fields for Nginx Proxy Manager at the end.
+
+The script does not set up a reverse proxy in the VM yet; until then an existing proxy points to
+the VM. Without questions: `sudo ADDR=10.0.0.21 PROXY=10.0.0.10 ADMIN=anna bash
+audiojoe-ubuntu.sh --yes`; `DRY_RUN=1` only shows what would be done.
 
 ### Debian package
 
@@ -104,6 +147,8 @@ the state.
   backup are put back**; that version is not tried again at night.
 - **Only report:** in the app "Update at 04:00" can be switched to "Only report"; the app then
   shows the new version and **Update now** installs it.
+- **Ubuntu** (set up by the Ubuntu script): like Debian, with the Ubuntu package sources
+  (`/etc/apt/apt.conf.d/52audiojoe-upgrades`, written by the script).
 - **Debian** (set up by the Proxmox script): `unattended-upgrades` installs all Debian updates
   daily, not only security updates, and removes packages no longer needed
   (`/etc/apt/apt.conf.d/52audiojoe-upgrades`). On an own Debian the same works with
@@ -139,16 +184,11 @@ Adding speakers: [Getting started](ERSTE-SCHRITTE.en.md#sonos).
 
 ## Apps
 
-- **Android:** signed APK. Until the first release it is built from source:
-  `cd clients/app && flutter build apk --release --flavor github`. This build asks your own
-  server for new versions and downloads them through it (see [Privacy](DATENSCHUTZ.en.md#updates-only-with-the-server-package)).
-  For F-Droid without the update check:
-  `flutter build apk --release --flavor fdroid --dart-define=AUDIOJOE_DIST=fdroid`.
-- **Linux (Ubuntu 24.04 / 26.04):** in the folder `clients/app` run `flutter build linux --release`,
-  then `../../tools/build-deb.sh` – this makes a `.deb`. Playback needs `libmpv2` from the system.
-- **Windows 10/11:** MSI `audiojoe-<version>-windows-x86_64.msi` (per user, without administrator
-  rights, into `%LOCALAPPDATA%\Programs\audiojoe`; a new MSI replaces the old one). Built on
-  Windows with `tools\build-windows.ps1` (Flutter, WiX 3.14); it brings `libmpv-2.dll` (LGPL, see
-  [third-party licences](../THIRD_PARTY.md)).
+Every app has its own page with installation, updates and notes:
+
+- **Ubuntu 24.04 / 26.04:** [Install audiojoe on Ubuntu](install-ubuntu.en.md)
+- **Debian 13:** [Install audiojoe on Debian](install-debian.en.md)
+- **Windows 10/11:** [Install audiojoe on Windows](install-windows.en.md)
+- **Android (7.0 and later):** [Install audiojoe on Android](install-android.en.md)
 - **Web player:** nothing to install – open the server address in the browser, in the car e.g. in
   the Tesla's browser. It can be put on the home screen as an app.

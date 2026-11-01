@@ -1,6 +1,6 @@
 # Getting started
 
-You need a running audiojoe server ([Installation](INSTALLATION.en.md)) and an authenticator app on
+You need a running audiojoe server ([Installation](install-server.en.md)) and an authenticator app on
 your phone (e.g. Aegis, 2FAS, FreeOTP or the one of your password manager). The screenshots show
 the German interface.
 
@@ -79,7 +79,7 @@ MusicBrainz asks for – see [Privacy](DATENSCHUTZ.en.md)).
 ## Sonos
 
 Sonos needs a second port of the server, reachable only in the home network
-([Installation](INSTALLATION.en.md#sonos)). Add speakers under **Settings → Sonos**: enter the IP
+([Installation](install-server.en.md#sonos)). Add speakers under **Settings → Sonos**: enter the IP
 address and **Add speaker**, or – when the configuration has a range `[sonos] scan` – search that
 range. They can be removed there too; speakers apply to all users of the server. Then the rooms can
 be picked in the player under **This device**.

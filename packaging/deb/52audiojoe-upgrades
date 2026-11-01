@@ -1,5 +1,5 @@
 // audiojoe: install Debian updates (not only security updates) daily and remove packages
-// that are no longer needed. Installed by the Proxmox script; see docs/INSTALLATION.md.
+// that are no longer needed. Installed by the Proxmox script; see docs/install-server.md.
 APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
 APT::Periodic::AutocleanInterval "7";

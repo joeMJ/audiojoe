@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="260" height="48" viewBox="0 0 260 48" role="img" aria-label="Install on Android">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a5d82"/>
+      <stop offset="1" stop-color="#253f5c"/>
+    </linearGradient>
+  </defs>
+  <rect x="1" y="1" width="258" height="46" rx="10" fill="url(#g)" stroke="#1b2f45" stroke-width="1.5"/>
+  <g stroke="#3ddc84" stroke-width="2.2" stroke-linecap="round"><line x1="22.5" y1="14.5" x2="19.5" y2="10"/><line x1="35.5" y1="14.5" x2="38.5" y2="10"/></g>
+  <path d="M15 31 A14 14 0 0 1 43 31 Z" fill="#3ddc84"/>
+  <g fill="#253f5c"><circle cx="23" cy="24.5" r="1.8"/><circle cx="35" cy="24.5" r="1.8"/></g>
+  <text x="54" y="30" font-family="Segoe UI, Ubuntu, Helvetica, Arial, sans-serif" font-size="16" font-weight="600" fill="#ffffff">Install on Android</text>
+</svg>

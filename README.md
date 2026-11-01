@@ -18,6 +18,17 @@
 <p align="center">
   <a href="https://www.johnlose.de/unterstutzung-fur-john-joe-lose/"><img src="docs/knoepfe/danke.svg" alt="Say thanks to John" width="300"></a>
 </p>
+<p align="center">
+  <a href="docs/install-ubuntu.en.md"><img src="docs/knoepfe/ubuntu-en.svg" alt="Install on Ubuntu" width="260"></a>
+  &nbsp;
+  <a href="docs/install-debian.en.md"><img src="docs/knoepfe/debian-en.svg" alt="Install on Debian" width="260"></a>
+  &nbsp;
+  <a href="docs/install-windows.en.md"><img src="docs/knoepfe/windows-en.svg" alt="Install on Windows" width="260"></a>
+  &nbsp;
+  <a href="docs/install-android.en.md"><img src="docs/knoepfe/android-en.svg" alt="Install on Android" width="260"></a>
+  &nbsp;
+  <a href="docs/install-server.en.md"><img src="docs/knoepfe/server-en.svg" alt="Install the server" width="260"></a>
+</p>
 
 The server stores **no media**. It knows sources, titles and positions and relays the audio over
 HTTP; caching happens on the devices only.
@@ -31,7 +42,8 @@ HTTP; caching happens on the devices only.
 
 ## Documentation
 
-- [`docs/INSTALLATION.en.md`](docs/INSTALLATION.en.md) – build and set up the server, HTTPS proxy, Sonos, apps
+- [`docs/install-server.en.md`](docs/install-server.en.md) – install the server (Proxmox, Ubuntu Server, package, source), HTTPS proxy, Sonos
+- apps: [Ubuntu](docs/install-ubuntu.en.md) · [Debian](docs/install-debian.en.md) · [Windows](docs/install-windows.en.md) · [Android](docs/install-android.en.md)
 - [`docs/ERSTE-SCHRITTE.en.md`](docs/ERSTE-SCHRITTE.en.md) – getting started: users, sign-in, sources, podcasts, radio, music
 - [`docs/ANLEITUNG.en.md`](docs/ANLEITUNG.en.md) – manual: continue listening, player, chapters, offline, in the car
 - [`docs/DATENSCHUTZ.en.md`](docs/DATENSCHUTZ.en.md) – privacy: every network access and what is stored where
@@ -65,7 +77,7 @@ HTTP; caching happens on the devices only.
 
 | Part | Status | Note |
 | :--- | :--- | :--- |
-| **Server** (Debian 13, LXC) | development | from source ([Installation](docs/INSTALLATION.en.md#server)); package and Proxmox script follow with `v0.1.0` |
+| **Server** (Debian 13, LXC) | development | from source ([Installation](docs/install-server.en.md#server)); package and Proxmox script follow with `v0.1.0` |
 | **Android** | development | signed APK |
 | **Linux (Ubuntu 24.04 / 26.04)** | development | `.deb` |
 | **Windows 10/11** | development | installer to follow |

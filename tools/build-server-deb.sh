@@ -59,7 +59,7 @@ id audiojoe >/dev/null 2>&1 || useradd --system --home-dir /var/lib/audiojoe --s
 install -d -m 755 -o audiojoe -g audiojoe /var/lib/audiojoe
 install -d -m 755 /etc/audiojoe /var/cache/audiojoe
 if [ ! -f /etc/audiojoe/config.toml ]; then
-  # Only reachable on this machine until the address is set (see docs/INSTALLATION.md).
+  # Only reachable on this machine until the address is set (see docs/install-server.md).
   sed -e 's/^listen = .*/listen = "127.0.0.1:8080"/' -e 's/^trusted_proxies = .*/trusted_proxies = []/' \
       /usr/share/audiojoe/config.example.toml > /etc/audiojoe/config.toml
   echo "audiojoe: /etc/audiojoe/config.toml created (listens on 127.0.0.1:8080 – set the LAN address there)"
