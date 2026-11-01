@@ -83,7 +83,7 @@ HTTP; caching happens on the devices only.
 | **Windows 10/11** | development | MSI, signed |
 | **Web player** | development | served by the server; built for the in-car browser |
 
-## What it does
+## What audiojoe does
 
 - **Sources:** Jellyfin, Emby, Plex and Audiobookshelf; the access keys stay on the server.
 - **Podcasts:** subscribe by search ([fyyd](https://fyyd.de)) or feed address, OPML import and
