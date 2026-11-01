@@ -32,7 +32,8 @@ Wer das Skript vorher lesen will: mit `curl -fsSL -o audiojoe-lxc.sh …` laden,
 
 Das Skript fragt in Dialogen (ähnlich den Proxmox Helper Scripts) zuerst nach den Ressourcen –
 **optimal** (2 Kerne, 2 GB RAM, 16 GB Platte, empfohlen) oder **Minimum** (1 Kern, 1 GB RAM,
-8 GB Platte) –, dann nach Container-Nummer, Name, Speicher, Bridge, Netz (feste Adresse oder
+8 GB Platte) –, dann nach Kernen (mehr als die Stufe, nie weniger), Platte (Vorschlag der Stufe,
+mindestens 8 GB), Container-Nummer, Name, Speicher, Bridge, Netz (feste Adresse oder
 DHCP), Gateway, DNS-Server (leer: wie der Host), der Adresse des Proxys, Sonos und dem Namen des
 ersten Benutzers; Enter übernimmt den Vorschlag. Eine Zusammenfassung zeigt alles vor dem
 Anlegen. Dann:

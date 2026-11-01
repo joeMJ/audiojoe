@@ -6,16 +6,18 @@
 #   bash -c "$(curl -fsSL https://raw.githubusercontent.com/joeMJ/audiojoe/main/packaging/proxmox/audiojoe-lxc.sh)"
 #
 # With a terminal and whiptail it asks in dialogs (like the Proxmox helper scripts): resources
-# (minimum or optimal), container ID, host name, storage, bridge, IP, gateway, DNS, proxy, Sonos,
-# first user; then a summary to confirm. Without whiptail it asks on the console.
+# (minimum or optimal), CPU cores (more than the preset, never fewer), disk (proposal from the
+# preset, at least 8 GB), container ID, host name, storage, bridge, IP, gateway, DNS, proxy,
+# Sonos, first user; then a summary to confirm. Without whiptail it asks on the console.
 #
 #   CTID=120 IP=10.0.0.20/24 GW=10.0.0.1 ADMIN=anna bash audiojoe-lxc.sh --yes
 #   DRY_RUN=1 bash audiojoe-lxc.sh        only shows what would be done
 #
 # Values (environment): PRESET (optimal: 2 cores, 2048 MB, 16 GB; minimal: 1 core, 1024 MB, 8 GB),
 # CTID, HOSTNAME_CT (audiojoe), STORAGE (local-lvm), TEMPLATE_STORAGE (local), BRIDGE (vmbr0),
-# IP (dhcp or address/prefix), GW, DNS (empty: like the host), CORES, RAM (MB), DISK (GB) – these
-# three override the preset –, PROXY (address of the reverse proxy, optional), ADMIN (first user),
+# IP (dhcp or address/prefix), GW, DNS (empty: like the host), CORES (at least the preset),
+# DISK (GB, at least 8), RAM (MB, overrides the preset), PROXY (address of the reverse proxy,
+# optional), ADMIN (first user),
 # SONOS (yes: stream port 8081).
 # RELEASE_API: release source (default: the GitHub repository), RELEASE_TOKEN_FILE: file with an
 # access token for a private repository (tests only).
@@ -47,6 +49,8 @@ eval "$BOX"
 # Dialogs only when someone sits at a terminal; otherwise environment values and proposals.
 ASKING=no; [ "$YES" = no ] && [ -t 0 ] && [ -t 1 ] && ASKING=yes
 UI=console; [ "$ASKING" = yes ] && command -v whiptail >/dev/null && UI=whiptail
+# Input fields in black on the blue field (the default light text is hard to read in many themes).
+export NEWT_COLORS="${NEWT_COLORS:-entry=black,blue}"
 wt() { whiptail --title "$TITLE" "$@" 3>&1 1>&2 2>&3; }
 
 ask() { # name proposal question – a value from the environment is kept, Enter keeps the proposal
@@ -56,6 +60,20 @@ ask() { # name proposal question – a value from the environment is kept, Enter
     else read -r -p "$3 [$2]: " v; fi
   fi
   printf -v "$1" '%s' "${v:-$2}"
+}
+ask_min() { # name minimum proposal question – a whole number, never below the minimum
+  local v="${!1:-}" msg="$4 (at least $2)"
+  while :; do
+    if [ -z "$v" ] && [ "$ASKING" = yes ]; then
+      if [ "$UI" = whiptail ]; then v="$(wt --inputbox "$msg" 10 72 "$3")" || die "cancelled"
+      else read -r -p "$msg [$3]: " v; fi
+    fi
+    v="${v:-$3}"
+    [[ "$v" =~ ^[0-9]+$ ]] && [ "$v" -ge "$2" ] && break
+    [ "$ASKING" = yes ] || die "$1 must be a whole number of at least $2"
+    msg="$4: \"$v\" is not allowed – at least $2"; v=""
+  done
+  printf -v "$1" '%s' "$v"
 }
 ask_yes() { # name question – yes/no, proposal yes
   local v="${!1:-}"
@@ -82,10 +100,12 @@ if [ -z "${PRESET:-}" ] && [ "$ASKING" = yes ]; then
 fi
 PRESET="${PRESET:-optimal}"
 case "$PRESET" in
-  optimal) CORES="${CORES:-2}" RAM="${RAM:-2048}" DISK="${DISK:-16}" ;;
-  minimal) CORES="${CORES:-1}" RAM="${RAM:-1024}" DISK="${DISK:-8}" ;;
+  optimal) P_CORES=2 RAM="${RAM:-2048}" P_DISK=16 ;;
+  minimal) P_CORES=1 RAM="${RAM:-1024}" P_DISK=8 ;;
   *) die "PRESET must be optimal or minimal" ;;
 esac
+ask_min CORES "$P_CORES" "$P_CORES" "CPU cores"
+ask_min DISK 8 "$P_DISK" "Disk in GB"
 
 ask CTID "$(pvesh get /cluster/nextid)" "Container ID"
 ask HOSTNAME_CT audiojoe "Host name"
