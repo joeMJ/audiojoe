@@ -5,7 +5,7 @@
 //     --dart-define=PASS=… --dart-define=TOTP_SECRET=…
 //
 // Signs in through the UI, opens podcasts, plays an episode, checks that the position
-// reaches the server, saves it offline and plays it from the offline copy. With
+// reaches the server, saves it offline and plays it from the offline copy, signs out. With
 // --dart-define=SHOTS=DIR also screenshots of player and settings, light and dark (X screen,
 // ImageMagick "import"); Sonos only as state shown, nothing is sent to a speaker.
 
@@ -168,5 +168,7 @@ void main() {
     // ---------------------------------------------------------- cleanup
     await downloads.remove(ep.key);
     await api.call('DELETE', '/podcasts/${sub['id']}');
+    // Sign out, so the test leaves no session "Linux (Test)" behind.
+    await api.call('POST', '/auth/logout');
   }, timeout: const Timeout(Duration(minutes: 10)));
 }
