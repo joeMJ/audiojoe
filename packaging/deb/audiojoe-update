@@ -40,7 +40,7 @@ SOURCE="$(conf SOURCE)"; SOURCE="${SOURCE:-https://api.github.com/repos/joeMJ/au
 TOKEN_FILE="$(conf TOKEN_FILE)"
 
 [ "$action" = now ] && rm -f "$STATE/update-request"
-mode="$(tr -d '[:space:]' < "$STATE/update-mode" 2>/dev/null || true)"
+mode="$(tr -d '[:space:]' 2>/dev/null < "$STATE/update-mode" || true)"
 [ "$mode" = notify ] || mode=auto
 
 installed="$(dpkg-query -W -f='${Version}' "$PKG" 2>/dev/null || echo "")"

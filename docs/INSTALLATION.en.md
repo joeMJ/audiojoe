@@ -136,9 +136,7 @@ Adding speakers: [Getting started](ERSTE-SCHRITTE.en.md#sonos).
   `cd clients/app && flutter build apk --release`.
 - **Linux (Ubuntu 24.04 / 26.04):** in the folder `clients/app` run `flutter build linux --release`,
   then `../../tools/build-deb.sh` – this makes a `.deb`. Playback needs `libmpv2` from the system.
-- **Windows 10/11:** installer `audiojoe-<version>-windows-x86_64-setup.exe` (per user, without
-  administrator rights, into `%LOCALAPPDATA%\Programs\audiojoe`). Built on Windows with
-  `tools\build-windows.ps1` (Flutter, Inno Setup 6); it brings `libmpv-2.dll` (LGPL, see
-  [third-party licences](../THIRD_PARTY.md)).
+- **Windows 10/11:** `flutter build windows --release`; an installer follows with the first
+  release. Playback brings `libmpv-2.dll` (LGPL, see [third-party licences](../THIRD_PARTY.md)).
 - **Web player:** nothing to install – open the server address in the browser, in the car e.g. in
   the Tesla's browser. It can be put on the home screen as an app.

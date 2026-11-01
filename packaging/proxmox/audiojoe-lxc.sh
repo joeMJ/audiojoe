@@ -14,7 +14,8 @@
 # access token for a private repository (tests only).
 set -Eeuo pipefail
 
-RELEASE_API="${RELEASE_API:-https://api.github.com/repos/joeMJ/audiojoe}"
+DEFAULT_API="https://api.github.com/repos/joeMJ/audiojoe"
+RELEASE_API="${RELEASE_API:-$DEFAULT_API}"
 YES=no; [ "${1:-}" = --yes ] && YES=yes
 DRY="${DRY_RUN:-0}"
 
@@ -87,7 +88,9 @@ say "Server in the container"
 # Runs inside the container; the values come as arguments, the token on standard input.
 INSIDE=$(cat <<'EOS'
 set -Eeuo pipefail
-ADDR="$1" PROXY="$2" SONOS="$3" API="$4" ADMIN="$5"
+# The host's locale (LANG) comes along with pct exec but is not installed in the container.
+export LC_ALL=C.UTF-8 LANG=C.UTF-8
+ADDR="$1" PROXY="$2" SONOS="$3" API="$4" ADMIN="$5" DEFAULT_API="$6"
 read -r TOKEN || true
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
@@ -113,11 +116,16 @@ install -d -m 755 /etc/audiojoe
   if [ -n "$PROXY" ]; then echo "trusted_proxies = [\"$PROXY\"]"; else echo "trusted_proxies = []"; fi
   if [ "$SONOS" = yes ]; then printf '\n[sonos]\nlisten = "%s:8081"\n' "$ADDR"; fi
 } > /etc/audiojoe/config.toml
-if [ -n "$TOKEN" ]; then
-  printf '%s\n' "$TOKEN" > /etc/audiojoe/update-token; chmod 600 /etc/audiojoe/update-token
-  printf 'SOURCE=%s\nTOKEN_FILE=/etc/audiojoe/update-token\n' "$API" > /etc/audiojoe/update.conf
-fi
 apt-get -y -qq -o Dpkg::Options::=--force-confold install "./$deb" >/dev/null
+
+# Another release source than the default (and its token) goes into the package's update.conf.
+if [ -n "$TOKEN" ]; then
+  install -m 600 /dev/null /etc/audiojoe/update-token; printf '%s\n' "$TOKEN" > /etc/audiojoe/update-token
+fi
+if [ "$API" != "$DEFAULT_API" ] || [ -n "$TOKEN" ]; then
+  { echo "# release source (written by audiojoe-lxc.sh)"; echo "SOURCE=$API"
+    [ -z "$TOKEN" ] || echo "TOKEN_FILE=/etc/audiojoe/update-token"; } > /etc/audiojoe/update.conf
+fi
 
 # Debian keeps itself up to date: all updates daily, unused packages removed.
 install -m 644 /usr/share/audiojoe/52audiojoe-upgrades /etc/apt/apt.conf.d/52audiojoe-upgrades
@@ -133,9 +141,9 @@ fi
 EOS
 )
 if [ "$DRY" = 1 ]; then
-  printf '   pct exec %s -- bash -s %q %q %q %q %q   (install, see INSIDE in this script)\n' "$CTID" "$ADDR" "${PROXY:-}" "$SONOS" "$RELEASE_API" "${ADMIN:-}"
+  printf '   pct exec %s -- bash -s %q %q %q %q %q %q   (install, see INSIDE in this script)\n' "$CTID" "$ADDR" "${PROXY:-}" "$SONOS" "$RELEASE_API" "${ADMIN:-}" "$DEFAULT_API"
 else
-  printf '%s\n' "$TOKEN" | pct exec "$CTID" -- bash -c "$INSIDE" inside "$ADDR" "${PROXY:-}" "$SONOS" "$RELEASE_API" "${ADMIN:-}"
+  printf '%s\n' "$TOKEN" | pct exec "$CTID" -- bash -c "$INSIDE" inside "$ADDR" "${PROXY:-}" "$SONOS" "$RELEASE_API" "${ADMIN:-}" "$DEFAULT_API"
 fi
 
 say "Done"
