@@ -93,9 +93,11 @@ Future<File> downloadAppUpdate(AppUpdate u, void Function(int done, int? total) 
   final expected = expectedSum(utf8.decode(sumsRes.bodyBytes, allowMalformed: true), u.name);
   if (expected == null) throw UpdateError(t('{name} is missing in SHA256SUMS', {'name': u.name}));
 
-  final dir = Directory('${(Platform.isAndroid ? await getTemporaryDirectory() : await getApplicationCacheDirectory()).path}/updates');
+  // With the system's separator: msiexec cannot open a path with "/" (error 1619, VM 2026-11-01).
+  final sep = Platform.pathSeparator;
+  final dir = Directory('${(Platform.isAndroid ? await getTemporaryDirectory() : await getApplicationCacheDirectory()).path}${sep}updates');
   await dir.create(recursive: true);
-  final file = File('${dir.path}/${u.name}');
+  final file = File('${dir.path}$sep${u.name}');
   final req = http.Request('GET', api.uri('/maintenance/app/${u.platform}'))..headers.addAll(api.authHeaders);
   final res = await api.client.send(req).timeout(const Duration(seconds: 60));
   if (res.statusCode != 200) throw ApiError(res.statusCode, 'download failed (${res.statusCode})');
