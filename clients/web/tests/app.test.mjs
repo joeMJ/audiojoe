@@ -382,6 +382,27 @@ try {
         st.status === 200 && list.some((e) => e.key === b0.key) && again?.position_ms === 25000, `list: ${list.map((e) => e.key).join(" ")}; shelf ${again?.position_ms}`);
       await call("PUT", `/playback/${encodeURIComponent(b0.key)}`, { position_ms: 0, duration_ms: m.duration_ms, finished: true, title: m.title, subtitle: m.subtitle, updated_at: new Date(Date.now() + 1000).toISOString() });
       await call("DELETE", `/lists/books/${encodeURIComponent(b0.key)}`);
+      // Hi-res FLAC for the car: the offline profile converts to 48 kHz (24/96 from the cache
+      // does not play in the Tesla); the original keeps its rate and Range requests.
+      const hires = (await call("GET", `/sources/${emby.id}/browse?search=Sinus%2024`)).body.items.find((x) => x.kind === "track" && x.quality?.sample_rate > 48000);
+      if (hires) {
+        const q = await page.evaluate(async (k) => {
+          const out = {};
+          for (const prof of ["original", "tesla-offline"]) {
+            const r = await fetch(`/api/v1/stream/${encodeURIComponent(k)}?profile=${prof}`, { headers: { range: "bytes=0-99" } });
+            const buf = new Uint8Array(await r.arrayBuffer());
+            // FLAC STREAMINFO: sample rate in the 20 bits at byte 18 of the file
+            const rate = buf[0] === 0x66 ? (buf[18] << 12) | (buf[19] << 4) | (buf[20] >> 4) : null;
+            out[prof] = { status: r.status, rate, q: JSON.parse(r.headers.get("x-audiojoe-quality") ?? "null") };
+          }
+          return out;
+        }, hires.key);
+        check("hi-res FLAC: original streams 24/96 with Range, offline profile delivers 48 kHz FLAC (converted)",
+          q.original.status === 206 && q.original.rate === hires.quality.sample_rate && q["tesla-offline"].status === 200 && q["tesla-offline"].rate === 48000 && q["tesla-offline"].q?.transcoded === true,
+          `original ${q.original.status} ${q.original.rate} Hz; offline ${q["tesla-offline"].status} ${q["tesla-offline"].rate} Hz`);
+      } else {
+        check("hi-res FLAC test track present in Emby", false, "no track above 48 kHz found");
+      }
       if (libs.length > 1) {
         await clickText("Hörbücher");
         await waitText("Autoren");
