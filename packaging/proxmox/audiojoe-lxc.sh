@@ -7,8 +7,10 @@
 #
 # With a terminal and whiptail it asks in dialogs (like the Proxmox helper scripts): resources
 # (minimum or optimal), CPU cores (more than the preset, never fewer), disk (proposal from the
-# preset, at least 8 GB), container ID, host name, storage, bridge, IP, gateway, DNS, proxy,
-# Sonos, first user; then a summary to confirm. Without whiptail it asks on the console.
+# preset, at least 8 GB), root password and root SSH access (both like the Proxmox helper
+# scripts: an empty password means automatic login on the console), container ID, host name,
+# storage, bridge, IP, gateway, DNS, proxy, Sonos, first user; then a summary to confirm.
+# Without whiptail it asks on the console.
 #
 #   CTID=120 IP=10.0.0.20/24 GW=10.0.0.1 ADMIN=anna bash audiojoe-lxc.sh --yes
 #   DRY_RUN=1 bash audiojoe-lxc.sh        only shows what would be done
@@ -18,7 +20,8 @@
 # IP (dhcp or address/prefix), GW, DNS (empty: like the host), CORES (at least the preset),
 # DISK (GB, at least 8), RAM (MB, overrides the preset), PROXY (IP address of the reverse proxy
 # that publishes audiojoe, e.g. NPM - not a download proxy; optional), ADMIN (first user),
-# SONOS (yes: stream port 8081).
+# SONOS (yes: stream port 8081), ROOT_PW (root password; empty: automatic console login),
+# SSH_ROOT (yes: root may log in over SSH; default no).
 # RELEASE_API: release source (default: the GitHub repository), RELEASE_TOKEN_FILE: file with an
 # access token for a private repository (tests only).
 set -Eeuo pipefail
@@ -75,6 +78,34 @@ ask_min() { # name minimum proposal question – a whole number, never below the
   done
   printf -v "$1" '%s' "$v"
 }
+msg() { if [ "$UI" = whiptail ]; then wt --msgbox "$1" 8 70 || true; else printf '%s\n' "$1"; fi; }
+ask_root_pw() { # like the Proxmox helper scripts (ui/advanced.func, step 2): empty = automatic login
+  [ -n "${ROOT_PW+x}" ] && return 0   # from the environment, also when empty
+  ROOT_PW=""
+  [ "$ASKING" = yes ] || return 0
+  local p1 p2
+  while :; do
+    if [ "$UI" = whiptail ]; then
+      p1="$(wt --passwordbox "\nSet Root Password (needed for root ssh access)\n\nLeave blank for automatic login (no password)" 12 58)" || die "cancelled"
+    else read -r -s -p "Set Root Password (needed for root ssh access), leave blank for automatic login (no password): " p1; echo; fi
+    [ -z "$p1" ] && return 0
+    if [[ "$p1" == *" "* ]]; then msg "Password cannot contain spaces."; continue; fi
+    if [ "${#p1}" -lt 5 ]; then msg "Password must be at least 5 characters."; continue; fi
+    if [ "$UI" = whiptail ]; then p2="$(wt --passwordbox "\nVerify Root Password" 10 58)" || die "cancelled"
+    else read -r -s -p "Verify Root Password: " p2; echo; fi
+    [ "$p1" = "$p2" ] && { ROOT_PW="$p1"; return 0; }
+    msg "Passwords do not match. Please try again."
+  done
+}
+ask_ssh_root() { # like the Proxmox helper scripts (ui/menu.func, SSH ACCESS): proposal no
+  local v="${SSH_ROOT:-}"
+  if [ -z "$v" ] && [ "$ASKING" = yes ]; then
+    if [ "$UI" = whiptail ]; then
+      if wt --defaultno --yesno "Enable root SSH access?" 10 58; then v=yes; else [ $? = 1 ] && v=no || die "cancelled"; fi
+    else read -r -p "Enable root SSH access? (yes/no) [no]: " v; fi
+  fi
+  SSH_ROOT="${v:-no}"
+}
 ask_yes() { # name question – yes/no, proposal yes
   local v="${!1:-}"
   if [ -z "$v" ] && [ "$ASKING" = yes ]; then
@@ -106,6 +137,8 @@ case "$PRESET" in
 esac
 ask_min CORES "$P_CORES" "$P_CORES" "CPU cores"
 ask_min DISK 8 "$P_DISK" "Disk in GB"
+ask_root_pw
+ask_ssh_root
 
 ask CTID "$(pvesh get /cluster/nextid)" "Container ID"
 ask HOSTNAME_CT audiojoe "Host name"
@@ -129,11 +162,14 @@ pct status "$CTID" >/dev/null 2>&1 && die "container $CTID exists already"
 [ -z "${DNS:-}" ] || [[ "$DNS" =~ ^[0-9.]+$ ]] || die "DNS server must be an IPv4 address"
 [ -z "${PROXY:-}" ] || [[ "$PROXY" =~ ^[0-9a-fA-F:.]+$ ]] || die "reverse proxy: an IP address, not a name or URL"
 [[ "$SONOS" =~ ^(yes|no)$ ]] || die "SONOS must be yes or no"
+[[ "$SSH_ROOT" =~ ^(yes|no)$ ]] || die "SSH_ROOT must be yes or no"
+[ -z "$ROOT_PW" ] || { [[ "$ROOT_PW" != *" "* ]] && [ "${#ROOT_PW}" -ge 5 ]; } || die "root password: at least 5 characters, no spaces"
 [ -z "${ADMIN:-}" ] || [[ "$ADMIN" =~ ^[a-z][a-z0-9_-]{0,31}$ ]] || die "user name: lower-case letters, digits, - and _"
 
 SUMMARY="Container $CTID \"$HOSTNAME_CT\", unprivileged Debian 13
 Resources: $PRESET – CPU cores $CORES, RAM $RAM MB, disk $DISK GB on $STORAGE
 Network: $BRIDGE, ${IP}${GW:+ via $GW}, DNS ${DNS:-like the host}
+Root password: $([ -n "$ROOT_PW" ] && echo set || echo "none - automatic login on the console"); root SSH access: $SSH_ROOT
 Reverse proxy publishing audiojoe: ${PROXY:-none}; Sonos: $SONOS; first user: ${ADMIN:-none}
 Server package from: $RELEASE_API"
 printf '%s\n' "$SUMMARY" | sed 's/^/   /'
@@ -176,8 +212,9 @@ INSIDE=$(cat <<'EOS'
 set -Eeuo pipefail
 # The host's locale (LANG) comes along with pct exec but is not installed in the container.
 export LC_ALL=C.UTF-8 LANG=C.UTF-8
-ADDR="$1" PROXY="$2" SONOS="$3" API="$4" ADMIN="$5" DEFAULT_API="$6"
+ADDR="$1" PROXY="$2" SONOS="$3" API="$4" ADMIN="$5" DEFAULT_API="$6" SSH_ROOT="$8"
 read -r TOKEN || true
+read -r ROOT_PW || true
 eval "$7"   # box()
 export DEBIAN_FRONTEND=noninteractive
 LOG=/var/log/audiojoe-install.log; : > "$LOG"
@@ -208,10 +245,34 @@ selfcare() { # Debian keeps itself up to date: all updates daily, unused package
   systemctl enable --now apt-daily.timer apt-daily-upgrade.timer
   audiojoe-update --check || true
 }
+rootpw() { printf 'root:%s\n' "$ROOT_PW" | chpasswd; }
+autologin() { # no password: root logs in on the console without one (like the Proxmox helper scripts)
+  passwd -d root
+  mkdir -p /etc/systemd/system/container-getty@.service.d /etc/systemd/system/console-getty.service.d
+  cat > /etc/systemd/system/container-getty@.service.d/autologin.conf <<'EOF'
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty -o '-- \\u' --noreset --noclear --autologin root - ${TERM}
+EOF
+  cat > /etc/systemd/system/console-getty.service.d/autologin.conf <<'EOF'
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty -o '-- \\u' --noreset --noclear --autologin root --keep-baud 115200,57600,38400,9600 - ${TERM}
+EOF
+  systemctl daemon-reload
+  systemctl restart 'container-getty@*.service' console-getty.service 2>/dev/null || true
+}
+sshroot() { # root may log in over SSH (with its password or a key)
+  apt-get -y install openssh-server
+  printf '# written by audiojoe-lxc.sh\nPermitRootLogin yes\n' > /etc/ssh/sshd_config.d/50-audiojoe-root.conf
+  systemctl enable ssh; systemctl restart ssh
+}
 health() { for _ in $(seq 1 30); do curl -fsS "http://$ADDR:8080/api/v1/health" && return 0; sleep 1; done; return 1; }
 
 step "Updating Debian in the container" upgrade
 step "Installing curl, jq and unattended-upgrades" tools
+if [ -n "$ROOT_PW" ]; then step "Setting the root password" rootpw; else step "Automatic root login on the console (no password)" autologin; fi
+[ "$SSH_ROOT" != yes ] || step "Enabling root SSH access" sshroot
 rel="$(hdr | curl -fsSL -H @- -H 'Accept: application/json' "$API/releases/latest")"
 ver="$(jq -r '.tag_name' <<<"$rel")"; ver="${ver#v}"
 deb="audiojoe-server_${ver}_amd64.deb"
@@ -250,10 +311,10 @@ fi
 EOS
 )
 if [ "$DRY" = 1 ]; then
-  printf '   pct exec %s -- bash -s %q %q %q %q %q %q   (install, see INSIDE in this script)\n' "$CTID" "$ADDR" "${PROXY:-}" "$SONOS" "$RELEASE_API" "${ADMIN:-}" "$DEFAULT_API"
-  printf '     steps: update Debian, install tools, download and check audiojoe, install it, nightly updates, wait for the server, first user\n'
+  printf '   pct exec %s -- bash -s %q %q %q %q %q %q box %q   (install, see INSIDE in this script)\n' "$CTID" "$ADDR" "${PROXY:-}" "$SONOS" "$RELEASE_API" "${ADMIN:-}" "$DEFAULT_API" "$SSH_ROOT"
+  printf '     steps: update Debian, install tools, root password or automatic console login, root SSH access if chosen, download and check audiojoe, install it, nightly updates, wait for the server, first user\n'
 else
-  printf '%s\n' "$TOKEN" | pct exec "$CTID" -- bash -c "$INSIDE" inside "$ADDR" "${PROXY:-}" "$SONOS" "$RELEASE_API" "${ADMIN:-}" "$DEFAULT_API" "$BOX"
+  printf '%s\n%s\n' "$TOKEN" "$ROOT_PW" | pct exec "$CTID" -- bash -c "$INSIDE" inside "$ADDR" "${PROXY:-}" "$SONOS" "$RELEASE_API" "${ADMIN:-}" "$DEFAULT_API" "$BOX" "$SSH_ROOT"
 fi
 
 say "Done"

@@ -40,13 +40,17 @@ bash audiojoe-lxc.sh
 Das Skript fragt in Dialogen (ähnlich den Proxmox Helper Scripts) zuerst nach den Ressourcen –
 **optimal** (2 Kerne, 2 GB RAM, 16 GB Platte, empfohlen) oder **Minimum** (1 Kern, 1 GB RAM,
 8 GB Platte) –, dann nach Kernen (mehr als die Stufe, nie weniger), Platte (Vorschlag der Stufe,
-mindestens 8 GB), Container-Nummer, Name, Speicher, Bridge, Netz (feste Adresse oder
+mindestens 8 GB), **root-Kennwort** (leer: automatische Anmeldung an der Konsole ohne Kennwort)
+und **SSH-Zugang für root** (Vorschlag: nein) – beides wie bei den Proxmox Helper Scripts –,
+Container-Nummer, Name, Speicher, Bridge, Netz (feste Adresse oder
 DHCP), Gateway, DNS-Server (leer: wie der Host), der IP-Adresse des **Reverse Proxys**, über den
 audiojoe veröffentlicht wird (z. B. Nginx Proxy Manager; kein Proxy für Downloads), Sonos und dem Namen des
 ersten Benutzers; Enter übernimmt den Vorschlag. Eine Zusammenfassung zeigt alles vor dem
 Anlegen. Dann:
 
 - legt es einen **unprivilegierten Debian-13-Container** an (Start mit dem Host),
+- setzt das root-Kennwort oder schaltet die automatische Anmeldung an der Konsole ein und
+  erlaubt auf Wunsch die Anmeldung als root per SSH,
 - installiert das Server-Paket aus dem neuesten Release (Prüfsumme aus `SHA256SUMS`),
 - schreibt `/etc/audiojoe/config.toml` mit der Adresse des Containers (Port 8080, Sonos 8081),
 - richtet die **Selbstpflege** ein (siehe [Updates und Pflege](#updates-und-pflege)),
@@ -54,6 +58,7 @@ Anlegen. Dann:
 
 Ohne Rückfragen, z. B. für Wiederholungen (`PRESET=minimal` für die kleinen Ressourcen):
 `CTID=120 IP=10.0.0.20/24 GW=10.0.0.1 DNS=10.0.0.1 PROXY=10.0.0.10 ADMIN=anna bash audiojoe-lxc.sh --yes`.
+`ROOT_PW=…` setzt dabei das root-Kennwort, `SSH_ROOT=yes` erlaubt root per SSH.
 `DRY_RUN=1` zeigt nur, was geschehen würde.
 
 ### Ubuntu Server 24.04 / 26.04 (VM per Skript)
