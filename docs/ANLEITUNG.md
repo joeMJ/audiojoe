@@ -114,7 +114,8 @@ rechts unten. Links in den Shownotes stehen nur als Text.
 ## Einstellungen
 
 Quellen und Bibliotheken, Musik (Albenverzeichnis, MusicBrainz), Sonos (Lautsprecher), Pflege
-(Server- und Debian-Updates, Sicherungen; siehe [Installation](INSTALLATION.md#updates-und-pflege)), Podcasts
+(Server- und Debian-Updates, Sicherungen, Stand dieser App; siehe
+[Installation](INSTALLATION.md#updates-und-pflege)), Podcasts
 (OPML), Geräte (angemeldete Geräte, einzeln abmelden), **Dieses Gerät abmelden** und
 **Über audiojoe** mit Version, Anleitung, Datenschutz und den Lizenzen Dritter. Im Web-Player
 stehen das Abmelden und **Über audiojoe** unten auf der Seite **Offline**. Siehe [Erste Schritte](ERSTE-SCHRITTE.md).

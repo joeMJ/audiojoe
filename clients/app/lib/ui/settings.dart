@@ -3,6 +3,7 @@
 // signed-in devices, sign out, about.
 
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +12,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../api.dart';
 import '../l10n.dart';
+import '../updates.dart';
 import 'common.dart';
 
 class SettingsView extends StatefulWidget {
@@ -374,16 +376,23 @@ class _MaintenanceSettingsState extends State<MaintenanceSettings> {
     }
   }
 
+  Widget _app(Map m, TextStyle muted) => _AppUpdateRow(latest: (m['apps'] as Map?)?['latest'] as String?, muted: muted, say: _say);
+
   @override
   Widget build(BuildContext context) => Loader<Map>(
+
         key: ValueKey('m$_gen'),
         load: () async => await api.call('GET', '/maintenance') as Map,
         builder: (context, m, reload) {
           final muted = TextStyle(color: context.tok.muted);
           final st = m['status'] as Map?;
           if (m['managed'] != true || st == null) {
-            return Text(t('Server {v}. Updates are not managed here (server not installed from the package, see the installation guide).', {'v': '${m['version']}'}),
-                style: muted);
+            return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(t('Server {v}. Updates are not managed here (server not installed from the package, see the installation guide).', {'v': '${m['version']}'}),
+                  style: muted),
+              const SizedBox(height: 12),
+              _app(m, muted),
+            ]);
           }
           final deb = (st['debian'] as Map?) ?? const {};
           final backups = ((st['backups'] as List?) ?? const []).cast<Map>();
@@ -412,6 +421,8 @@ class _MaintenanceSettingsState extends State<MaintenanceSettings> {
                 ),
             ]),
             const SizedBox(height: 12),
+            _app(m, muted),
+            const SizedBox(height: 12),
             Text(t('Debian updates'), style: const TextStyle(fontWeight: FontWeight.w700)),
             Text(
               [
@@ -430,6 +441,61 @@ class _MaintenanceSettingsState extends State<MaintenanceSettings> {
                   : t('{n} kept (before every server update), latest {ago}.', {'n': backups.length, 'ago': ago('${backups.first['at']}')}),
               style: muted,
             ),
+          ]);
+        },
+      );
+}
+
+/// This app: version, and the newer one the server knows (github build only).
+class _AppUpdateRow extends StatefulWidget {
+  final String? latest;
+  final TextStyle muted;
+  final void Function(String) say;
+  const _AppUpdateRow({required this.latest, required this.muted, required this.say});
+  @override
+  State<_AppUpdateRow> createState() => _AppUpdateRowState();
+}
+
+class _AppUpdateRowState extends State<_AppUpdateRow> {
+  late final Future<(String, AppUpdate?)> info = _load();
+
+  Future<(String, AppUpdate?)> _load() async {
+    final v = (await PackageInfo.fromPlatform()).version;
+    AppUpdate? u;
+    if (appUpdatesEnabled) {
+      try {
+        u = await checkAppUpdate();
+      } catch (_) {}
+    }
+    return (v, u);
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<(String, AppUpdate?)>(
+        future: info,
+        builder: (context, snap) {
+          final (v, u) = snap.data ?? ('…', null);
+          return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(t('App {v}', {'v': v}), style: const TextStyle(fontWeight: FontWeight.w700)),
+            Text(
+              !appUpdatesEnabled
+                  ? t('Updates come from F-Droid.')
+                  : u != null
+                      ? t('Version {v} is available.', {'v': u.latest})
+                      : widget.latest == null
+                          ? t('The server knows no newer version yet.')
+                          : t('Up to date.'),
+              style: widget.muted,
+            ),
+            if (u != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.download),
+                  label: Text(Platform.isAndroid ? t('Install version {v}', {'v': u.latest}) : t('Download version {v}', {'v': u.latest})),
+                  onPressed: () => runAppUpdate(u, widget.say, t),
+                ),
+              ),
           ]);
         },
       );

@@ -675,3 +675,39 @@ msgstr "Noch keine; vor jeder Server-Aktualisierung wird eine angelegt."
 
 msgid "{n} kept (before every server update), latest {ago}."
 msgstr "{n} aufbewahrt (vor jeder Server-Aktualisierung), neueste {ago}."
+
+msgid "audiojoe {v} is available."
+msgstr "audiojoe {v} ist verfügbar."
+
+msgid "Later"
+msgstr "Später"
+
+msgid "Install"
+msgstr "Installieren"
+
+msgid "Download"
+msgstr "Herunterladen"
+
+msgid "Downloading version {v} …"
+msgstr "Version {v} wird geladen …"
+
+msgid "Saved as {file}. Opening the installer …"
+msgstr "Gespeichert als {file}. Installationsprogramm wird geöffnet …"
+
+msgid "Update failed"
+msgstr "Aktualisierung fehlgeschlagen"
+
+msgid "App {v}"
+msgstr "App {v}"
+
+msgid "Updates come from F-Droid."
+msgstr "Updates kommen über F-Droid."
+
+msgid "The server knows no newer version yet."
+msgstr "Der Server kennt noch keine neuere Version."
+
+msgid "Install version {v}"
+msgstr "Version {v} installieren"
+
+msgid "Download version {v}"
+msgstr "Version {v} herunterladen"

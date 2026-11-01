@@ -37,6 +37,15 @@ android {
         versionName = flutter.versionName
     }
 
+    // github: checks for updates and may hand a downloaded APK to the installer (manifest in
+    // src/github). fdroid: no update check, no such permission (build with
+    // --flavor fdroid --dart-define=AUDIOJOE_DIST=fdroid).
+    flavorDimensions += "dist"
+    productFlavors {
+        create("github") { dimension = "dist" }
+        create("fdroid") { dimension = "dist" }
+    }
+
     signingConfigs {
         if (signingProps != null) {
             create("release") {

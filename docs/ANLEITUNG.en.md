@@ -111,7 +111,8 @@ shown as text only.
 ## Settings
 
 Sources and libraries, music (album index, MusicBrainz), Sonos (speakers), maintenance (server and
-Debian updates, backups; see [Installation](INSTALLATION.en.md#updates-and-maintenance)), podcasts (OPML), devices
+Debian updates, backups, this app's version; see [Installation](INSTALLATION.en.md#updates-and-maintenance)),
+podcasts (OPML), devices
 (signed-in devices, sign out each one), **Sign out this device** and **About audiojoe** with
 version, manual, privacy and the third-party licences. In the web player signing out and
 **About audiojoe** are at the bottom of the **Offline** page. See [Getting started](ERSTE-SCHRITTE.en.md).

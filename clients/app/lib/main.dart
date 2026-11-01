@@ -11,8 +11,10 @@ import 'appearance.dart';
 import 'downloads.dart';
 import 'media_session.dart';
 import 'player.dart';
+import 'l10n.dart';
 import 'store.dart';
 import 'sync.dart';
+import 'updates.dart';
 import 'ui/common.dart';
 import 'ui/lists.dart';
 import 'ui/login.dart';
@@ -40,6 +42,8 @@ class AudiojoeApp extends StatefulWidget {
   State<AudiojoeApp> createState() => _AudiojoeAppState();
 }
 
+final messenger = GlobalKey<ScaffoldMessengerState>();
+
 class _AudiojoeAppState extends State<AudiojoeApp> {
   late bool signedIn = widget.signedIn;
   bool started = false;
@@ -51,6 +55,45 @@ class _AudiojoeAppState extends State<AudiojoeApp> {
     downloads.check();
     connectLists();
     unawaited(player.cueLast());
+    unawaited(_offerUpdate());
+  }
+
+  /// A newer app version the server knows: one banner per version, "Later" keeps quiet
+  /// until the next version. Nothing is downloaded without a tap.
+  Future<void> _offerUpdate() async {
+    await Future<void>.delayed(const Duration(seconds: 4));
+    AppUpdate? u;
+    try {
+      u = await checkAppUpdate();
+    } catch (_) {
+      return;
+    }
+    if (u == null || !mounted) return;
+    if (Stores.device.get('update')?['skip'] == u.latest) return;
+    final m = messenger.currentState;
+    if (m == null) return;
+    void say(String s) => m.showSnackBar(SnackBar(content: Text(s)));
+    final update = u;
+    m.showMaterialBanner(MaterialBanner(
+      content: Text(t('audiojoe {v} is available.', {'v': update.latest})),
+      leading: const Icon(Icons.system_update_alt),
+      actions: [
+        TextButton(
+          onPressed: () {
+            m.hideCurrentMaterialBanner();
+            Stores.device.put('update', {'skip': update.latest});
+          },
+          child: Text(t('Later')),
+        ),
+        FilledButton(
+          onPressed: () {
+            m.hideCurrentMaterialBanner();
+            unawaited(runAppUpdate(update, say, t));
+          },
+          child: Text(Platform.isAndroid ? t('Install') : t('Download')),
+        ),
+      ],
+    ));
   }
 
   Future<void> _signOut() async {
@@ -70,6 +113,7 @@ class _AudiojoeAppState extends State<AudiojoeApp> {
       valueListenable: appearance,
       builder: (context, mode, _) => MaterialApp(
         title: 'audiojoe',
+        scaffoldMessengerKey: messenger,
         debugShowCheckedModeBanner: false,
         theme: buildTheme(Brightness.light),
         darkTheme: buildTheme(Brightness.dark),

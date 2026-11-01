@@ -133,7 +133,10 @@ Adding speakers: [Getting started](ERSTE-SCHRITTE.en.md#sonos).
 ## Apps
 
 - **Android:** signed APK. Until the first release it is built from source:
-  `cd clients/app && flutter build apk --release`.
+  `cd clients/app && flutter build apk --release --flavor github`. This build asks your own
+  server for new versions and downloads them through it (see [Privacy](DATENSCHUTZ.en.md#updates-only-with-the-server-package)).
+  For F-Droid without the update check:
+  `flutter build apk --release --flavor fdroid --dart-define=AUDIOJOE_DIST=fdroid`.
 - **Linux (Ubuntu 24.04 / 26.04):** in the folder `clients/app` run `flutter build linux --release`,
   then `../../tools/build-deb.sh` – this makes a `.deb`. Playback needs `libmpv2` from the system.
 - **Windows 10/11:** MSI `audiojoe-<version>-windows-x86_64.msi` (per user, without administrator

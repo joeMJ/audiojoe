@@ -135,7 +135,10 @@ Lautsprecher eintragen: [Erste Schritte](ERSTE-SCHRITTE.md#sonos).
 ## Apps
 
 - **Android:** signierte APK. Bis zum ersten Release wird sie aus dem Quelltext
-  gebaut: `cd clients/app && flutter build apk --release`.
+  gebaut: `cd clients/app && flutter build apk --release --flavor github`. Diese Fassung fragt
+  den eigenen Server nach neuen Versionen und lädt sie über ihn (siehe
+  [Datenschutz](DATENSCHUTZ.md#updates-nur-mit-dem-server-paket)). Für F-Droid ohne Updateprüfung:
+  `flutter build apk --release --flavor fdroid --dart-define=AUDIOJOE_DIST=fdroid`.
 - **Linux (Ubuntu 24.04 / 26.04):** im Ordner `clients/app` `flutter build linux --release`, dann
   `../../tools/build-deb.sh` – das erzeugt ein `.deb`. Die Wiedergabe braucht
   `libmpv2` vom System.

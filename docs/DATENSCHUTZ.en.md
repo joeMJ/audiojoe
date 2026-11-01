@@ -73,6 +73,12 @@ feeds to a CDN), the server follows the redirect.
 - **Maintenance overview:** what the app shows under **Settings → Maintenance** (versions, last
   Debian updates, backups) stays on the server (`/var/lib/audiojoe/update-status.json`); database
   backups in `/var/backups/audiojoe/` (the last 5).
+- **Apps:** the apps never ask GitHub. At start the app asks its own audiojoe server which
+  version the release last seen by the server has, and shows a newer one once ("Later" keeps
+  quiet until the next version). Only on a tap does the app download the installer – through
+  the server, which fetches it from the release host and relays it – and hand it to the system:
+  Android asks before installing, Linux and Windows open the saved file (folder "Downloads").
+  The F-Droid build does not check; the web player always comes from the server.
 
 ## What the server stores
 

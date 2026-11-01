@@ -77,6 +77,13 @@ Server der Weiterleitung.
   Debian-Updates, Sicherungen), liegt nur auf dem Server
   (`/var/lib/audiojoe/update-status.json`); Sicherungen der Datenbank in
   `/var/backups/audiojoe/` (die letzten 5).
+- **Apps:** Die Apps fragen nie GitHub. Beim Start fragt die App ihren eigenen audiojoe-Server,
+  welche Version das zuletzt vom Server gesehene Release hat, und zeigt eine neuere einmal an
+  („Später“ schweigt bis zur nächsten Version). Erst auf Tippen lädt die App das
+  Installationsprogramm – über den Server, der es vom Release-Host holt und durchreicht –
+  und übergibt es dem System: Android fragt vor der Installation, Linux und Windows öffnen die
+  gespeicherte Datei (Ordner „Downloads“). Die F-Droid-Fassung prüft nicht; der Web-Player
+  kommt immer vom Server.
 
 ## Was der Server speichert
 
