@@ -9,7 +9,6 @@ export default defineConfig({
     rollupOptions: {
       input: {
         index: resolve(__dirname, "index.html"),
-        probe: resolve(__dirname, "probe.html"),
         sw: resolve(__dirname, "src/sw.ts"),
       },
       output: {

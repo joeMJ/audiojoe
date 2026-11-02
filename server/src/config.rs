@@ -17,8 +17,9 @@ pub struct Config {
     /// Reverse proxies whose `X-Forwarded-For` header is trusted for the access log.
     #[serde(default)]
     pub trusted_proxies: Vec<std::net::IpAddr>,
-    #[serde(default)]
-    pub probe: Option<ProbeConfig>,
+    /// Former browser probe section (removed in 0.2.0); still accepted so old configs keep working.
+    #[serde(default, rename = "probe")]
+    _probe: Option<toml::Value>,
     #[serde(default)]
     pub sonos: Option<SonosConfig>,
 }
@@ -33,25 +34,21 @@ pub struct SonosConfig {
     pub scan: Option<String>,
 }
 
-/// Browser capability probe (stage 0): collects measurements from the in-car browser.
-#[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ProbeConfig {
-    /// Shared secret that must be passed as `?t=` to read results (submitting is open).
-    pub token: String,
-    /// Base URL of the test media source the probe streams are relayed from.
-    pub upstream: String,
-}
-
 impl Config {
     pub fn load(path: &std::path::Path) -> Result<Self> {
         let text = std::fs::read_to_string(path)
             .with_context(|| format!("cannot read config {}", path.display()))?;
         let cfg: Config =
             toml::from_str(&text).with_context(|| format!("invalid config {}", path.display()))?;
-        if let Some(p) = &cfg.probe {
-            anyhow::ensure!(p.token.len() >= 24, "probe.token must be at least 24 characters");
-        }
         Ok(cfg)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn old_probe_section_is_accepted() {
+        let text = "listen = \"127.0.0.1:8080\"\ndatabase = \"/tmp/a.db\"\nweb_root = \"/tmp\"\n\n[probe]\ntoken = \"x\"\nupstream = \"http://127.0.0.1:8090\"\n";
+        assert!(toml::from_str::<super::Config>(text).is_ok());
     }
 }

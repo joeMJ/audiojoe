@@ -9,8 +9,3 @@ web_root = "/usr/share/audiojoe/web"
 # Reverse proxies whose X-Forwarded-For header is trusted for the access log.
 trusted_proxies = ["10.0.0.10"]
 
-# Development only: browser capability probe (Tesla measurement). Off without this section;
-# the results can be sent without a login, so keep it off on a server reachable from outside.
-# [probe]
-# token = "change-me-to-a-long-random-string"
-# upstream = "http://127.0.0.1:8090"

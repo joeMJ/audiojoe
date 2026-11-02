@@ -18,7 +18,6 @@ mod opml;
 mod playback;
 mod plex;
 mod podcasts;
-mod probe;
 mod radio;
 mod sonos;
 mod sources;
@@ -128,8 +127,6 @@ async fn main() -> Result<()> {
         .fallback(ServeFile::new(state.config.web_root.join("index.html")));
     let app = Router::new()
         .route("/api/v1/health", get(health))
-        .route("/api/v1/probe/results", post(probe::submit).get(probe::list))
-        .route("/api/v1/probe/stream/{file}", get(probe::stream))
         .route("/api/v1/auth/login", post(auth::login))
         .route("/api/v1/auth/logout", post(auth::logout))
         .route("/api/v1/me", get(auth::me))

@@ -23,7 +23,7 @@ sw.addEventListener("fetch", (e) => {
   if (url.origin !== sw.location.origin || e.request.method !== "GET") return;
   if (url.pathname.startsWith("/offline/")) {
     e.respondWith(fromCache(e.request, url.pathname));
-  } else if (e.request.mode === "navigate" && !url.pathname.startsWith("/api/") && url.pathname !== "/probe.html") {
+  } else if (e.request.mode === "navigate" && !url.pathname.startsWith("/api/") && !url.pathname.startsWith("/testcar/")) {
     e.respondWith(page(e.request));
   } else if (url.pathname.startsWith("/assets/") || url.pathname === "/manifest.webmanifest") {
     e.respondWith(asset(e.request));
