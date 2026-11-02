@@ -409,7 +409,9 @@ Die Desktop-App spielt über [media_kit](https://github.com/media-kit/media-kit)
 
 ## Web-App
 
-Die Web-App nutzt zur Laufzeit keine Pakete Dritter. Beim Bauen kommen
+Zur Laufzeit nutzt nur der Autotest (`/testcar/`) ein Paket Dritter:
+[qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) 2.0.4 von Kazuhiko Arase
+(MIT) für den QR-Code mit den Ergebnissen. Beim Bauen kommen
 [TypeScript](https://www.typescriptlang.org) (Apache-2.0) und [Vite](https://vite.dev) (MIT) zum
 Einsatz; Vite fügt dabei einen kleinen eigenen Ladeteil ein (MIT).
 

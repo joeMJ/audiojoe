@@ -5,7 +5,8 @@ THIRD_PARTY_LICENSES.txt with the licence texts from the package sources (LICENS
 NOTICE*, UNLICENSE). Equal texts appear once, headed by the packages they apply to.
 The rest of THIRD_PARTY.md stays as it is. Model: tools/third-party.py of tvjoe.
 
-The web app has no run-time npm packages (only build tools), so there is no table for it.
+Web app: the npm run-time packages from clients/web/package.json ("dependencies"; build tools are
+devDependencies) only go into THIRD_PARTY_LICENSES.txt; THIRD_PARTY.md names them in its text.
 
 Run in the repository root of a machine with cargo, flutter and the package caches (the build
 container):  python3 -I tools/third-party.py
@@ -101,6 +102,13 @@ for p in sorted((by_name[n] for n in used), key=lambda p: p["name"]):
     licence = spdx(open(os.path.join(folder, files[0]), encoding="utf-8", errors="replace").read()) if files else "unbekannt"
     dart_rows.append(f"| {p['name']} | {p['version']} | {licence} |")
 
+# Web app: run-time npm packages (bundled into the pages by Vite).
+web = "clients/web"
+for n in sorted(json.load(open(os.path.join(web, "package.json"), encoding="utf-8")).get("dependencies", {})):
+    folder = os.path.join(web, "node_modules", n)
+    pkg = json.load(open(os.path.join(folder, "package.json"), encoding="utf-8"))
+    licence_files(folder, f"{n} {pkg['version']} (npm)", pkg.get("license") or "unbekannt")
+
 lines = open(DOC, encoding="utf-8").read().split("\n")
 replace_table(lines, "| Crate | Version | Lizenz |", rust_rows)
 replace_table(lines, "| Paket | Version | Lizenz |", dart_rows)
@@ -109,7 +117,7 @@ print(f"{len(rust_rows)} Rust crates, {len(dart_rows)} Dart packages entered")
 
 rule = "=" * 78
 out = ["Lizenztexte der Bibliotheken Dritter in audiojoe",
-       "Erzeugt mit tools/third-party.py aus den Quellen der Rust-Crates und Dart-Pakete.",
+       "Erzeugt mit tools/third-party.py aus den Quellen der Rust-Crates, Dart- und npm-Pakete.",
        "Übersicht mit Lizenzangaben: THIRD_PARTY.md.", ""]
 for f, body, packages in sorted(texts.values(), key=lambda t: (t[2][0], t[0])):
     out += [rule, f"{f} – gilt für: {', '.join(packages)}", rule, body, ""]

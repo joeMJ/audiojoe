@@ -60,6 +60,8 @@ try {
   await page.evaluate(() => [...document.querySelectorAll("main button")].find((b) => b.innerText === "Offline")?.click());
   await page.click("#offsize");
   await waitText("Cache leeren");
+  const car = await page.$eval('.about a[href="/testcar/"]', (a) => ({ text: a.innerText, target: a.target })).catch(() => null);
+  check("Link Autotest unter „Über audiojoe“, im selben Fenster", car?.text === "Autotest" && !car.target, JSON.stringify(car));
   await page.waitForFunction(async () => (await (await caches.open("audiojoe-offline-v1")).keys()).length > 0, { timeout: 120000, polling: 500 });
   const before = await offline();
   check("saved titles listed and a file in the cache", before.rows >= 3 && before.files >= 1, JSON.stringify(before));

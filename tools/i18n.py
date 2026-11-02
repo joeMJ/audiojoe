@@ -43,6 +43,7 @@ def used_texts() -> set:
     found = set()
     for path, pat in [
         ("clients/web/src/app", re.compile(r'\bt\("((?:[^"\\]|\\.)*)"')),
+        ("clients/web/src/testcar", re.compile(r'\bt\("((?:[^"\\]|\\.)*)"')),
         ("clients/app/lib", re.compile(r"\bt\('((?:[^'\\]|\\.)*)'")),
     ]:
         for f in (root / path).rglob("*"):

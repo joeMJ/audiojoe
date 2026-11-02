@@ -1,5 +1,5 @@
 Lizenztexte der Bibliotheken Dritter in audiojoe
-Erzeugt mit tools/third-party.py aus den Quellen der Rust-Crates und Dart-Pakete.
+Erzeugt mit tools/third-party.py aus den Quellen der Rust-Crates, Dart- und npm-Pakete.
 Übersicht mit Lizenzangaben: THIRD_PARTY.md.
 
 ==============================================================================
@@ -12071,5 +12071,6 @@ SQLite ist gemeinfrei (Public Domain), siehe https://sqlite.org/copyright.html
 ==============================================================================
 Pakete ohne eigene Lizenzdatei (es gilt der Standardtext der genannten Lizenz, siehe https://spdx.org/licenses/):
 ==============================================================================
+- qrcode-generator 2.0.4 (npm) (MIT)
 - r-efi 6.0.0 (Rust) (MIT OR Apache-2.0 OR LGPL-2.1-or-later)
 - valuable 0.1.1 (Rust) (MIT)

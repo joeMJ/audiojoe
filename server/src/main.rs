@@ -33,7 +33,7 @@ use std::{
 use anyhow::Result;
 use axum::{
     extract::DefaultBodyLimit,
-    http::{header, HeaderValue},
+    http::{header, HeaderName, HeaderValue},
     middleware,
     routing::{delete, get, post},
     Json, Router,
@@ -125,6 +125,13 @@ async fn main() -> Result<()> {
 
     let web = ServeDir::new(&state.config.web_root)
         .fallback(ServeFile::new(state.config.web_root.join("index.html")));
+    // Car test page: open without login, static only, kept out of search indexes.
+    let testcar = Router::new()
+        .fallback_service(ServeDir::new(state.config.web_root.join("testcar")))
+        .layer(SetResponseHeaderLayer::overriding(
+            HeaderName::from_static("x-robots-tag"),
+            HeaderValue::from_static("noindex, nofollow"),
+        ));
     let app = Router::new()
         .route("/api/v1/health", get(health))
         .route("/api/v1/auth/login", post(auth::login))
@@ -182,6 +189,7 @@ async fn main() -> Result<()> {
         .route("/docs/{file}", get(docs::english))
         .route("/docs/de/{file}", get(docs::german))
         .route("/docs/screenshots/{file}", get(docs::screenshot))
+        .nest_service("/testcar", testcar)
         .fallback_service(web)
         .layer(DefaultBodyLimit::max(64 * 1024))
         .layer(middleware::from_fn_with_state(state.clone(), access::log))

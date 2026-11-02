@@ -9,6 +9,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         index: resolve(__dirname, "index.html"),
+        testcar: resolve(__dirname, "testcar/index.html"),
         sw: resolve(__dirname, "src/sw.ts"),
       },
       output: {

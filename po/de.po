@@ -918,3 +918,224 @@ msgstr "{n} angemeldet · dieses Gerät abmelden"
 
 msgid "{n} speakers"
 msgstr "{n} Lautsprecher"
+
+# Car test (/testcar/)
+
+msgid "About 1 minute · only when parked"
+msgstr "Dauer etwa 1 Minute · nur im Stand"
+
+msgid "All three fields are needed so the result can be assigned."
+msgstr "Alle drei Felder werden gebraucht, damit sich das Ergebnis zuordnen lässt."
+
+msgid "Background"
+msgstr "Hintergrund"
+
+msgid "Car test"
+msgstr "Autotest"
+
+msgid "Checks whether audiojoe plays in this car and can be controlled from the car's music display and the steering wheel. At the end the page shows a QR code – take a photo of it and a mail with the results opens."
+msgstr "Prüft, ob audiojoe in diesem Auto spielt und sich über die Musikanzeige des Autos und das Lenkrad steuern lässt. Am Ende zeigt die Seite einen QR-Code – abfotografieren, die Mail öffnet sich mit den Ergebnissen."
+
+msgid "Continue without press"
+msgstr "Weiter ohne Druck"
+
+msgid "Earlier visit"
+msgstr "Früherer Besuch"
+
+msgid "Features"
+msgstr "Funktionen"
+
+msgid "Five short beeps, then one from the cache."
+msgstr "Fünf kurze Töne, danach einer aus dem Cache."
+
+msgid "Formats"
+msgstr "Formate"
+
+msgid "Head-up display"
+msgstr "Head-up-Display"
+
+msgid "If nothing arrives, the test moves on after {n} s. Every press is logged with its time."
+msgstr "Kommt nichts an, geht es nach {n} s von selbst weiter. Jeder Druck wird mit Uhrzeit mitgeschrieben."
+
+msgid "Instrument cluster behind the steering wheel"
+msgstr "Kombiinstrument hinter dem Lenkrad"
+
+msgid "Keep the volume low, the sound is a beep."
+msgstr "Lautstärke leise, der Ton ist ein Piepen."
+
+msgid "Make"
+msgstr "Marke"
+
+msgid "Measured already"
+msgstr "Schon gemessen"
+
+msgid "Minimise the browser"
+msgstr "Browser verkleinern"
+
+msgid "Model"
+msgstr "Typ"
+
+msgid "Music bar"
+msgstr "Musikleiste"
+
+msgid "Music bar on the centre screen"
+msgstr "Musikleiste auf dem Mittelbildschirm"
+
+msgid "Music bar {next}"
+msgstr "Musikleiste {next}"
+
+msgid "Music bar {pause} / {stop}"
+msgstr "Musikleiste {pause} / {stop}"
+
+msgid "Music bar {prev}"
+msgstr "Musikleiste {prev}"
+
+msgid "Music shown"
+msgstr "Musik angezeigt"
+
+msgid "No music buttons on the steering wheel"
+msgstr "Keine Musiktasten am Lenkrad"
+
+msgid "Nowhere"
+msgstr "Nirgends"
+
+msgid "Operation"
+msgstr "Bedienung"
+
+msgid "Press pause on the steering wheel"
+msgstr "Drücke Pause am Lenkrad"
+
+msgid "Press “next” on the steering wheel"
+msgstr "Drücke „weiter“ am Lenkrad"
+
+msgid "Repeat test"
+msgstr "Test wiederholen"
+
+msgid "Screen / window"
+msgstr "Bildschirm / Fenster"
+
+msgid "Show mail text"
+msgstr "Mailtext anzeigen"
+
+msgid "Skip"
+msgstr "Überspringen"
+
+msgid "Start test"
+msgstr "Test starten"
+
+msgid "Steering wheel"
+msgstr "Lenkrad"
+
+msgid "Steering wheel: next"
+msgstr "Lenkrad: weiter"
+
+msgid "Steering wheel: pause"
+msgstr "Lenkrad: Pause"
+
+msgid "Step {n} of {m}"
+msgstr "Schritt {n} von {m}"
+
+msgid "Take a photo with your phone"
+msgstr "Mit dem Telefon abfotografieren"
+
+msgid "Tap everything that applies – outside this browser"
+msgstr "Alles antippen, was zutrifft – außerhalb dieses Browsers"
+
+msgid "Tap {next} in the music bar"
+msgstr "Tippe {next} in der Musikleiste"
+
+msgid "Tap {pause} or {stop} in the music bar"
+msgstr "Tippe {pause} oder {stop} in der Musikleiste"
+
+msgid "Tap {prev} in the music bar"
+msgstr "Tippe {prev} in der Musikleiste"
+
+msgid "Testing formats…"
+msgstr "Formate werden geprüft…"
+
+msgid "The camera opens a mail with the subject “{s}” and all results. Enter the recipient yourself and send it."
+msgstr "Die Kamera öffnet eine Mail mit Betreff „{s}“ und allen Ergebnissen. Empfänger selbst eintragen und senden."
+
+msgid "The page notices minimising and coming back by itself."
+msgstr "Die Seite erkennt das Verkleinern und Zurückkommen selbst."
+
+msgid "Vehicle"
+msgstr "Fahrzeug"
+
+msgid "Where do you see “audiojoe Test” now?"
+msgstr "Wo siehst du jetzt „audiojoe Test“?"
+
+msgid "Year"
+msgstr "Baujahr"
+
+msgid "Your vehicle"
+msgstr "Dein Fahrzeug"
+
+msgid "arrived as “{a}”"
+msgstr "angekommen als „{a}“"
+
+msgid "display in front of the driver"
+msgstr "Anzeige vor dem Fahrer"
+
+msgid "done · {n} s"
+msgstr "fertig · {n} s"
+
+msgid "e.g. 2024"
+msgstr "z. B. 2024"
+
+msgid "e.g. Model 3 Highland"
+msgstr "z. B. Model 3 Highland"
+
+msgid "e.g. Tesla"
+msgstr "z. B. Tesla"
+
+msgid "e.g. mini player in a Tesla, media card in a Polestar, Volvo, Zeekr"
+msgstr "z. B. Mini-Player bei Tesla, Medienkarte bei Polestar, Volvo, Zeekr"
+
+msgid "first visit"
+msgstr "erster Besuch"
+
+msgid "no buttons"
+msgstr "keine Tasten"
+
+msgid "not arrived"
+msgstr "nicht angekommen"
+
+msgid "on the centre screen, where “audiojoe Test” is shown – not here in the browser"
+msgstr "auf dem Mittelbildschirm, wo „audiojoe Test“ steht – nicht hier im Browser"
+
+msgid "only here in the browser"
+msgstr "nur hier im Browser"
+
+msgid "or play/pause; in some cars pressing the volume roller"
+msgstr "oder Wiedergabe/Pause; bei manchen Autos Druck auf die Lautstärkewalze"
+
+msgid "shown in the windscreen"
+msgstr "Einblendung in der Frontscheibe"
+
+msgid "skipped"
+msgstr "übersprungen"
+
+msgid "sound kept playing"
+msgstr "Ton lief weiter"
+
+msgid "sound stopped"
+msgstr "Ton hörte auf"
+
+msgid "the button for the next track"
+msgstr "die Taste für den nächsten Titel"
+
+msgid "then open the browser again after about 10 seconds"
+msgstr "dann den Browser nach etwa 10 Sekunden wieder öffnen"
+
+msgid "then press “next” on the steering wheel once and open the browser again"
+msgstr "dann am Lenkrad einmal „weiter“ drücken und den Browser wieder öffnen"
+
+msgid "{n} of {m}"
+msgstr "{n} von {m}"
+
+msgid "“Music bar” is preselected in a Tesla."
+msgstr "Bei Tesla ist „Musikleiste“ vorausgewählt."
+
+msgid "Next step"
+msgstr "Weiter"
