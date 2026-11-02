@@ -101,10 +101,14 @@ debian_status() {
 }
 
 backups_status() {
-  # Newest first by time, not by name: a copy made by hand (e.g. "vor-0.1.2-….db") must not count as
-  # the latest backup (171, 2026-11-02).
-  { find "$BACKUPS" -maxdepth 1 -name '*.db' -printf '%T@\t%f\t%s\n' 2>/dev/null || true; } | sort -t$'\t' -k1,1gr \
-    | jq -R 'split("\t") | {file: .[1], bytes: (.[2] | tonumber), at: (.[0] | tonumber | floor | todate)}' | jq -cs .
+  # Newest first by the time the backup was made: for the script's own backups
+  # (audiojoe-<version>-<YYYYmmdd-HHMMSS>.db, UTC) the time in the name – cp -a keeps the
+  # database's own modification time –, for other copies (e.g. made by hand) the file time.
+  # Not by name: "vor-0.1.2-….db" counted as the latest on 171 (2026-11-02).
+  { find "$BACKUPS" -maxdepth 1 -name '*.db' -printf '%f\t%s\t%T@\n' 2>/dev/null || true; } \
+    | jq -R 'split("\t") | {file: .[0], bytes: (.[1] | tonumber),
+               t: ((.[0] | capture("-(?<s>[0-9]{8}-[0-9]{6})\\.db$").s | strptime("%Y%m%d-%H%M%S") | mktime)? // (.[2] | tonumber | floor))}' \
+    | jq -cs 'sort_by(-.t) | map({file, bytes, at: (.t | todate)})'
 }
 
 # result: ok | available | updated | rolled_back | failed ; message: English text for the log
@@ -238,7 +242,12 @@ if [ -f "$db" ]; then
   # Stopped server: database, write-ahead log and index together are a consistent copy.
   for ext in "" -wal -shm; do if [ -f "$db$ext" ]; then cp -a "$db$ext" "$backup$ext"; fi; done
 fi
-{ ls -1t "$BACKUPS"/audiojoe-*.db 2>/dev/null || true; } | tail -n +6 | while read -r f; do rm -f "$f" "$f-wal" "$f-shm"; done
+# Keep the newest 5 by the time in the name (cp -a keeps the database's time on the file).
+prune_backups() {
+  { ls -1 "$BACKUPS"/audiojoe-*.db 2>/dev/null || true; } | awk -F- '{print $(NF-1) "-" $NF "\t" $0}' | sort -r | cut -f2- \
+    | tail -n +6 | while read -r f; do rm -f "$f" "$f-wal" "$f-shm"; done
+}
+prune_backups
 
 started="$(now)"
 if dpkg -i "$new" >/dev/null && systemctl restart audiojoe-server && healthy "$latest"; then
