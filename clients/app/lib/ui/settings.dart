@@ -521,18 +521,33 @@ class _MaintenanceSettingsState extends State<MaintenanceSettings> {
   @override
   Widget build(BuildContext context) => Loader<Map>(
         key: ValueKey('m$_gen'),
-        load: () async => await api.call('GET', '/maintenance') as Map,
+        load: () async => {...await api.call('GET', '/maintenance') as Map, 'app_version': (await PackageInfo.fromPlatform()).version},
         builder: (context, m, reload) {
           final k = context.tok;
           final muted = TextStyle(color: k.muted);
           final apps = m['apps'] as Map?;
           final app = SettingsGroup(title: t('App'), children: [_AppUpdateRow(latest: apps?['latest'] as String?, say: _say)]);
           if (m['managed'] != true) {
+            // A server before 0.1.3 without a status file also reports "not managed", although its
+            // update script installs the newest release on request ("check" fails there, so only
+            // "update"). Offered when the server is older than this app.
+            final older = compareVersions('${m['version']}', '${m['app_version']}') < 0;
+            final requested = m['request'] == 'now' || (m['request'] == null && m['requested'] == true);
             return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               SettingsGroup(title: t('Server'), children: [
                 KeyValue(t('Running'), Text('${m['version']}')),
+                if (older) KeyValue(t('Available'), Text(t('unknown – not checked yet'))),
                 const SizedBox(height: 6),
-                Text(t('Updates are not managed here (server not installed from the package, see the installation guide).'), style: muted),
+                if (!older) Text(t('Updates are not managed here (server not installed from the package, see the installation guide).'), style: muted),
+                if (older)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: FilledButton.icon(
+                      icon: const Icon(Icons.system_update_alt),
+                      label: Text(requested ? t('Update requested') : t('Update server now')),
+                      onPressed: requested ? null : () => _call('POST', '/maintenance/update', null, t('Update started; the server restarts briefly.')),
+                    ),
+                  ),
               ]),
               app,
             ]);

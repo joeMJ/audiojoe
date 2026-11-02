@@ -162,4 +162,25 @@ void main() {
     expect(find.textContaining('Updates are not managed here'), findsOneWidget);
     expect(find.text('Check for updates'), findsNothing);
   });
+
+  testWidgets('older server without status (before 0.1.3): "Update server now" only', (tester) async {
+    PackageInfo.setMockInitialValues(appName: 'audiojoe', packageName: 'audiojoe', version: '0.1.3', buildNumber: '1', buildSignature: '');
+    var requested = false;
+    api.client = MockClient((req) async {
+      calls.add('${req.method} ${req.url.path}');
+      if (req.url.path == '/api/v1/maintenance/update') requested = true;
+      return http.Response(jsonEncode({'version': '0.1.2', 'mode': 'auto', 'managed': false, 'requested': requested, 'request': requested ? 'now' : null, 'apps': null, 'status': null}), 200,
+          headers: {'content-type': 'application/json'});
+    });
+    await show(tester);
+    expect(find.text('Update server now'), findsOneWidget);
+    expect(find.text('Check for updates'), findsNothing);
+    expect(find.textContaining('Updates are not managed here'), findsNothing);
+    await tester.tap(find.text('Update server now'));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(calls, contains('POST /api/v1/maintenance/update'));
+    expect(find.text('Update requested'), findsOneWidget);
+  });
 }
