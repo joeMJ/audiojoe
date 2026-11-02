@@ -73,6 +73,7 @@ try {
 
   await button("Cache leeren");
   await waitText("Alle offline gespeicherten Titel löschen?");
+  if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
   await sleep(1500); // re-renders while loading must keep the question
   check("question stays while a download counts up", await page.evaluate(() => document.body.innerText.includes("Alle offline gespeicherten Titel löschen?")));
   await button("Abbrechen");

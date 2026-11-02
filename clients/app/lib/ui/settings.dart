@@ -135,7 +135,10 @@ class _SettingsViewState extends State<SettingsView> {
         if (list.isEmpty) return t('No sources yet');
         var libs = 0;
         for (final s in list) {
-          libs += (await api.call('GET', '/sources/${s['id']}/libraries') as List).length;
+          // Not every kind lists libraries (Audiobookshelf answers 400); the names still count.
+          try {
+            libs += (await api.call('GET', '/sources/${s['id']}/libraries') as List).length;
+          } catch (_) {}
         }
         return '${list.map((s) => '${s['name']}').join(', ')} · ${t('{n} libraries', {'n': libs})}';
       }),

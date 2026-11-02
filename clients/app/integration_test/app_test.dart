@@ -18,6 +18,7 @@ import 'package:audiojoe/main.dart' as app;
 import 'package:audiojoe/models.dart';
 import 'package:audiojoe/player.dart';
 import 'package:audiojoe/sonos.dart';
+import 'package:audiojoe/ui/common.dart' show desktop;
 import 'package:audiojoe/updates.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
@@ -153,6 +154,27 @@ void main() {
       await tester.tap(find.byKey(ValueKey('settings-page-$i')));
       await tester.pump(const Duration(seconds: 2));
       await shot(tester, 'settings-$name');
+    }
+
+    // Phone layout (Android) at 360 × 760: the settings as a list of pages, a tap opens one.
+    // Shots only (top left 360 × 760 of the X screen).
+    if (shots.isNotEmpty) {
+      desktop = false;
+      await tester.binding.setSurfaceSize(const Size(360, 760));
+      await waitFor(tester, find.text('Settings'));
+      await tester.tap(find.text('Settings').last);
+      await waitFor(tester, find.textContaining(' · App '));
+      await shot(tester, 'phone-settings');
+      for (final (page, name) in [('Sources', 'sources'), ('Maintenance', 'maintenance')]) {
+        await tester.tap(find.text(page));
+        await tester.pump(const Duration(seconds: 2));
+        await shot(tester, 'phone-$name');
+        await tester.tap(find.byTooltip('Back'));
+        await waitFor(tester, find.textContaining(' · App '));
+      }
+      desktop = true;
+      await tester.binding.setSurfaceSize(null);
+      await tester.pump(const Duration(seconds: 1));
     }
 
     // ---------------------------------------------------------- offline copy
