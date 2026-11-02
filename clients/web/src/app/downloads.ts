@@ -26,8 +26,12 @@ const notify = () => listeners.forEach((l) => l());
 /** Cache key of one part of a multi-file item. */
 export const partKey = (key: string, part: number) => `${key}#${part}`;
 
-export const offlineList = () => idbAll<OfflineEntry>("offline");
-export const offlineEntry = (key: string) => idbGet<OfflineEntry>("offline", key);
+// The running download counts up in memory only; the stored entry keeps 0 % until it is done.
+let live: OfflineEntry | null = null;
+const withLive = (e?: OfflineEntry) => (e && live?.key === e.key && e.status === "loading" ? { ...e, progress: live.progress, bytes: live.bytes } : e);
+
+export const offlineList = async () => (await idbAll<OfflineEntry>("offline")).map((e) => withLive(e)!);
+export const offlineEntry = async (key: string) => withLive(await idbGet<OfflineEntry>("offline", key));
 
 export async function isOffline(key: string): Promise<boolean> {
   return (await offlineEntry(key))?.status === "done";
@@ -125,7 +129,16 @@ async function fetchOne(e: OfflineEntry) {
   e.status = "loading";
   e.progress = 0;
   await idbPut("offline", e.key, e);
+  live = e;
   notify();
+  try {
+    await fetchParts(e);
+  } finally {
+    live = null;
+  }
+}
+
+async function fetchParts(e: OfflineEntry) {
   const it = await idbGet<Item>("items", e.key);
   const parts = it?.parts && it.parts.length > 1 ? it.parts : null;
   const total = parts ? parts.reduce((s, p) => s + p.duration_ms, 0) : 1;

@@ -825,3 +825,6 @@ msgstr "Einschalten, App-Passwort erzeugen"
 
 msgid "Switch off"
 msgstr "Abschalten"
+
+msgid "Cache {p}"
+msgstr "Cache {p}"

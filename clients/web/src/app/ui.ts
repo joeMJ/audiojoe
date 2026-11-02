@@ -227,11 +227,76 @@ export function renderTop() {
   // Opens the offline page (it has no place in the navigation).
   const off = h("button", { className: view === "off" ? "pill num tap on" : "pill num tap", id: "offsize", onclick: () => show("off") },
     usage ? `${t("Offline")} ${usage}` : t("Offline"));
-  top.replaceChildren(h("div", { className: "logo" }, h("img", { src: "/icon-192.png", alt: "" }), "audiojoe"), net, sync, off);
+  // Fixed width: the share changes while titles are saved and must not move the other pills.
+  cachePill = h("button", { className: `pill num tap cache ${cacheLook.cls}`, id: "cache", onclick: () => void cacheRest() }, cacheLook.text);
+  top.replaceChildren(h("div", { className: "logo" }, h("img", { src: "/icon-192.png", alt: "" }), "audiojoe"), cachePill, net, sync, off);
+  void renderCache();
   void offlineUsage().then((u) => {
     usage = u || "";
     off.textContent = usage ? `${t("Offline")} ${usage}` : t("Offline");
   });
+}
+
+// ---------------------------------------------------------------- cache of what plays next
+
+// Minimised, the car's browser does not start a title that is not in the cache: playback
+// stops at the end of the current one. The pill shows how much of what plays next is saved.
+let cachePill: HTMLElement | null = null;
+let cacheLook = { cls: "", text: "Cache –" };
+let scope: { key: string; items: Promise<Item[]> } | null = null;
+
+/** What has to be in the cache: the queue (an album, a single title), a book with its parts,
+ *  for a podcast also the following episodes of the continue list. Once per title. */
+function cacheScope(): Promise<Item[]> {
+  const s = player.state, it = s.item;
+  if (!it || player.isLive()) return Promise.resolve([]);
+  const key = `${it.key}|${s.queue.length}|${s.entry?.list ?? ""}`;
+  if (scope?.key !== key) scope = { key, items: collectScope(it, s.queue.filter((x) => x.kind !== "radio"), s.entry) };
+  return scope.items;
+}
+
+async function collectScope(it: Item, queue: Item[], entry?: player.Entry): Promise<Item[]> {
+  if (entry?.list !== "podcasts") return queue;
+  try {
+    const list = await api<ListEntry[]>("GET", "/lists/podcasts");
+    const i = list.findIndex((x) => x.key === it.key);
+    const more = i < 0 ? [] : list.slice(i + 1).filter((x) => !queue.some((q) => q.key === x.key));
+    return [...queue, ...more.map((x) => ({ key: x.key, kind: "episode", title: x.title, subtitle: x.subtitle, duration_ms: x.duration_ms }))];
+  } catch {
+    if (scope) scope.key = ""; // asked again next time
+    return queue;
+  }
+}
+
+/** Saved share by playing time; a title without a known length counts as an average one. */
+export async function renderCache() {
+  const items = await cacheScope();
+  let look = { cls: "", text: "Cache –" };
+  if (items.length) {
+    const offline = new Map((await offlineList()).map((e) => [e.key, e]));
+    const known = items.map((x) => x.duration_ms ?? 0).filter((d) => d > 0);
+    const avg = known.length ? known.reduce((a, b) => a + b, 0) / known.length : 1;
+    let all = 0, have = 0;
+    for (const x of items) {
+      const w = x.duration_ms || avg, e = offline.get(x.key);
+      all += w;
+      have += e?.status === "done" ? w : e?.status === "loading" ? w * e.progress : 0;
+    }
+    // 100 % only when everything is there.
+    const p = have >= all ? 100 : Math.min(99, Math.floor((have / all) * 100));
+    look = { cls: p === 100 ? "ok" : "warn", text: t("Cache {p}", { p: `${p} %` }) };
+  }
+  cacheLook = look;
+  const cls = `pill num tap cache ${look.cls}`;
+  if (!cachePill || (cachePill.className === cls && cachePill.textContent === look.text)) return;
+  cachePill.className = cls;
+  cachePill.textContent = look.text;
+}
+
+/** Tap on the pill: the rest of what plays next is saved offline. */
+async function cacheRest() {
+  const items = await cacheScope();
+  if (items.length) await addOffline(items);
 }
 
 /** Moon button below the top bar, top right over the content: dark mode on (filled, accent)

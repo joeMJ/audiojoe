@@ -7,7 +7,7 @@ import { t } from "./i18n";
 import { cueLast, onPlayer, setDevice } from "./player";
 import { onRemote, onSyncState, startSync, stopSync } from "./sync";
 import { isDark, onAppearance } from "./theme";
-import { mountShell, refresh, renderTop } from "./ui";
+import { mountShell, refresh, renderCache, renderTop } from "./ui";
 import "./app.css";
 
 const root = document.getElementById("app")!;
@@ -116,7 +116,10 @@ async function startApp() {
   startSync();
   onConnection(renderTop);
   onSyncState(renderTop);
-  onPlayer(() => refresh("player"));
+  onPlayer(() => {
+    refresh("player");
+    void renderCache();
+  });
   onRemote((p) => {
     refresh("data");
     if (p.finished) void dropPlayed();

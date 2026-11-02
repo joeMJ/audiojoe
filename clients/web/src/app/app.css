@@ -217,6 +217,7 @@ main.dock .tools .big { white-space: normal; line-height: 1.15; text-overflow: c
 .big.arrow svg { width: 24px; height: 24px; }
 .pill.tap { border: 0; cursor: pointer; font: inherit; font-size: 14px; font-weight: 650; }
 .pill.tap.on { background: var(--accent); color: var(--accentText); }
+.pill.tap.cache { justify-content: center; width: calc(11ch + 22px); }
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: 16px;
          padding: 10px 12px 10px 20px; border-radius: 14px; background: var(--panel); border: 2px solid var(--line); font-size: 17px; font-weight: 650;
          box-shadow: 0 6px 24px rgb(0 0 0 / 0.25); max-width: calc(100vw - 32px); }

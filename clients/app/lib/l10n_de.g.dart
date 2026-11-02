@@ -28,6 +28,7 @@ const deStrings = <String, String>{
   "Back": "Zurück",
   "Back {n} s": "{n} s zurück",
   "Cache": "Cache",
+  "Cache {p}": "Cache {p}",
   "Cancel": "Abbrechen",
   "Cancelled or failed.": "Abgebrochen oder fehlgeschlagen.",
   "Chapter {c}": "Kapitel {c}",
