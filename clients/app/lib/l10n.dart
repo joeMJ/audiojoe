@@ -23,6 +23,14 @@ String ago(String iso) {
   return t('{n} days ago', {'n': (s / 86400).round()});
 }
 
+/// Local date and time of an ISO time, "02.11.2026, 13:05" (German) or "2026-11-02 13:05".
+String when(String iso) {
+  final d = DateTime.parse(iso).toLocal();
+  String two(int n) => n.toString().padLeft(2, '0');
+  final time = '${two(d.hour)}:${two(d.minute)}';
+  return isDe ? '${two(d.day)}.${two(d.month)}.${d.year}, $time' : '${d.year}-${two(d.month)}-${two(d.day)} $time';
+}
+
 String clock(int ms) {
   final s = (ms / 1000).floor().clamp(0, 1 << 31);
   final h = s ~/ 3600, m = (s % 3600) ~/ 60, sec = s % 60;

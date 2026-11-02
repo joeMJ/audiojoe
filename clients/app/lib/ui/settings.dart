@@ -163,7 +163,7 @@ class _SettingsViewState extends State<SettingsView> {
             SettingsGroup(children: [_devices()]),
             SettingsGroup(children: [Align(alignment: Alignment.centerLeft, child: _signOut())]),
           ],
-        5 => [SettingsGroup(children: [MaintenanceSettings(key: ValueKey('maint$_gen'))])],
+        5 => [MaintenanceSettings(key: ValueKey('maint$_gen'))],
         _ => [
             const SettingsGroup(children: [AboutPanel()]),
             // As in tvjoe (prefs.rs, group "Mitwirkende").
@@ -495,99 +495,148 @@ class _MaintenanceSettingsState extends State<MaintenanceSettings> {
     }
   }
 
-  String _server(Map st) {
-    final last = st['last_update'] as Map?;
-    switch (st['result']) {
-      case 'available':
-        return t('Version {v} is available.', {'v': '${st['latest']}'});
-      case 'updated':
-        return t('Updated from {from} to {to} {ago}.', {'from': '${last?['from']}', 'to': '${last?['to']}', 'ago': ago('${last?['at']}')});
-      case 'rolled_back':
-        return t('Version {v} did not start; the server went back to {from}.', {'v': '${last?['to'] ?? st['latest']}', 'from': '${last?['from']}'});
-      case 'failed':
-        return t('Last update failed: {msg}', {'msg': '${st['message']}'});
-      default:
-        return t('Up to date.');
-    }
+  /// "Last server update": from → to, when, and how it ended.
+  String _lastUpdate(Map? last) {
+    if (last == null) return '–';
+    final base = t('{from} → {to} on {when}', {'from': '${last['from'] ?? '–'}', 'to': '${last['to']}', 'when': when('${last['at']}')});
+    return switch (last['result']) {
+      'rolled_back' => '$base · ${t('did not start, back on {v}', {'v': '${last['from']}'})}',
+      'failed' => '$base · ${t('failed')}',
+      _ => base,
+    };
   }
 
-  Widget _app(Map m, TextStyle muted) => _AppUpdateRow(latest: (m['apps'] as Map?)?['latest'] as String?, muted: muted, say: _say);
+  /// "{date} – n packages (a, b)" of a Debian log entry, null without one.
+  String? _debian(Map? e, {bool removed = false}) {
+    final pkgs = ((e?['packages'] as List?) ?? const []).cast<String>();
+    if (e == null || pkgs.isEmpty) return null;
+    final at = e['at'] == null ? '' : '${when('${e['at']}')} – ';
+    final n = pkgs.length;
+    final count = removed
+        ? (n == 1 ? t('1 package removed') : t('{n} packages removed', {'n': n}))
+        : (n == 1 ? t('1 package') : t('{n} packages', {'n': n}));
+    return '$at$count (${pkgs.join(', ')})';
+  }
 
   @override
   Widget build(BuildContext context) => Loader<Map>(
-
         key: ValueKey('m$_gen'),
         load: () async => await api.call('GET', '/maintenance') as Map,
         builder: (context, m, reload) {
-          final muted = TextStyle(color: context.tok.muted);
-          final st = m['status'] as Map?;
-          if (m['managed'] != true || st == null) {
-            return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(t('Server {v}. Updates are not managed here (server not installed from the package, see the installation guide).', {'v': '${m['version']}'}),
-                  style: muted),
-              const SizedBox(height: 12),
-              _app(m, muted),
+          final k = context.tok;
+          final muted = TextStyle(color: k.muted);
+          final apps = m['apps'] as Map?;
+          final app = SettingsGroup(title: t('App'), children: [_AppUpdateRow(latest: apps?['latest'] as String?, say: _say)]);
+          if (m['managed'] != true) {
+            return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              SettingsGroup(title: t('Server'), children: [
+                KeyValue(t('Running'), Text('${m['version']}')),
+                const SizedBox(height: 6),
+                Text(t('Updates are not managed here (server not installed from the package, see the installation guide).'), style: muted),
+              ]),
+              app,
             ]);
           }
-          final deb = (st['debian'] as Map?) ?? const {};
-          final backups = ((st['backups'] as List?) ?? const []).cast<Map>();
-          final newer = st['latest'] != null && st['latest'] != st['installed'] && st['result'] != 'ok';
+          final st = m['status'] as Map?;
+          final running = '${m['version']}';
+          final latest = st?['latest'] as String?;
+          final newer = latest != null && compareVersions(latest, running) > 0;
+          final deb = (st?['debian'] as Map?) ?? const {};
+          final backups = ((st?['backups'] as List?) ?? const []).cast<Map>();
           final installRequested = m['request'] == 'now' || (m['request'] == null && m['requested'] == true);
-          return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(t('Server {v}', {'v': '${st['installed']}'}), style: const TextStyle(fontWeight: FontWeight.w700)),
-            Text('${_server(st)} ${t('Checked {ago}.', {'ago': ago('${st['checked_at']}')})}', style: muted),
-            const SizedBox(height: 8),
-            Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-              SegmentedButton<String>(
-                showSelectedIcon: false,
-                segments: [
-                  ButtonSegment(value: 'auto', label: Text(t('Update at 04:00'))),
-                  ButtonSegment(value: 'notify', label: Text(t('Only report'))),
-                ],
-                selected: {'${m['mode']}'},
-                onSelectionChanged: (v) => _call('PUT', '/maintenance', {'mode': v.first}),
-              ),
-              // Older servers only know "requested" (then always "install now").
-              if (installRequested)
-                FilledButton.icon(icon: const Icon(Icons.system_update_alt), label: Text(t('Update requested')), onPressed: null)
-              else if (_checking || m['request'] == 'check')
-                FilledButton.tonalIcon(
+          final checking = _checking || m['request'] == 'check';
+          // Before 0.1.3 the status only had the package list of the last Debian update.
+          final upgraded = _debian(deb['last_upgrade'] as Map?) ??
+              (((deb['upgraded'] as List?) ?? const []).isNotEmpty ? (deb['upgraded'] as List).join(', ') : null);
+          final removed = _debian(deb['last_removal'] as Map?, removed: true);
+          final failed = st?['result'] == 'failed';
+
+          final check = checking
+              ? OutlinedButton.icon(
                   icon: const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2.5)),
                   label: Text(t('Checking …')),
-                  onPressed: null,
-                )
-              else if (newer)
-                FilledButton.icon(
-                  icon: const Icon(Icons.system_update_alt),
-                  label: Text(t('Install now')),
-                  onPressed: () => _call('POST', '/maintenance/update', null, t('Update started; the server restarts briefly.')),
-                )
-              else
-                FilledButton.tonalIcon(icon: const Icon(Icons.refresh), label: Text(t('Check for updates')), onPressed: () => _check(m)),
+                  onPressed: null)
+              : newer
+                  ? OutlinedButton.icon(icon: const Icon(Icons.refresh), label: Text(t('Check for updates')), onPressed: installRequested ? null : () => _check(m))
+                  : FilledButton.icon(icon: const Icon(Icons.refresh), label: Text(t('Check for updates')), onPressed: installRequested ? null : () => _check(m));
+          final install = installRequested
+              ? FilledButton.icon(icon: const Icon(Icons.system_update_alt), label: Text(t('Update requested')), onPressed: null)
+              : newer && !checking
+                  ? FilledButton.icon(
+                      icon: const Icon(Icons.system_update_alt),
+                      label: Text(t('Update server now to {v}', {'v': latest})),
+                      onPressed: () => _call('POST', '/maintenance/update', null, t('Update started; the server restarts briefly.')),
+                    )
+                  : OutlinedButton.icon(icon: const Icon(Icons.system_update_alt), label: Text(t('Update server now')), onPressed: null);
+
+          return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            SettingsGroup(title: t('Server'), children: [
+              KeyValue(t('Running'), Text(running)),
+              KeyValue(
+                t('Available'),
+                latest == null
+                    ? Text(t('unknown – not checked yet'))
+                    : Row(children: [Text(latest), if (newer) ...[const SizedBox(width: 8), Badge2(t('newer'), kind: 'warn')]]),
+              ),
+              KeyValue(t('Last checked'), Text(st?['checked_at'] == null ? t('never') : '${when('${st!['checked_at']}')} (${ago('${st['checked_at']}')})')),
+              KeyValue(t('Last server update'), Text(_lastUpdate(st?['last_update'] as Map?))),
+              KeyValue(
+                t('Database backups'),
+                Text(backups.isEmpty ? t('none') : t('{n}, latest on {when}', {'n': backups.length, 'when': when('${backups.first['at']}')})),
+              ),
+              if (failed)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(t('Last check or update failed: {msg}', {'msg': '${st!['message']}'}), style: TextStyle(color: k.bad, fontWeight: FontWeight.w700)),
+                ),
+              const SizedBox(height: 10),
+              Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                check,
+                install,
+                SegmentedButton<String>(
+                  showSelectedIcon: false,
+                  segments: [
+                    ButtonSegment(value: 'auto', label: Text(t('Update at 04:00'))),
+                    ButtonSegment(value: 'notify', label: Text(t('Only report'))),
+                  ],
+                  selected: {'${m['mode']}'},
+                  onSelectionChanged: (v) => _call('PUT', '/maintenance', {'mode': v.first}),
+                ),
+              ]),
             ]),
-            const SizedBox(height: 12),
-            _app(m, muted),
-            const SizedBox(height: 12),
-            Text(t('Debian updates'), style: const TextStyle(fontWeight: FontWeight.w700)),
-            Text(
-              [
-                deb['automatic'] == true ? t('Installed automatically every day; unused packages are removed.') : t('Not set up for automatic installation.'),
-                if (deb['last_run'] != null) t('Last run {ago}.', {'ago': ago('${deb['last_run']}')}),
-                if ((deb['upgraded'] as List?)?.isNotEmpty == true) t('Last updated: {pkgs}.', {'pkgs': (deb['upgraded'] as List).join(', ')}),
-                if ((deb['pending'] ?? 0) != 0) t('{n} updates waiting.', {'n': deb['pending']}),
-              ].join(' '),
-              style: muted,
-            ),
-            const SizedBox(height: 12),
-            Text(t('Database backups'), style: const TextStyle(fontWeight: FontWeight.w700)),
-            Text(
-              backups.isEmpty
-                  ? t('None yet; one is made before every server update.')
-                  : t('{n} kept (before every server update), latest {ago}.', {'n': backups.length, 'ago': ago('${backups.first['at']}')}),
-              style: muted,
-            ),
+            SettingsGroup(title: t('Debian'), children: [
+              KeyValue(t('Updates last installed'), Text(upgraded ?? t('not yet'))),
+              KeyValue(t('Last cleaned up'), Text(removed ?? t('not yet'))),
+              KeyValue(t('Waiting updates'), Text(deb['pending'] == null ? t('unknown') : '${deb['pending']}')),
+              KeyValue(
+                t('Automatic'),
+                Row(children: [
+                  Flexible(child: Text(deb['automatic'] == true ? t('install and clean up daily') : t('not set up'))),
+                  const SizedBox(width: 8),
+                  deb['automatic'] == true ? Badge2(t('on'), kind: 'ok') : Badge2(t('off')),
+                ]),
+              ),
+            ]),
+            app,
           ]);
         },
+      );
+}
+
+/// A label and its value in one line; on narrow screens the value goes below the label.
+class KeyValue extends StatelessWidget {
+  final String label;
+  final Widget value;
+  const KeyValue(this.label, this.value, {super.key});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: LayoutBuilder(builder: (context, c) {
+          final l = Text(label, style: TextStyle(color: context.tok.muted));
+          if (c.maxWidth < 440) return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [l, value]);
+          return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [SizedBox(width: 220, child: l), Expanded(child: value)]);
+        }),
       );
 }
 
@@ -676,12 +725,12 @@ class _GpodderSettingsState extends State<GpodderSettings> {
       );
 }
 
-/// This app: version, and the newer one the server knows (github build only).
+/// This app: running and available version (the newest release the server knows) and the
+/// download, github build only.
 class _AppUpdateRow extends StatefulWidget {
   final String? latest;
-  final TextStyle muted;
   final void Function(String) say;
-  const _AppUpdateRow({required this.latest, required this.muted, required this.say});
+  const _AppUpdateRow({required this.latest, required this.say});
   @override
   State<_AppUpdateRow> createState() => _AppUpdateRowState();
 }
@@ -705,25 +754,34 @@ class _AppUpdateRowState extends State<_AppUpdateRow> {
         future: info,
         builder: (context, snap) {
           final (v, u) = snap.data ?? ('…', null);
-          return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(t('App {v}', {'v': v}), style: const TextStyle(fontWeight: FontWeight.w700)),
-            Text(
+          final latest = widget.latest;
+          final android = Platform.isAndroid;
+          return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            KeyValue(t('Running'), Text(v)),
+            KeyValue(
+              t('Available'),
               !appUpdatesEnabled
-                  ? t('Updates come from F-Droid.')
-                  : u != null
-                      ? t('Version {v} is available.', {'v': u.latest})
-                      : widget.latest == null
-                          ? t('The server knows no newer version yet.')
-                          : t('Up to date.'),
-              style: widget.muted,
+                  ? Text(t('Updates come from F-Droid.'))
+                  : latest == null
+                      ? Text(t('unknown – only after “Check for updates”'))
+                      : Row(children: [Text(u?.latest ?? latest), if (u != null) ...[const SizedBox(width: 8), Badge2(t('newer'), kind: 'warn')]]),
             ),
-            if (u != null)
+            if (appUpdatesEnabled)
               Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: FilledButton.icon(
-                  icon: const Icon(Icons.download),
-                  label: Text(Platform.isAndroid ? t('Install version {v}', {'v': u.latest}) : t('Download version {v}', {'v': u.latest})),
-                  onPressed: () => runAppUpdate(u, widget.say),
+                padding: const EdgeInsets.only(top: 10),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: u != null
+                      ? FilledButton.icon(
+                          icon: const Icon(Icons.download),
+                          label: Text(android ? t('Install version {v}', {'v': u.latest}) : t('Download version {v}', {'v': u.latest})),
+                          onPressed: () => runAppUpdate(u, widget.say),
+                        )
+                      : OutlinedButton.icon(
+                          icon: const Icon(Icons.download),
+                          label: Text(android ? t('Install version') : t('Download version')),
+                          onPressed: null,
+                        ),
                 ),
               ),
           ]);

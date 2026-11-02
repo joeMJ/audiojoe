@@ -622,29 +622,8 @@ msgstr "Nächstes Album"
 msgid "Maintenance"
 msgstr "Pflege"
 
-msgid "Version {v} is available."
-msgstr "Version {v} ist verfügbar."
-
-msgid "Updated from {from} to {to} {ago}."
-msgstr "Von {from} auf {to} aktualisiert, {ago}."
-
-msgid "Version {v} did not start; the server went back to {from}."
-msgstr "Version {v} startete nicht; der Server ist zurück auf {from}."
-
-msgid "Last update failed: {msg}"
-msgstr "Letzte Aktualisierung gescheitert: {msg}"
-
-msgid "Up to date."
-msgstr "Aktuell."
-
-msgid "Server {v}. Updates are not managed here (server not installed from the package, see the installation guide)."
-msgstr "Server {v}. Aktualisierungen werden hier nicht verwaltet (Server nicht aus dem Paket installiert, siehe Installationsanleitung)."
-
-msgid "Checked {ago}."
-msgstr "Geprüft {ago}."
-
 msgid "Update at 04:00"
-msgstr "Um 04:00 aktualisieren"
+msgstr "Update um 04:00"
 
 msgid "Only report"
 msgstr "Nur melden"
@@ -658,41 +637,14 @@ msgstr "Nach Updates suchen"
 msgid "Checking …"
 msgstr "Sucht …"
 
-msgid "Install now"
-msgstr "Jetzt installieren"
-
 msgid "The check takes longer; the result appears here later."
 msgstr "Die Prüfung dauert länger; das Ergebnis erscheint später hier."
 
 msgid "Update started; the server restarts briefly."
 msgstr "Aktualisierung gestartet; der Server startet kurz neu."
 
-msgid "Debian updates"
-msgstr "Debian-Aktualisierungen"
-
-msgid "Installed automatically every day; unused packages are removed."
-msgstr "Werden täglich automatisch eingespielt; nicht mehr benötigte Pakete werden entfernt."
-
-msgid "Not set up for automatic installation."
-msgstr "Nicht für automatisches Einspielen eingerichtet."
-
-msgid "Last run {ago}."
-msgstr "Zuletzt {ago}."
-
-msgid "Last updated: {pkgs}."
-msgstr "Zuletzt aktualisiert: {pkgs}."
-
-msgid "{n} updates waiting."
-msgstr "{n} Aktualisierungen stehen aus."
-
 msgid "Database backups"
 msgstr "Datenbanksicherungen"
-
-msgid "None yet; one is made before every server update."
-msgstr "Noch keine; vor jeder Server-Aktualisierung wird eine angelegt."
-
-msgid "{n} kept (before every server update), latest {ago}."
-msgstr "{n} aufbewahrt (vor jeder Server-Aktualisierung), neueste {ago}."
 
 msgid "audiojoe {v} is available."
 msgstr "audiojoe {v} ist verfügbar."
@@ -772,9 +724,6 @@ msgstr "App {v}"
 msgid "Updates come from F-Droid."
 msgstr "Updates kommen über F-Droid."
 
-msgid "The server knows no newer version yet."
-msgstr "Der Server kennt noch keine neuere Version."
-
 msgid "Install version {v}"
 msgstr "Version {v} installieren"
 
@@ -828,3 +777,105 @@ msgstr "Abschalten"
 
 msgid "Cache {p}"
 msgstr "Cache {p}"
+
+msgid "1 package"
+msgstr "1 Paket"
+
+msgid "1 package removed"
+msgstr "1 Paket entfernt"
+
+msgid "{n} packages"
+msgstr "{n} Pakete"
+
+msgid "{n} packages removed"
+msgstr "{n} Pakete entfernt"
+
+msgid "App"
+msgstr "App"
+
+msgid "Automatic"
+msgstr "Automatisch"
+
+msgid "Available"
+msgstr "Verfügbar"
+
+msgid "Debian"
+msgstr "Debian"
+
+msgid "Running"
+msgstr "Läuft"
+
+msgid "Download version"
+msgstr "Version herunterladen"
+
+msgid "Install version"
+msgstr "Version installieren"
+
+msgid "Last check or update failed: {msg}"
+msgstr "Prüfung oder Update fehlgeschlagen: {msg}"
+
+msgid "Last checked"
+msgstr "Zuletzt geprüft"
+
+msgid "Last cleaned up"
+msgstr "Zuletzt aufgeräumt"
+
+msgid "Last server update"
+msgstr "Letztes Server-Update"
+
+msgid "Update server now"
+msgstr "Server jetzt aktualisieren"
+
+msgid "Update server now to {v}"
+msgstr "Server jetzt aktualisieren auf {v}"
+
+msgid "Updates are not managed here (server not installed from the package, see the installation guide)."
+msgstr "Aktualisierungen werden hier nicht verwaltet (Server nicht aus dem Paket installiert, siehe Installationsanleitung)."
+
+msgid "Updates last installed"
+msgstr "Updates zuletzt installiert"
+
+msgid "Waiting updates"
+msgstr "Wartende Updates"
+
+msgid "did not start, back on {v}"
+msgstr "startete nicht, zurück auf {v}"
+
+msgid "install and clean up daily"
+msgstr "täglich installieren und aufräumen"
+
+msgid "never"
+msgstr "noch nie"
+
+msgid "newer"
+msgstr "neuer"
+
+msgid "none"
+msgstr "keine"
+
+msgid "not set up"
+msgstr "nicht eingerichtet"
+
+msgid "not yet"
+msgstr "noch nicht"
+
+msgid "off"
+msgstr "aus"
+
+msgid "on"
+msgstr "an"
+
+msgid "unknown"
+msgstr "unbekannt"
+
+msgid "unknown – not checked yet"
+msgstr "unbekannt – noch nicht geprüft"
+
+msgid "unknown – only after “Check for updates”"
+msgstr "unbekannt – erst nach „Nach Updates suchen“"
+
+msgid "{from} → {to} on {when}"
+msgstr "{from} → {to} am {when}"
+
+msgid "{n}, latest on {when}"
+msgstr "{n}, letzte am {when}"

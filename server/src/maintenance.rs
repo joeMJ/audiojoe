@@ -34,6 +34,9 @@ use crate::{
     AppState, VERSION,
 };
 
+/// Installed by the package together with its timer and path unit.
+const UPDATE_SCRIPT: &str = "/usr/sbin/audiojoe-update";
+
 fn dir(state: &AppState) -> PathBuf {
     state.config.database.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| PathBuf::from("."))
 }
@@ -97,8 +100,9 @@ pub async fn status(State(state): State<AppState>, _user: CurrentUser) -> Json<V
     Json(json!({
         "version": VERSION,
         "mode": mode(&state),
-        // Without the script (development, other installation) there is no status.
-        "managed": status.is_some(),
+        // Managed when the update script is installed (package audiojoe-server), even before its
+        // first run has written a status – the apps then offer "check" and "install".
+        "managed": status.is_some() || std::path::Path::new(UPDATE_SCRIPT).exists(),
         "apps": apps_of(status.as_ref()),
         "status": status,
         // `now` or `check` while the script has not taken the request yet.

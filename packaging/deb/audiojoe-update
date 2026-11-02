@@ -57,18 +57,47 @@ log() { echo "$*"; }
 last_update='null'
 [ -r "$STATUS" ] && last_update="$(jq -c '.last_update // null' "$STATUS" 2>/dev/null || echo null)"
 
+# Exactly one JSON value from $1, otherwise $2 (default null) – a broken part must never stop the
+# status from being written.
+one_json() {
+  local v
+  v="$(jq -cs 'if length == 1 then .[0] else error("not one value") end' <<<"${1:-}" 2>/dev/null)" && [ -n "$v" ] \
+    && printf '%s' "$v" || printf '%s' "${2:-null}"
+}
+
+# All logs of unattended-upgrades, oldest first (rotated ones are compressed).
+uu_log() {
+  local f
+  { ls -1tr /var/log/unattended-upgrades/unattended-upgrades.log* 2>/dev/null || true; } \
+    | while read -r f; do zcat -f "$f" 2>/dev/null || true; done
+}
+
+# The last log line "<message> pkg1 pkg2 …" with at least one package, as {at, packages}; null without one.
+# Lines start with the local time: "2026-11-02 06:14:01,123 INFO …".
+uu_entry() { # message
+  local line at
+  line="$(uu_log | grep -F "INFO $1" | grep -v -E -- "$1[[:space:]]*\$" | tail -n1 || true)"
+  [ -n "$line" ] || { echo null; return 0; }
+  # Local time of the machine (not UTC) → seconds → UTC.
+  at="$(date -d "${line:0:19}" +%s 2>/dev/null || true)"
+  [ -z "$at" ] || at="$(date -u -d "@$at" +%Y-%m-%dT%H:%M:%SZ)"
+  one_json "$(jq -cn --arg at "$at" --arg p "${line#*"$1"}" \
+    '{at: (if $at == "" then null else $at end), packages: ($p | split(" ") | map(select(. != "")))}' 2>/dev/null)"
+}
+
+# Debian updates of the machine: last run, last installed and last removed packages, waiting updates.
 debian_status() {
-  local stamp=/var/lib/apt/periodic/unattended-upgrades-stamp lg=/var/log/unattended-upgrades/unattended-upgrades.log
-  local last=null pkgs='[]' pending
+  local stamp=/var/lib/apt/periodic/unattended-upgrades-stamp last=null upgraded removed pending
   [ -e "$stamp" ] && last="\"$(date -u -r "$stamp" +%Y-%m-%dT%H:%M:%SZ)\""
-  if [ -r "$lg" ]; then
-    pkgs="$(grep -h "Packages that will be upgraded:" "$lg" 2>/dev/null | tail -n1 \
-            | sed 's/.*upgraded: *//' | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -cs . || echo '[]')"
-  fi
+  upgraded="$(uu_entry "Packages that will be upgraded:")"
+  removed="$(uu_entry "Packages that were successfully auto-removed:")"
   pending="$(apt-get -s -o Debug::NoLocking=1 upgrade 2>/dev/null | grep -c '^Inst ' || true)"
-  jq -cn --argjson last "$last" --argjson pkgs "$pkgs" --argjson pending "${pending:-0}" \
+  [[ "${pending:-}" =~ ^[0-9]+$ ]] || pending=null
+  # "upgraded" (package list) stays for apps before 0.1.3.
+  jq -cn --argjson last "$last" --argjson up "$upgraded" --argjson rm "$removed" --argjson pending "$pending" \
      --arg auto "$([ -e /etc/apt/apt.conf.d/52audiojoe-upgrades ] && echo yes || echo no)" \
-     '{last_run: $last, upgraded: $pkgs, pending: $pending, automatic: ($auto == "yes")}'
+     '{last_run: $last, upgraded: ($up.packages // []), last_upgrade: $up, last_removal: $rm,
+       pending: $pending, automatic: ($auto == "yes")}'
 }
 
 backups_status() {
@@ -83,9 +112,14 @@ write_status() {
   local result="$1" message="$2" latest="${3:-}"
   local tmp; tmp="$(mktemp "$STATE/.update-status.XXXXXX")"
   installed="$(dpkg-query -W -f='${Version}' "$PKG" 2>/dev/null || echo "")"
+  local debian backups
+  debian="$(one_json "$(trap - ERR; set +e; debian_status 2>/dev/null)")"
+  backups="$(one_json "$(trap - ERR; set +e; backups_status 2>/dev/null)" '[]')"
+  last_update="$(one_json "$last_update")"
+  release_info="$(one_json "$release_info")"
   jq -n --arg checked "$(now)" --arg installed "$installed" --arg latest "$latest" --arg mode "$mode" \
         --arg result "$result" --arg message "$message" --arg source "$SOURCE" \
-        --argjson last_update "$last_update" --argjson debian "$(debian_status)" --argjson backups "$(backups_status)" \
+        --argjson last_update "$last_update" --argjson debian "$debian" --argjson backups "$backups" \
         --argjson release "$release_info" \
      '{checked_at: $checked, installed: $installed, latest: (if $latest == "" then null else $latest end),
        mode: $mode, result: $result, message: $message, source: $source,
