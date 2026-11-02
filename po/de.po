@@ -888,3 +888,33 @@ msgstr "Alle offline gespeicherten Titel löschen?"
 
 msgid "Delete"
 msgstr "Löschen"
+
+msgid "MusicBrainz labels"
+msgstr "MusicBrainz-Labels"
+
+msgid "No sources yet"
+msgstr "Noch keine Quellen"
+
+msgid "OPML, sync with podcast apps"
+msgstr "OPML, Abgleich mit Podcast-Apps"
+
+msgid "Version, guide, privacy, licences"
+msgstr "Version, Anleitung, Datenschutz, Lizenzen"
+
+msgid "not checked yet"
+msgstr "noch nicht geprüft"
+
+msgid "up to date"
+msgstr "aktuell"
+
+msgid "update available"
+msgstr "Update verfügbar"
+
+msgid "{n} libraries"
+msgstr "{n} Bibliotheken"
+
+msgid "{n} signed in · sign out this device"
+msgstr "{n} angemeldet · dieses Gerät abmelden"
+
+msgid "{n} speakers"
+msgstr "{n} Lautsprecher"

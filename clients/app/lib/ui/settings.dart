@@ -1,6 +1,7 @@
 // Settings: sources (Jellyfin, Audiobookshelf) and which of their libraries to show, music
 // (reading in the album directory, labels from MusicBrainz), Sonos speakers, podcast import/export (OPML),
-// signed-in devices, sign out, about. Phones: one list; desktop: pages on the left, groups on the right.
+// signed-in devices, sign out, about. Phones: a list of the pages, a tap opens one; desktop: pages on the
+// left, groups on the right.
 
 import 'dart:convert';
 import 'dart:io';
@@ -100,41 +101,109 @@ class _SettingsViewState extends State<SettingsView> {
   @override
   Widget build(BuildContext context) => desktop ? _desktop(context) : _phone(context);
 
-  Widget _phone(BuildContext context) => ListView(padding: const EdgeInsets.all(12), children: [
-        Row(children: [_h(t('Sources')), const Spacer(), _addSource()]),
+  /// Phones: the pages as one list (mockup android-einstellungen, picture 1), each row with its state
+  /// in one line; a tap opens the page, ← or the system back gesture returns to the list.
+  int? _phonePage;
+
+  Widget _phone(BuildContext context) {
+    final p = _phonePage;
+    return PopScope(
+      canPop: p == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) setState(() => _phonePage = null);
+      },
+      child: p == null ? _overview(context) : _phoneSub(context, p),
+    );
+  }
+
+  /// One line per page: sources and libraries, speakers, devices, versions; fixed text where nothing is counted.
+  Future<Map<int, String>> _summary() async {
+    final out = <int, String>{
+      1: t('OPML, sync with podcast apps'),
+      2: t('MusicBrainz labels'),
+      6: t('Version, guide, privacy, licences'),
+    };
+    Future<void> one(int i, Future<String> Function() f) async {
+      try {
+        out[i] = await f();
+      } catch (_) {}
+    }
+
+    await Future.wait([
+      one(0, () async {
+        final list = (await api.call('GET', '/sources') as List).cast<Map>();
+        if (list.isEmpty) return t('No sources yet');
+        var libs = 0;
+        for (final s in list) {
+          libs += (await api.call('GET', '/sources/${s['id']}/libraries') as List).length;
+        }
+        return '${list.map((s) => '${s['name']}').join(', ')} · ${t('{n} libraries', {'n': libs})}';
+      }),
+      one(3, () async {
+        if ((await api.call('GET', '/sonos/setup') as Map)['enabled'] != true) return t('not set up');
+        return t('{n} speakers', {'n': (await api.call('GET', '/sonos') as List).length});
+      }),
+      one(4, () async => t('{n} signed in · sign out this device', {'n': (await api.call('GET', '/sessions') as List).length})),
+      one(5, () async {
+        final m = await api.call('GET', '/maintenance') as Map;
+        final app = (await PackageInfo.fromPlatform()).version;
+        final latest = (m['status'] as Map?)?['latest'] as String?;
+        final state = latest == null
+            ? t('not checked yet')
+            : compareVersions(latest, '${m['version']}') > 0 || compareVersions(latest, app) > 0
+                ? t('update available')
+                : t('up to date');
+        return 'Server ${m['version']} · App $app · $state';
+      }),
+    ]);
+    return out;
+  }
+
+  Widget _overview(BuildContext context) {
+    final k = context.tok;
+    return Loader<Map<int, String>>(
+      key: ValueKey('sum$_gen'),
+      load: _summary,
+      builder: (context, sum, reload) => ListView(padding: const EdgeInsets.all(12), children: [
+        _h(t('Settings')),
         const SizedBox(height: 8),
-        _sources(),
-        const SizedBox(height: 20),
-        _h(t('Music')),
-        const SizedBox(height: 8),
-        MusicSettings(key: ValueKey('music$_gen')),
-        const SizedBox(height: 20),
-        _h(t('Sonos')),
-        const SizedBox(height: 8),
-        const SonosSettings(),
-        const SizedBox(height: 20),
-        _h(t('Sync with other podcast apps')),
-        const SizedBox(height: 8),
-        GpodderSettings(key: ValueKey('gpodder$_gen')),
-        const SizedBox(height: 20),
-        _h(t('Maintenance')),
-        const SizedBox(height: 8),
-        MaintenanceSettings(key: ValueKey('maint$_gen')),
-        const SizedBox(height: 20),
-        _h(t('Devices')),
-        const SizedBox(height: 8),
-        _devices(),
-        const SizedBox(height: 20),
-        _h(t('Podcasts')),
-        const SizedBox(height: 4),
-        Text(t('Subscriptions as OPML file, the format other podcast apps read and write.'), style: TextStyle(color: context.tok.muted)),
-        const SizedBox(height: 8),
-        _opml(),
-        const SizedBox(height: 20),
-        _signOut(),
-        const SizedBox(height: 8),
-        OutlinedButton.icon(icon: const Icon(Icons.info_outline), label: Text(t('About audiojoe')), onPressed: () => showAbout(context)),
-      ]);
+        for (final (i, (icon, label)) in _pages.indexed) ...[
+          ListTile(
+            key: ValueKey('settings-page-$i'),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            leading: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(color: k.panel2, borderRadius: BorderRadius.circular(10)),
+              child: Icon(icon, size: 20),
+            ),
+            title: Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            subtitle: sum[i] == null ? null : Text(sum[i]!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: k.muted)),
+            trailing: Icon(Icons.chevron_right, color: k.muted),
+            onTap: () => setState(() => _phonePage = i),
+          ),
+          Divider(height: 1, color: k.line),
+        ],
+      ]),
+    );
+  }
+
+  Widget _phoneSub(BuildContext context, int page) {
+    return ListView(key: PageStorageKey('phone-settings$page'), padding: const EdgeInsets.fromLTRB(4, 4, 12, 12), children: [
+      Row(children: [
+        IconButton(tooltip: t('Back'), icon: const Icon(Icons.arrow_back), onPressed: () => setState(() => _phonePage = null)),
+        Expanded(child: _h(_pages[page].$2)),
+      ]),
+      const SizedBox(height: 8),
+      Padding(
+        padding: const EdgeInsets.only(left: 8),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          ..._pageContent(context, page),
+          if (page == 0) Align(alignment: Alignment.centerLeft, child: _addSource()),
+        ]),
+      ),
+    ]);
+  }
 
   /// Desktop: the pages on the left, the chosen page on the right in groups.
   List<(IconData, String)> get _pages => [
@@ -147,7 +216,7 @@ class _SettingsViewState extends State<SettingsView> {
         (Icons.info_outline, t('About')),
       ];
 
-  List<Widget> _pageContent(BuildContext context) => switch (_page) {
+  List<Widget> _pageContent(BuildContext context, [int? page]) => switch (page ?? _page) {
         0 => [_sources(grouped: true)],
         1 => [
             SettingsGroup(

@@ -2,6 +2,9 @@
 // volume and footer at the bottom of the right two thirds; no volume of this device; phone
 // layout unchanged; settings on pages.
 
+import 'dart:convert';
+
+import 'package:audiojoe/api.dart';
 import 'package:audiojoe/models.dart';
 import 'package:audiojoe/player.dart';
 import 'package:audiojoe/sonos.dart';
@@ -10,6 +13,8 @@ import 'package:audiojoe/ui/now_playing.dart';
 import 'package:audiojoe/ui/settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 const episode = Item(key: 'episode:1', kind: 'episode', title: 'Episode 212', subtitle: 'Podcast', durationMs: 600000);
@@ -159,13 +164,47 @@ void main() {
       expect(find.text('© 2026 John Lose · Apache-2.0'), findsOneWidget);
     });
 
-    testWidgets('phone: one list as before', (tester) async {
+    testWidgets('phone: list of the pages with their state, a tap opens one, back returns', (tester) async {
       desktop = false;
-      await show(tester, SettingsView(onSignOut: () {}), size: const Size(400, 3000));
-      expect(find.text('Add source'), findsOneWidget);
+      api.client = MockClient((req) async => http.Response(
+          jsonEncode(switch (req.url.path) {
+            '/api/v1/sources' => [{'id': 1, 'name': 'Jellyfin', 'kind': 'jellyfin', 'url': 'https://jf.example'}],
+            '/api/v1/sources/1/libraries' => [{'id': 'a', 'title': 'Music'}, {'id': 'b', 'title': 'Books'}],
+            '/api/v1/sonos/setup' => {'enabled': true},
+            '/api/v1/sonos' => [{'name': 'Kitchen'}, {'name': 'Bath'}],
+            '/api/v1/sessions' => [{'id': 1, 'device': 'phone', 'current': true, 'last_seen': '2026-11-02T12:00:00Z'}],
+            '/api/v1/maintenance' => {'version': '0.1.4', 'managed': true, 'status': {'latest': '0.1.4'}},
+            _ => [],
+          }),
+          200,
+          headers: {'content-type': 'application/json'}));
+      await show(tester, SettingsView(onSignOut: () {}), size: const Size(360, 760));
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      for (final p in ['Sources', 'Podcasts', 'Music', 'Sonos', 'Devices', 'Maintenance', 'About']) {
+        expect(find.text(p), findsOneWidget, reason: p);
+      }
+      expect(find.text('Jellyfin · 2 libraries'), findsOneWidget);
+      expect(find.text('2 speakers'), findsOneWidget);
+      expect(find.text('1 signed in · sign out this device'), findsOneWidget);
+      expect(find.text('Server 0.1.4 · App 0.1.0 · update available'), findsOneWidget);
+      expect(find.text('Storage'), findsNothing); // "Ablage" comes with 0.2.0
+      expect(find.text('Import OPML'), findsNothing);
+
+      await tester.tap(find.text('Podcasts'));
+      await tester.pump();
       expect(find.text('Import OPML'), findsOneWidget);
-      expect(find.text('About audiojoe'), findsOneWidget);
-      expect(find.byType(SettingsGroup), findsNothing);
+      expect(find.text('Sources'), findsNothing);
+      await tester.tap(find.byTooltip('Back'));
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(find.text('Sources'), findsOneWidget);
+
+      await tester.tap(find.text('Devices'));
+      await tester.pump();
+      expect(find.text('Sign out this device'), findsOneWidget);
     });
   });
 }
