@@ -879,3 +879,12 @@ msgstr "{from} → {to} am {when}"
 
 msgid "{n}, latest on {when}"
 msgstr "{n}, letzte am {when}"
+
+msgid "Clear cache"
+msgstr "Cache leeren"
+
+msgid "Delete all titles saved offline?"
+msgstr "Alle offline gespeicherten Titel löschen?"
+
+msgid "Delete"
+msgstr "Löschen"

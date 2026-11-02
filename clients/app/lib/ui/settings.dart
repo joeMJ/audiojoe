@@ -452,6 +452,10 @@ class MaintenanceSettings extends StatefulWidget {
   State<MaintenanceSettings> createState() => _MaintenanceSettingsState();
 }
 
+/// The app's filled buttons are 56 high (touch size); on this page they stand next to outlined
+/// and segmented buttons (40), so all of them are 40 here.
+final _pflegeButton = FilledButton.styleFrom(minimumSize: const Size(64, 40));
+
 class _MaintenanceSettingsState extends State<MaintenanceSettings> {
   int _gen = 0;
   bool _checking = false;
@@ -542,7 +546,7 @@ class _MaintenanceSettingsState extends State<MaintenanceSettings> {
                 if (older)
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: FilledButton.icon(
+                    child: FilledButton.icon(style: _pflegeButton, 
                       icon: const Icon(Icons.system_update_alt),
                       label: Text(requested ? t('Update requested') : t('Update server now')),
                       onPressed: requested ? null : () => _call('POST', '/maintenance/update', null, t('Update started; the server restarts briefly.')),
@@ -573,11 +577,11 @@ class _MaintenanceSettingsState extends State<MaintenanceSettings> {
                   onPressed: null)
               : newer
                   ? OutlinedButton.icon(icon: const Icon(Icons.refresh), label: Text(t('Check for updates')), onPressed: installRequested ? null : () => _check(m))
-                  : FilledButton.icon(icon: const Icon(Icons.refresh), label: Text(t('Check for updates')), onPressed: installRequested ? null : () => _check(m));
+                  : FilledButton.icon(style: _pflegeButton, icon: const Icon(Icons.refresh), label: Text(t('Check for updates')), onPressed: installRequested ? null : () => _check(m));
           final install = installRequested
-              ? FilledButton.icon(icon: const Icon(Icons.system_update_alt), label: Text(t('Update requested')), onPressed: null)
+              ? FilledButton.icon(style: _pflegeButton, icon: const Icon(Icons.system_update_alt), label: Text(t('Update requested')), onPressed: null)
               : newer && !checking
-                  ? FilledButton.icon(
+                  ? FilledButton.icon(style: _pflegeButton, 
                       icon: const Icon(Icons.system_update_alt),
                       label: Text(t('Update server now to {v}', {'v': latest})),
                       onPressed: () => _call('POST', '/maintenance/update', null, t('Update started; the server restarts briefly.')),
@@ -787,7 +791,7 @@ class _AppUpdateRowState extends State<_AppUpdateRow> {
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: u != null
-                      ? FilledButton.icon(
+                      ? FilledButton.icon(style: _pflegeButton, 
                           icon: const Icon(Icons.download),
                           label: Text(android ? t('Install version {v}', {'v': u.latest}) : t('Download version {v}', {'v': u.latest})),
                           onPressed: () => runAppUpdate(u, widget.say),

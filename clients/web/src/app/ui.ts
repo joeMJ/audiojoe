@@ -1,7 +1,7 @@
 // Screens of the web app. Plain DOM; each view renders itself into <main>.
 
 import { api, online, codecLabel, qualityBadge, qualityChips, qualityTier, qualityText, type Item, type Playback, type Quality } from "./api";
-import { addOffline, dropPlayedOn, offlineEntry, offlineList, removeFromOffline, retryFailed, setDropPlayed, type OfflineEntry } from "./downloads";
+import { addOffline, clearOffline, dropPlayedOn, offlineEntry, offlineList, removeFromOffline, retryFailed, setDropPlayed, type OfflineEntry } from "./downloads";
 import { ago, bytes, clock, t } from "./i18n";
 import { idbAll } from "./idb";
 import * as player from "./player";
@@ -1031,6 +1031,9 @@ async function renderBooks() {
 
 // ---------------------------------------------------------------- offline
 
+let askClear = false;
+const refreshOffline = () => show("off");
+
 async function renderOffline() {
   main.append(h("h2", {}, t("Offline")));
   try {
@@ -1041,6 +1044,14 @@ async function renderOffline() {
   } catch {
     /* no storage manager */
   }
+  // "Clear cache" asks on the page itself (no browser dialog in the car); the question survives the
+  // re-renders while a download counts up.
+  main.append(askClear
+    ? h("div", { className: "ask" }, h("div", {}, t("Delete all titles saved offline?")),
+        h("div", { className: "row" },
+          h("button", { className: "big", onclick: () => { askClear = false; void clearOffline(); } }, t("Delete")),
+          h("button", { className: "big sec", onclick: () => { askClear = false; refreshOffline(); } }, t("Cancel"))))
+    : h("button", { className: "big sec clear", onclick: () => { askClear = true; refreshOffline(); } }, t("Clear cache")));
   const drop = h("input", { type: "checkbox", checked: dropPlayedOn() }) as HTMLInputElement;
   drop.onchange = () => setDropPlayed(drop.checked);
   main.append(h("label", { className: "switch" }, drop, h("span", {}, t("Remove played media from the cache"))));

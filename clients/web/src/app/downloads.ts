@@ -108,6 +108,16 @@ export async function removeFromOffline(key: string) {
   await idbDel("offline", key);
   notify();
 }
+/** "Clear cache": every offline entry with its files, also running and waiting downloads. A running
+ * download notices that its entry is gone and keeps nothing. The settings stay. */
+export async function clearOffline() {
+  for (const e of await idbAll<OfflineEntry>("offline")) {
+    await idbDel("offline", e.key);
+    await idbDel("items", e.key);
+  }
+  await caches.delete(OFFLINE_CACHE); // also parts left over from earlier removals
+  notify();
+}
 
 let running = false;
 async function process() {
