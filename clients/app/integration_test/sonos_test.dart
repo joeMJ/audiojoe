@@ -1,0 +1,89 @@
+// Playback on a real Sonos speaker, run by hand (it plays aloud, quietly):
+//
+//   flutter test integration_test/sonos_test.dart -d linux --dart-define=SERVER=… --dart-define=USER=… \
+//     --dart-define=PASS=… --dart-define=TOTP_SECRET=… --dart-define=ROOM=6 \
+//     --dart-define=FIRST=jellyfin:… --dart-define=NEXT=jellyfin:…
+//
+// Starts FIRST 20 s before its end on room ROOM (volume 5, restored afterwards), with NEXT after it
+// in the queue. Checks that the shown position follows the speaker and that the app switches to
+// NEXT when the speaker gets there. Then prints "CUT <port>": the event stream is cut without
+// notice from outside (tools/dev/cut-events.sh), and positions must arrive again after reconnecting.
+
+import 'package:audiojoe/api.dart';
+import 'package:audiojoe/main.dart' as app;
+import 'package:audiojoe/player.dart';
+import 'package:audiojoe/sonos.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:integration_test/integration_test.dart';
+
+import 'app_test.dart' show totp, waitFor, waitUntil;
+
+const server = String.fromEnvironment('SERVER');
+const user = String.fromEnvironment('USER');
+const pass = String.fromEnvironment('PASS');
+const secret = String.fromEnvironment('TOTP_SECRET');
+const roomId = int.fromEnvironment('ROOM');
+const first = String.fromEnvironment('FIRST');
+const next = String.fromEnvironment('NEXT');
+
+// ignore: avoid_print
+void log(String s) => print('${DateTime.now().toIso8601String().substring(11, 19)} $s');
+
+void main() {
+  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('sonos: position, next title, stream cut', (tester) async {
+    await app.main();
+    await tester.pumpAndSettle();
+    final fields = find.byType(TextField);
+    await Future.delayed(Duration(seconds: 31 - DateTime.now().second % 30));
+    await tester.enterText(fields.at(0), server);
+    await tester.enterText(fields.at(1), user);
+    await tester.enterText(fields.at(2), pass);
+    await tester.enterText(fields.at(3), totp(secret, DateTime.now()));
+    await tester.enterText(fields.at(4), 'Linux (Test)');
+    await tester.tap(find.byType(FilledButton));
+    await waitFor(tester, find.byTooltip('Server reachable'));
+
+    final room = (await sonos.rooms()).firstWhere((r) => r.id == roomId);
+    final volume = room.volume ?? 15;
+    try {
+      await api.call('POST', '/sonos/$roomId/command', body: {'action': 'volume', 'volume': 5});
+      final a = (await player.meta(first))!, b = (await player.meta(next))!;
+      await player.play([a, b]);
+      await waitUntil(tester, () => player.playing, what: 'playing here');
+      await player.seekTo(a.durationMs! - 20000);
+      await tester.pump(const Duration(seconds: 1));
+      await sonos.playOn(room);
+      final start = player.position;
+      log('on Sonos at $start of ${a.durationMs}');
+
+      // The shown position moves with the speaker (the server reports about every 10 s).
+      await waitUntil(tester, () => player.item?.key == first && player.position > start + 5000, seconds: 30,
+          what: 'position follows the speaker (${player.position})');
+      log('position follows: ${player.position}');
+      expect(player.playing, isFalse, reason: 'the app does not play along');
+
+      // The speaker reaches the next title by itself; the app shows it.
+      await waitUntil(tester, () => player.item?.key == next, seconds: 60, what: 'app switches to the next title');
+      await waitUntil(tester, () => player.position > 3000, seconds: 30, what: 'position of the next title');
+      log('next title shown at ${player.position}, queue index ${player.index}');
+      expect(player.playing, isFalse);
+
+      // Cut the event stream without notice; the app must notice the silence and reconnect.
+      final cut = DateTime.now();
+      log('CUT');
+      await tester.pump(const Duration(seconds: 15));
+      final frozen = player.position;
+      await waitUntil(tester, () => player.position > frozen + 5000, seconds: 120,
+          what: 'positions arrive again after the cut');
+      log('positions again after ${DateTime.now().difference(cut).inSeconds} s: ${player.position}');
+    } finally {
+      await sonos.backToDevice();
+      await api.call('POST', '/sonos/$roomId/command', body: {'action': 'volume', 'volume': volume});
+      await player.stop();
+      await api.call('POST', '/auth/logout');
+    }
+  }, timeout: const Timeout(Duration(minutes: 6)));
+}
