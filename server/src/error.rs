@@ -12,6 +12,7 @@ pub enum ApiError {
     BadRequest(String),
     Unauthorized,
     NotFound,
+    Conflict(String),
     TooManyRequests,
     BadGateway(String),
     Internal(anyhow::Error),
@@ -25,6 +26,7 @@ impl IntoResponse for ApiError {
             ApiError::BadRequest(m) => (StatusCode::BAD_REQUEST, m),
             ApiError::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized".into()),
             ApiError::NotFound => (StatusCode::NOT_FOUND, "not found".into()),
+            ApiError::Conflict(m) => (StatusCode::CONFLICT, m),
             ApiError::TooManyRequests => (StatusCode::TOO_MANY_REQUESTS, "too many attempts, try again later".into()),
             ApiError::BadGateway(m) => (StatusCode::BAD_GATEWAY, m),
             ApiError::Internal(e) => {

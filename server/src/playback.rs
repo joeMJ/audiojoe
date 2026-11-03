@@ -20,6 +20,7 @@ use tokio::sync::broadcast;
 
 use crate::{
     auth::CurrentUser,
+    devices,
     error::{with_db, ApiError, ApiResult},
     AppState,
 };
@@ -40,10 +41,21 @@ pub struct Update {
     title: String,
     #[serde(default)]
     subtitle: String,
+    /// The reporting device's state (playing | paused | stopped) and kind; older clients send neither.
+    #[serde(default)]
+    state: Option<String>,
+    #[serde(default)]
+    kind: Option<String>,
+    #[serde(default)]
+    queue_index: Option<i64>,
 }
 
 fn ts(t: DateTime<Utc>) -> String {
     t.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()
+}
+
+pub fn now() -> String {
+    ts(Utc::now())
 }
 
 fn row_json(r: &rusqlite::Row) -> rusqlite::Result<Value> {
@@ -89,6 +101,19 @@ fn apply(c: &rusqlite::Connection, user: i64, device: &str, key: &str, u: &Updat
     Ok((n > 0, row))
 }
 
+/// Stores the device state that came with an update; returns whether it changed.
+fn report_device(c: &rusqlite::Connection, user: i64, device: &str, key: &str, u: &Update) -> ApiResult<bool> {
+    let Some(state) = u.state.as_deref() else { return Ok(false) };
+    let kind = u.kind.as_deref().filter(|k| devices::valid_kind(k) && *k != "sonos");
+    if !devices::valid_state(state) {
+        return Err(ApiError::BadRequest("invalid state".into()));
+    }
+    let when = ts(u.updated_at.min(Utc::now()));
+    let r = devices::Report { kind, state, key, title: &u.title, subtitle: &u.subtitle, position_ms: u.position_ms,
+                              duration_ms: u.duration_ms, queue_index: u.queue_index, updated_at: &when };
+    Ok(devices::report(c, user, device, &r)?)
+}
+
 /// A position from another system (e.g. Audiobookshelf).
 pub struct External {
     pub position_ms: i64,
@@ -101,7 +126,8 @@ pub struct External {
 
 pub async fn apply_external(state: &AppState, user: i64, device: &str, key: &str, e: External) -> ApiResult<()> {
     let u = Update { key: None, position_ms: e.position_ms, duration_ms: e.duration_ms, finished: e.finished,
-                     updated_at: e.updated_at, title: e.title, subtitle: e.subtitle };
+                     updated_at: e.updated_at, title: e.title, subtitle: e.subtitle, state: None, kind: None,
+                     queue_index: None };
     let (dev, k) = (device.to_string(), key.to_string());
     let (applied, row) = with_db(&state.db, move |c| apply(c, user, &dev, &k, &u)).await?;
     if applied {
@@ -118,10 +144,17 @@ pub async fn put(
 ) -> ApiResult<Json<Value>> {
     let (uid, dev) = (user.id, user.device.clone());
     let k = key.clone();
-    let (applied, row) = with_db(&state.db, move |c| apply(c, uid, &dev, &k, &u)).await?;
+    let (applied, row, reported) = with_db(&state.db, move |c| {
+        let (a, r) = apply(c, uid, &dev, &k, &u)?;
+        Ok((a, r, report_device(c, uid, &dev, &k, &u)?))
+    })
+    .await?;
     if applied {
         let _ = state.events.send((user.id, json!({ "type": "playback", "state": row.clone() })));
         crate::audiobookshelf::push_later(&state, user.id, &key);
+    }
+    if reported {
+        devices::notify(&state, user.id, &user.device).await;
     }
     Ok(Json(json!({ "applied": applied, "state": row })))
 }
@@ -134,15 +167,20 @@ pub async fn sync(State(state): State<AppState>, user: CurrentUser, Json(list): 
     let (uid, dev) = (user.id, user.device.clone());
     let results = with_db(&state.db, move |c| {
         let tx = c.transaction()?;
-        let mut out = Vec::new();
+        let (mut out, mut reported) = (Vec::new(), false);
         for u in &list {
             let key = u.key.clone().ok_or_else(|| ApiError::BadRequest("key missing".into()))?;
             out.push(apply(&tx, uid, &dev, &key, u)?);
+            reported |= report_device(&tx, uid, &dev, &key, u)?;
         }
         tx.commit()?;
-        Ok(out)
+        Ok((out, reported))
     })
     .await?;
+    let (results, reported) = results;
+    if reported {
+        devices::notify(&state, user.id, &user.device).await;
+    }
     for (applied, row) in &results {
         if *applied {
             let _ = state.events.send((user.id, json!({ "type": "playback", "state": row })));
@@ -181,20 +219,37 @@ pub async fn list(State(state): State<AppState>, user: CurrentUser, Query(q): Qu
     .await
 }
 
-/// Server-Sent Events with the user's playback changes from all devices.
-pub async fn events(State(state): State<AppState>, user: CurrentUser) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+#[derive(Deserialize)]
+pub struct EventsQuery {
+    /// The connecting device's kind (linux | windows | android | web).
+    #[serde(default)]
+    kind: Option<String>,
+}
+
+/// Server-Sent Events with the user's playback changes from all devices. An open stream
+/// marks its device as online.
+pub async fn events(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Query(q): Query<EventsQuery>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    if let Some(kind) = q.kind.filter(|k| devices::valid_kind(k) && k != "sonos") {
+        let (uid, dev) = (user.id, user.device.clone());
+        let _ = with_db(&state.db, move |c| Ok(devices::set_kind(c, uid, &dev, &kind)?)).await;
+    }
+    let guard = devices::connect(&state, user.id, &user.device);
     let rx = state.events.subscribe();
-    let stream = futures_util::stream::unfold((rx, user.id), |(mut rx, uid)| async move {
+    let stream = futures_util::stream::unfold((rx, user.id, guard), |(mut rx, uid, guard)| async move {
         loop {
             match rx.recv().await {
                 Ok((u, v)) if u == uid => {
                     let name = v["type"].as_str().unwrap_or("playback").to_string();
-                    return Some((Ok(Event::default().event(name).data(v.to_string())), (rx, uid)));
+                    return Some((Ok(Event::default().event(name).data(v.to_string())), (rx, uid, guard)));
                 }
                 Ok(_) => continue,
                 // Missed events: tell the client to reload instead of silently dropping them.
                 Err(broadcast::error::RecvError::Lagged(_)) => {
-                    return Some((Ok(Event::default().event("resync").data("{}")), (rx, uid)))
+                    return Some((Ok(Event::default().event("resync").data("{}")), (rx, uid, guard)))
                 }
                 Err(broadcast::error::RecvError::Closed) => return None,
             }

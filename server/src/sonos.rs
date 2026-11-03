@@ -8,8 +8,16 @@
 //!
 //! While a speaker plays one of our streams, its position is stored as the user's
 //! playback position (device "Sonos <room>"), so other devices continue from there.
+//!
+//! "Play there" opens a session per room (`sonos_session`, kept across restarts): the queue
+//! it plays, its state and position. A stop, a takeover or the speaker playing something
+//! else ends it; the user's devices get an event `sonos` and the room's `device` row.
 
-use std::{collections::HashMap, net::SocketAddr, time::Duration};
+use std::{
+    collections::HashMap,
+    net::SocketAddr,
+    time::{Duration, Instant},
+};
 
 use axum::{
     extract::{Path, State},
@@ -28,14 +36,21 @@ use sha2::Sha256;
 use crate::{
     auth::CurrentUser,
     error::{with_db, ApiError, ApiResult},
-    media, playback, AppState,
+    devices, media, playback, AppState,
 };
 
 const START_TIMEOUT: Duration = Duration::from_secs(20);
 const TIMEOUT: Duration = Duration::from_secs(3);
 /// Stream URLs stay valid this long (Sonos re-requests ranges while playing).
 const URL_HOURS: i64 = 24;
-const POLL_EVERY: Duration = Duration::from_secs(10);
+/// Coordinators with a session are asked this often (and right after each command) …
+const POLL_EVERY: Duration = Duration::from_secs(5);
+/// … without one only this often.
+const IDLE_EVERY: Duration = Duration::from_secs(30);
+/// A session whose speaker stays stopped (or unreachable) this long has ended.
+const STOPPED_GRACE: Duration = Duration::from_secs(20);
+/// A title counts as heard when its last position lay this close to its end.
+const HEARD_TAIL_MS: i64 = 30_000;
 
 // ---------------------------------------------------------------- SOAP
 
@@ -219,7 +234,7 @@ async fn coordinator(state: &AppState, sp: &Speaker) -> ApiResult<String> {
     Ok(group_of(&groups, &sp.uuid).and_then(|g| g.coordinator_ip()).unwrap_or(&sp.ip).to_string())
 }
 
-async fn status_of(state: &AppState, sp: &Speaker, all: &[Speaker], groups: &[Group]) -> Value {
+async fn status_of(state: &AppState, sp: &Speaker, all: &[Speaker], groups: &[Group], user: i64, sessions: &[Session]) -> Value {
     let mut out = json!({ "id": sp.id, "ip": sp.ip, "name": sp.name, "model": sp.model, "s2": sp.s2, "reachable": false });
     let Some(group) = group_of(groups, &sp.uuid) else {
         return out;
@@ -252,8 +267,148 @@ async fn status_of(state: &AppState, sp: &Speaker, all: &[Speaker], groups: &[Gr
     o.insert("state".into(), json!(transport.as_deref().and_then(|t| tag(t, "CurrentTransportState"))));
     o.insert("volume".into(), json!(volume.as_deref().and_then(|v| tag(v, "CurrentVolume")).and_then(|v| v.parse::<i64>().ok())));
     o.insert("position_ms".into(), json!(ours.as_ref().and_then(|c| pos.as_deref().and_then(|p| tag(p, "RelTime")).and_then(|t| parse_time(&t)).map(|ms| ms + c.offset_ms + c.start_ms))));
+    let playing = matches!(o["state"].as_str(), Some("PLAYING" | "TRANSITIONING"));
+    let session = sessions.iter().find(|s| s.coordinator == coord || group.members.iter().any(|m| all.iter().any(|a| a.id == s.room_id && a.uuid == m.uuid)));
+    let busy = session.is_some_and(|s| s.user != user) || (playing && occupied(ours.as_ref().map(|c| c.user), &uri, user));
+    o.insert("busy".into(), json!(busy));
+    o.insert("session".into(), json!(session.filter(|s| s.user == user).map(|s| json!({
+        "room": s.room_id, "state": s.state, "key": s.key, "started_by": s.started_by }))));
     o.insert("item_key".into(), json!(ours.map(|c| c.key)));
     out
+}
+
+/// Whether a speaker plays something that is not this user's: another service, another user.
+fn occupied(claim_user: Option<i64>, uri: &str, user: i64) -> bool {
+    match claim_user {
+        Some(u) => u != user,
+        None => !uri.is_empty(),
+    }
+}
+
+/// Whether a title whose last position was `at` has been heard to its end.
+fn heard_to_end(at: i64, duration_ms: Option<i64>) -> bool {
+    duration_ms.is_some_and(|d| d > 0 && at >= d - HEARD_TAIL_MS)
+}
+
+// ---------------------------------------------------------------- sessions
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Session {
+    pub room_id: i64,
+    pub room: String,
+    pub coordinator: String,
+    pub user: i64,
+    pub key: String,
+    pub queue: Vec<String>,
+    pub idx: usize,
+    pub state: String,
+    pub position_ms: i64,
+    pub started_by: String,
+}
+
+impl Session {
+    fn device(&self) -> String {
+        format!("Sonos {}", self.room)
+    }
+}
+
+/// Sessions that have not ended.
+fn load_sessions(c: &rusqlite::Connection) -> rusqlite::Result<Vec<Session>> {
+    let mut st = c.prepare(
+        "SELECT s.room_id, p.name, s.coordinator, s.user_id, s.item_key, s.queue, s.idx, s.state, s.position_ms, s.started_by
+         FROM sonos_session s JOIN sonos_speaker p ON p.id = s.room_id WHERE s.state <> 'ended' ORDER BY s.room_id",
+    )?;
+    let rows = st.query_map([], |r| {
+        Ok(Session {
+            room_id: r.get(0)?,
+            room: r.get(1)?,
+            coordinator: r.get(2)?,
+            user: r.get(3)?,
+            key: r.get(4)?,
+            queue: serde_json::from_str(&r.get::<_, String>(5)?).unwrap_or_default(),
+            idx: r.get::<_, i64>(6)?.max(0) as usize,
+            state: r.get(7)?,
+            position_ms: r.get(8)?,
+            started_by: r.get(9)?,
+        })
+    })?;
+    rows.collect()
+}
+
+/// Opens (or replaces) the session of a room; a group has one session at its coordinator.
+fn open_session(c: &rusqlite::Connection, s: &Session) -> rusqlite::Result<()> {
+    let now = playback::now();
+    c.execute("DELETE FROM sonos_session WHERE coordinator = ?1 AND room_id <> ?2", (&s.coordinator, s.room_id))?;
+    c.execute(
+        "INSERT INTO sonos_session (room_id, coordinator, user_id, item_key, queue, idx, state, position_ms, started_by,
+                                    started_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10)
+         ON CONFLICT (room_id) DO UPDATE SET coordinator = excluded.coordinator, user_id = excluded.user_id,
+           item_key = excluded.item_key, queue = excluded.queue, idx = excluded.idx, state = excluded.state,
+           position_ms = excluded.position_ms, started_by = excluded.started_by, started_at = excluded.started_at,
+           updated_at = excluded.updated_at",
+        (s.room_id, &s.coordinator, s.user, &s.key, serde_json::to_string(&s.queue).unwrap(), s.idx as i64, &s.state,
+         s.position_ms, &s.started_by, &now),
+    )?;
+    Ok(())
+}
+
+fn save_session(c: &rusqlite::Connection, s: &Session) -> rusqlite::Result<()> {
+    c.execute(
+        "UPDATE sonos_session SET coordinator = ?2, item_key = ?3, idx = ?4, state = ?5, position_ms = ?6, updated_at = ?7
+         WHERE room_id = ?1",
+        (s.room_id, &s.coordinator, &s.key, s.idx as i64, &s.state, s.position_ms, playback::now()),
+    )?;
+    Ok(())
+}
+
+async fn sessions(state: &AppState) -> Vec<Session> {
+    with_db(&state.db, |c| Ok(load_sessions(c)?)).await.unwrap_or_default()
+}
+
+/// The queue the device last played, as keys, if it contains `key`; else just `key`.
+fn queue_of(c: &rusqlite::Connection, user: i64, device: &str, key: &str) -> (Vec<String>, usize) {
+    let data: Option<String> =
+        c.query_row("SELECT data FROM queue WHERE user_id = ?1 AND device = ?2", (user, device), |r| r.get(0)).ok();
+    let keys: Vec<String> = data
+        .and_then(|d| serde_json::from_str::<Value>(&d).ok())
+        .and_then(|q| q["items"].as_array().map(|a| a.iter().filter_map(|i| i["key"].as_str().map(str::to_string)).collect()))
+        .unwrap_or_default();
+    match keys.iter().position(|k| k == key) {
+        Some(i) => (keys, i),
+        None => (vec![key.to_string()], 0),
+    }
+}
+
+/// Stores the session's room as a device (kind `sonos`) and tells the user's devices.
+async fn report_room(state: &AppState, s: &Session, title: &str, subtitle: &str, duration_ms: Option<i64>) {
+    let (s2, t, st, now) = (s.clone(), title.to_string(), subtitle.to_string(), playback::now());
+    let dev_state = match s.state.as_str() {
+        "playing" => "playing",
+        "paused" => "paused",
+        _ => "stopped",
+    };
+    let stored = with_db(&state.db, move |c| {
+        let r = devices::Report { kind: Some("sonos"), state: dev_state, key: &s2.key, title: &t, subtitle: &st,
+                                  position_ms: s2.position_ms, duration_ms, queue_index: Some(s2.idx as i64), updated_at: &now };
+        Ok(devices::report(c, s2.user, &s2.device(), &r)?)
+    })
+    .await;
+    if stored.unwrap_or(false) {
+        devices::notify(state, s.user, &s.device()).await;
+    }
+}
+
+/// Ends a session: stopped, taken over, or the speaker plays something else.
+async fn end_session(state: &AppState, s: &Session, reason: &str) {
+    let mut e = s.clone();
+    e.state = "ended".into();
+    let e2 = e.clone();
+    let _ = with_db(&state.db, move |c| Ok(save_session(c, &e2)?)).await;
+    tracing::info!("sonos {}: session ended ({reason})", s.room);
+    report_room(state, &e, "", "", None).await;
+    let _ = state.events.send((s.user, json!({ "type": "sonos", "room": s.room_id, "state": "ended", "reason": reason,
+                                                "key": s.key, "position_ms": s.position_ms }))); 
 }
 
 // ---------------------------------------------------------------- signed stream URLs
@@ -322,10 +477,11 @@ async fn lan_stream(State(state): State<AppState>, Path(token): Path<String>, he
 
 // ---------------------------------------------------------------- handlers
 
-pub async fn list(State(state): State<AppState>, _user: CurrentUser) -> ApiResult<Json<Value>> {
+pub async fn list(State(state): State<AppState>, user: CurrentUser) -> ApiResult<Json<Value>> {
     let list = speakers(&state).await?;
     let groups = topology(&state, &list).await;
-    let futures = list.iter().map(|sp| status_of(&state, sp, &list, &groups));
+    let open = sessions(&state).await;
+    let futures = list.iter().map(|sp| status_of(&state, sp, &list, &groups, user.id, &open));
     Ok(Json(Value::Array(futures_util::future::join_all(futures).await)))
 }
 
@@ -396,17 +552,37 @@ pub struct PlayRequest {
     position_ms: i64,
 }
 
-/// Plays an item on the speaker's group, starting at a position.
+/// Plays an item on the speaker's group, starting at a position, and opens the room's
+/// session with the calling device's queue.
 pub async fn play(
     State(state): State<AppState>,
     user: CurrentUser,
     Path(id): Path<i64>,
     Json(req): Json<PlayRequest>,
 ) -> ApiResult<Json<Value>> {
-    let lan = state.config.sonos.as_ref().and_then(|s| s.listen).ok_or_else(|| ApiError::BadRequest("sonos.listen not configured".into()))?;
     let sp = speaker(&state, id).await?;
     let coord = coordinator(&state, &sp).await?;
-    let meta = media::meta_for(&state, &user, &req.key).await?;
+    if sessions(&state).await.iter().any(|s| (s.room_id == id || s.coordinator == coord) && s.user != user.id) {
+        return Err(ApiError::Conflict("speaker is busy".into()));
+    }
+    start(&state, &user, &sp, &coord, &req.key, req.position_ms).await?;
+    let (uid, dev, key) = (user.id, user.device.clone(), req.key.clone());
+    let (queue, idx) = with_db(&state.db, move |c| Ok(queue_of(c, uid, &dev, &key))).await?;
+    let s = Session { room_id: sp.id, room: sp.name.clone(), coordinator: coord.clone(), user: user.id, key: req.key.clone(),
+                      queue, idx, state: "playing".into(), position_ms: req.position_ms, started_by: user.device.clone() };
+    let s2 = s.clone();
+    with_db(&state.db, move |c| Ok(open_session(c, &s2)?)).await?;
+    let meta = media::meta_for(&state, &user, &req.key).await.unwrap_or(Value::Null);
+    report_room(&state, &s, meta["title"].as_str().unwrap_or(""), meta["subtitle"].as_str().unwrap_or(""), meta["duration_ms"].as_i64()).await;
+    state.sonos_poke.notify_one();
+    Ok(Json(json!({ "ok": true, "speaker": sp.name, "coordinator": coord })))
+}
+
+/// Sends an item to a coordinator, starting at a position, and queues what follows.
+async fn start(state: &AppState, user: &CurrentUser, sp: &Speaker, coord: &str, key: &str, position_ms: i64) -> ApiResult<()> {
+    let lan = state.config.sonos.as_ref().and_then(|s| s.listen).ok_or_else(|| ApiError::BadRequest("sonos.listen not configured".into()))?;
+    let req = PlayRequest { key: key.to_string(), position_ms };
+    let meta = media::meta_for(state, user, &req.key).await?;
     // Multi-file books: the file containing the position.
     let parts = meta["parts"].as_array().cloned().unwrap_or_default();
     let (part, offset) = parts
@@ -430,17 +606,37 @@ pub async fn play(
         room: sp.name.clone(),
     };
     let live = meta["kind"] == "radio";
-    let (url, didl) = track(&state, lan, &meta, &claim);
-    soap(&state.http, &coord, AVT, "SetAVTransportURI",
+    let (url, didl) = track(state, lan, &meta, &claim);
+    soap(&state.http, coord, AVT, "SetAVTransportURI",
          &format!("<InstanceID>0</InstanceID><CurrentURI>{}</CurrentURI><CurrentURIMetaData>{}</CurrentURIMetaData>", xml_escape(&url), xml_escape(&didl))).await?;
     if !live && !converted && local > 1000 {
         // Some sources are not seekable before playback starts; ignore that error.
-        let _ = soap(&state.http, &coord, AVT, "Seek",
+        let _ = soap(&state.http, coord, AVT, "Seek",
                      &format!("<InstanceID>0</InstanceID><Unit>REL_TIME</Unit><Target>{}</Target>", format_time(local))).await;
     }
-    soap(&state.http, &coord, AVT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>").await?;
-    queue_next(&state, lan, &coord, &meta, &claim).await;
-    Ok(Json(json!({ "ok": true, "speaker": sp.name, "coordinator": coord })))
+    soap(&state.http, coord, AVT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>").await?;
+    queue_next(state, lan, coord, &meta, &claim).await;
+    Ok(())
+}
+
+/// Moves to a position: a seek within the file the speaker plays, else the stream anew
+/// (converted streams cannot seek; multi-file books may need another file).
+async fn seek(state: &AppState, user: &CurrentUser, sp: &Speaker, coord: &str, key: &str, position_ms: i64) -> ApiResult<()> {
+    let pos = soap(&state.http, coord, AVT, "GetPositionInfo", "<InstanceID>0</InstanceID>").await?;
+    let claim = decode_uri(state, &unescape(&tag(&pos, "TrackURI").unwrap_or_default()));
+    if let Some(c) = claim.filter(|c| c.key == key && c.start_ms == 0) {
+        let meta = media::meta_for(state, user, key).await?;
+        let converted = media::conversion(&meta["quality"], &c.profile)?.is_some();
+        let parts = meta["parts"].as_array().cloned().unwrap_or_default();
+        let end = parts.iter().find(|p| p["start_ms"].as_i64() == Some(c.offset_ms)).and_then(|p| p["duration_ms"].as_i64()).map(|d| c.offset_ms + d);
+        let same_file = parts.len() < 2 || (position_ms >= c.offset_ms && end.is_none_or(|e| position_ms < e));
+        if !converted && same_file {
+            soap(&state.http, coord, AVT, "Seek",
+                 &format!("<InstanceID>0</InstanceID><Unit>REL_TIME</Unit><Target>{}</Target>", format_time(position_ms - c.offset_ms))).await?;
+            return Ok(());
+        }
+    }
+    start(state, user, sp, coord, key, position_ms).await
 }
 
 /// Signed stream URL and DIDL metadata for the file a claim describes.
@@ -552,6 +748,8 @@ fn didl(meta: &Value, url: &str, mime: &str) -> String {
 pub struct Command {
     action: String,
     volume: Option<i64>,
+    #[serde(default)]
+    position_ms: Option<i64>,
 }
 
 /// A visible room of the speaker's group, or an error for parts of pairs and home theatres.
@@ -594,19 +792,67 @@ pub async fn leave(State(state): State<AppState>, _user: CurrentUser, Path(id): 
     Ok(Json(json!({ "ok": true })))
 }
 
-/// pause | resume | stop | volume (the whole group) | room_volume (this room only)
+/// pause | resume | stop | volume (the whole group) | room_volume (this room only) |
+/// next | prev (title of the session's queue) | seek (position_ms) | takeover (pauses, ends
+/// the session and answers with the position, so the calling device continues there)
 pub async fn command(
     State(state): State<AppState>,
-    _user: CurrentUser,
+    user: CurrentUser,
     Path(id): Path<i64>,
     Json(cmd): Json<Command>,
 ) -> ApiResult<Json<Value>> {
     let sp = speaker(&state, id).await?;
     let coord = coordinator(&state, &sp).await?;
+    let session = sessions(&state).await.into_iter().find(|s| s.room_id == id || s.coordinator == coord);
+    if session.as_ref().is_some_and(|s| s.user != user.id) {
+        return Err(ApiError::Conflict("speaker is busy".into()));
+    }
+    let need = || session.clone().ok_or_else(|| ApiError::BadRequest("nothing of ours plays there".into()));
+    let mut answer = json!({ "ok": true });
     match cmd.action.as_str() {
         "pause" => soap(&state.http, &coord, AVT, "Pause", "<InstanceID>0</InstanceID>").await?,
         "resume" => soap(&state.http, &coord, AVT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>").await?,
-        "stop" => soap(&state.http, &coord, AVT, "Stop", "<InstanceID>0</InstanceID>").await?,
+        "stop" => {
+            let r = soap(&state.http, &coord, AVT, "Stop", "<InstanceID>0</InstanceID>").await?;
+            if let Some(s) = &session {
+                end_session(&state, s, "stop").await;
+            }
+            r
+        }
+        "next" | "prev" => {
+            let mut s = need()?;
+            let i = if cmd.action == "next" { s.idx + 1 } else { s.idx.checked_sub(1).ok_or_else(|| ApiError::BadRequest("no previous title".into()))? };
+            let key = s.queue.get(i).cloned().ok_or_else(|| ApiError::BadRequest("no next title".into()))?;
+            let room = speaker(&state, s.room_id).await?;
+            start(&state, &user, &room, &coord, &key, 0).await?;
+            (s.key, s.idx, s.position_ms, s.state) = (key, i, 0, "playing".into());
+            let s2 = s.clone();
+            with_db(&state.db, move |c| Ok(save_session(c, &s2)?)).await?;
+            String::new()
+        }
+        "seek" => {
+            let s = need()?;
+            let at = cmd.position_ms.filter(|p| *p >= 0).ok_or_else(|| ApiError::BadRequest("position_ms required".into()))?;
+            let room = speaker(&state, s.room_id).await?;
+            seek(&state, &user, &room, &coord, &s.key, at).await?;
+            String::new()
+        }
+        "takeover" => {
+            let r = soap(&state.http, &coord, AVT, "Pause", "<InstanceID>0</InstanceID>").await?;
+            let pos = soap(&state.http, &coord, AVT, "GetPositionInfo", "<InstanceID>0</InstanceID>").await?;
+            if let Some(c) = decode_uri(&state, &unescape(&tag(&pos, "TrackURI").unwrap_or_default())).filter(|c| c.user == user.id) {
+                let at = tag(&pos, "RelTime").and_then(|t| parse_time(&t)).map(|ms| ms + c.offset_ms + c.start_ms).unwrap_or(0);
+                let ext = playback::External { position_ms: at, duration_ms: None, finished: false, updated_at: Utc::now(),
+                                               title: String::new(), subtitle: String::new() };
+                let _ = playback::apply_external(&state, user.id, &format!("Sonos {}", c.room), &c.key, ext).await;
+                answer = json!({ "ok": true, "key": c.key, "position_ms": at });
+                if let Some(mut s) = session.clone() {
+                    s.position_ms = at;
+                    end_session(&state, &s, "takeover").await;
+                }
+            }
+            r
+        }
         "volume" | "room_volume" => {
             let v = cmd.volume.ok_or_else(|| ApiError::BadRequest("volume 0–100 required".into()))?.clamp(0, 100);
             let grouped = cmd.action == "volume" && room(&state, &sp).await.is_ok_and(|(_, g)| g.rooms().len() > 1);
@@ -618,77 +864,194 @@ pub async fn command(
                 soap(&state.http, &sp.ip, RC, "SetVolume", &format!("<InstanceID>0</InstanceID><Channel>Master</Channel><DesiredVolume>{v}</DesiredVolume>")).await?
             }
         }
-        _ => return Err(ApiError::BadRequest("action: pause | resume | stop | volume | room_volume".into())),
+        _ => return Err(ApiError::BadRequest("action: pause | resume | stop | volume | room_volume | next | prev | seek | takeover".into())),
     };
-    Ok(Json(json!({ "ok": true })))
+    state.sonos_poke.notify_one();
+    Ok(Json(answer))
 }
 
-/// Stores the position of speakers that play one of our streams.
-pub async fn poll_loop(state: AppState) {
-    let mut last: HashMap<String, i64> = HashMap::new();
-    // Per coordinator: the track whose successor has been queued, and the item playing.
-    let mut queued: HashMap<String, String> = HashMap::new();
-    let mut playing: HashMap<String, (i64, String, String, i64)> = HashMap::new(); // user, room, key, position
-    // Title and subtitle per item, so a position stored by the speaker carries them.
-    let mut titles: HashMap<String, (String, String)> = HashMap::new();
-    loop {
-        tokio::time::sleep(POLL_EVERY).await;
-        let Ok(list) = speakers(&state).await else { continue };
-        // All at once: speakers that are switched off would otherwise hold up the round by their timeout.
-        let found = futures_util::future::join_all(list.iter().map(|sp| coordinator(&state, sp))).await;
-        let coords: std::collections::BTreeSet<String> = found.into_iter().flatten().collect();
-        for coord in coords {
-            let Ok(pos) = soap(&state.http, &coord, AVT, "GetPositionInfo", "<InstanceID>0</InstanceID>").await else { continue };
-            let uri = unescape(&tag(&pos, "TrackURI").unwrap_or_default());
-            let Some(c) = decode_uri(&state, &uri) else { continue };
-            if c.key.starts_with("radio:") {
-                continue;
-            }
-            // A stopped speaker keeps its last track at 0:00: that is no position to store.
-            let Ok(transport) = soap(&state.http, &coord, AVT, "GetTransportInfo", "<InstanceID>0</InstanceID>").await else { continue };
-            if !matches!(tag(&transport, "CurrentTransportState").as_deref(), Some("PLAYING" | "PAUSED_PLAYBACK")) {
-                continue;
-            }
-            if queued.get(&coord) != Some(&uri) {
-                // A new track (started here or reached by the speaker): queue what follows it.
-                if let (Some(lan), Ok(meta)) = (lan_addr(&state), media::meta_for(&state, &stream_user(&c), &c.key).await) {
-                    queue_next(&state, lan, &coord, &meta, &c).await;
-                }
-                queued.insert(coord.clone(), uri.clone());
-            }
-            let Some(ms) = tag(&pos, "RelTime").and_then(|t| parse_time(&t)) else { continue };
-            let global = c.offset_ms + c.start_ms + ms;
-            let device = format!("Sonos {}", c.room);
-            // The speaker moved on to another title: the one before is heard to the end.
-            if let Some((user, room, key, at)) = playing.get(&coord).cloned() {
-                if key != c.key {
-                    let done = playback::External { position_ms: at, duration_ms: None, finished: true, updated_at: Utc::now(),
-                                                    title: String::new(), subtitle: String::new() };
-                    let _ = playback::apply_external(&state, user, &format!("Sonos {room}"), &key, done).await;
-                }
-            }
-            playing.insert(coord.clone(), (c.user, c.room.clone(), c.key.clone(), global));
-            if last.get(&coord).is_some_and(|&p| (p - global).abs() < 2000) {
-                continue; // paused or unchanged
-            }
-            last.insert(coord.clone(), global);
-            if !titles.contains_key(&c.key) {
-                if let Ok(meta) = media::meta_for(&state, &stream_user(&c), &c.key).await {
-                    let text = |k: &str| meta[k].as_str().unwrap_or_default().to_string();
-                    titles.insert(c.key.clone(), (text("title"), text("subtitle")));
-                }
-            }
-            let (title, subtitle) = titles.get(&c.key).cloned().unwrap_or_default();
-            let ext = playback::External {
-                position_ms: global,
-                duration_ms: None,
-                finished: false,
-                updated_at: Utc::now(),
-                title,
-                subtitle,
-            };
-            let _ = playback::apply_external(&state, c.user, &device, &c.key, ext).await;
+/// What the poll loop remembers between rounds.
+#[derive(Default)]
+struct Poller {
+    /// Per coordinator: the last stored position, the track whose successor has been queued,
+    /// and the item playing (user, room, key, position).
+    last: HashMap<String, i64>,
+    queued: HashMap<String, String>,
+    playing: HashMap<String, (i64, String, String, i64)>,
+    /// Title, subtitle and duration per item, so positions stored for the speaker carry them.
+    titles: HashMap<String, (String, String, Option<i64>)>,
+    /// Since when a session's speaker has been stopped or unreachable.
+    stopped_since: HashMap<i64, Instant>,
+    /// The reason last logged per address, so a switched-off speaker is logged once.
+    warned: HashMap<String, String>,
+}
+
+impl Poller {
+    /// Logs a failure once per address and again only when the reason changes.
+    fn warn(&mut self, addr: &str, reason: &str) -> bool {
+        if self.warned.get(addr).map(String::as_str) == Some(reason) {
+            return false;
         }
+        tracing::warn!("sonos {addr}: poll failed: {reason}");
+        self.warned.insert(addr.to_string(), reason.to_string());
+        true
+    }
+
+    fn ok(&mut self, addr: &str) {
+        if self.warned.remove(addr).is_some() {
+            tracing::info!("sonos {addr}: answers again");
+        }
+    }
+
+    async fn title(&mut self, state: &AppState, c: &Claim) -> (String, String, Option<i64>) {
+        if !self.titles.contains_key(&c.key) {
+            if let Ok(meta) = media::meta_for(state, &stream_user(c), &c.key).await {
+                let text = |k: &str| meta[k].as_str().unwrap_or_default().to_string();
+                self.titles.insert(c.key.clone(), (text("title"), text("subtitle"), meta["duration_ms"].as_i64()));
+            }
+        }
+        self.titles.get(&c.key).cloned().unwrap_or_default()
+    }
+
+    /// A session's speaker did not play: ends the session after the grace time.
+    async fn not_playing(&mut self, state: &AppState, s: &Session) {
+        let since = *self.stopped_since.entry(s.room_id).or_insert_with(Instant::now);
+        if since.elapsed() >= STOPPED_GRACE {
+            self.stopped_since.remove(&s.room_id);
+            end_session(state, s, "stopped").await;
+        }
+    }
+}
+
+/// Follows sessions and stores the position of speakers that play one of our streams.
+pub async fn poll_loop(state: AppState) {
+    let mut p = Poller::default();
+    loop {
+        let wait = if sessions(&state).await.is_empty() { IDLE_EVERY } else { POLL_EVERY };
+        tokio::select! {
+            _ = tokio::time::sleep(wait) => {}
+            _ = state.sonos_poke.notified() => {}
+        }
+        poll_once(&state, &mut p).await;
+    }
+}
+
+async fn poll_once(state: &AppState, p: &mut Poller) {
+    let Ok(list) = speakers(state).await else { return };
+    // All at once: speakers that are switched off would otherwise hold up the round by their timeout.
+    let found = futures_util::future::join_all(list.iter().map(|sp| coordinator(state, sp))).await;
+    let mut coord_of: HashMap<i64, String> = HashMap::new();
+    for (sp, r) in list.iter().zip(found) {
+        match r {
+            Ok(c) => {
+                p.ok(&sp.ip);
+                coord_of.insert(sp.id, c);
+            }
+            Err(e) => {
+                p.warn(&sp.ip, &format!("{e:?}"));
+            }
+        }
+    }
+    // Sessions follow their room's group; a room that does not answer counts as stopped.
+    let mut open = Vec::new();
+    for mut s in sessions(state).await {
+        match coord_of.get(&s.room_id) {
+            Some(c) => {
+                s.coordinator = c.clone();
+                open.push(s);
+            }
+            None => p.not_playing(state, &s).await,
+        }
+    }
+    let coords: std::collections::BTreeSet<String> = coord_of.values().cloned().collect();
+    for coord in coords {
+        let here: Vec<Session> = open.iter().filter(|s| s.coordinator == coord).cloned().collect();
+        let answers = async {
+            let pos = soap(&state.http, &coord, AVT, "GetPositionInfo", "<InstanceID>0</InstanceID>").await?;
+            let transport = soap(&state.http, &coord, AVT, "GetTransportInfo", "<InstanceID>0</InstanceID>").await?;
+            Ok::<_, ApiError>((pos, transport))
+        };
+        let (pos, transport) = match answers.await {
+            Ok(a) => a,
+            Err(e) => {
+                p.warn(&coord, &format!("{e:?}"));
+                for s in &here {
+                    p.not_playing(state, s).await;
+                }
+                continue;
+            }
+        };
+        p.ok(&coord);
+        let ts = tag(&transport, "CurrentTransportState").unwrap_or_default();
+        let uri = unescape(&tag(&pos, "TrackURI").unwrap_or_default());
+        let claim = decode_uri(state, &uri);
+        let global = claim.as_ref().and_then(|c| tag(&pos, "RelTime").and_then(|t| parse_time(&t)).map(|ms| c.offset_ms + c.start_ms + ms));
+        for s in &here {
+            if occupied(claim.as_ref().map(|c| c.user), &uri, s.user) {
+                p.stopped_since.remove(&s.room_id);
+                end_session(state, s, "foreign").await;
+                continue;
+            }
+            if !matches!(ts.as_str(), "PLAYING" | "PAUSED_PLAYBACK" | "TRANSITIONING") {
+                p.not_playing(state, s).await;
+                continue;
+            }
+            p.stopped_since.remove(&s.room_id);
+            let mut n = s.clone();
+            if let Some(c) = &claim {
+                if c.key != n.key {
+                    n.key = c.key.clone();
+                    if let Some(i) = n.queue.iter().position(|k| *k == c.key) {
+                        n.idx = i;
+                    }
+                }
+            }
+            if let Some(g) = global {
+                n.position_ms = g;
+            }
+            n.state = if ts == "PAUSED_PLAYBACK" { "paused" } else { "playing" }.into();
+            let n2 = n.clone();
+            let _ = with_db(&state.db, move |c| Ok(save_session(c, &n2)?)).await;
+            let (title, subtitle, duration) = match &claim {
+                Some(c) => p.title(state, c).await,
+                None => Default::default(),
+            };
+            report_room(state, &n, &title, &subtitle, duration).await;
+        }
+        let Some(c) = claim else { continue };
+        // Radio has no position; a stopped speaker keeps its last track at 0:00: no position to store.
+        if c.key.starts_with("radio:") || !matches!(ts.as_str(), "PLAYING" | "PAUSED_PLAYBACK") {
+            continue;
+        }
+        if p.queued.get(&coord) != Some(&uri) {
+            // A new track (started here or reached by the speaker): queue what follows it.
+            if let (Some(lan), Ok(meta)) = (lan_addr(state), media::meta_for(state, &stream_user(&c), &c.key).await) {
+                queue_next(state, lan, &coord, &meta, &c).await;
+            }
+            p.queued.insert(coord.clone(), uri.clone());
+        }
+        let Some(global) = global else { continue };
+        let device = format!("Sonos {}", c.room);
+        // The speaker moved on to another title: the one before is heard to the end only
+        // when its last position lay within its last 30 seconds.
+        if let Some((user, room, key, at)) = p.playing.get(&coord).cloned() {
+            if key != c.key {
+                let duration = p.titles.get(&key).and_then(|t| t.2);
+                if heard_to_end(at, duration) {
+                    let done = playback::External { position_ms: at, duration_ms: duration, finished: true, updated_at: Utc::now(),
+                                                    title: String::new(), subtitle: String::new() };
+                    let _ = playback::apply_external(state, user, &format!("Sonos {room}"), &key, done).await;
+                }
+            }
+        }
+        p.playing.insert(coord.clone(), (c.user, c.room.clone(), c.key.clone(), global));
+        if p.last.get(&coord).is_some_and(|&l| (l - global).abs() < 2000) {
+            continue; // paused or unchanged
+        }
+        p.last.insert(coord.clone(), global);
+        let (title, subtitle, duration) = p.title(state, &c).await;
+        let ext = playback::External { position_ms: global, duration_ms: duration, finished: false, updated_at: Utc::now(), title, subtitle };
+        let _ = playback::apply_external(state, c.user, &device, &c.key, ext).await;
     }
 }
 
@@ -699,6 +1062,74 @@ pub fn lan_addr(state: &AppState) -> Option<SocketAddr> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn db() -> rusqlite::Connection {
+        let c = crate::db::open_memory().unwrap();
+        c.execute("INSERT INTO user (id, name, password_hash, totp_secret) VALUES (1, 'u', 'x', 'y')", []).unwrap();
+        for (id, ip, name) in [(5, "10.0.0.2", "Buero"), (6, "10.0.0.3", "Badezimmer")] {
+            c.execute("INSERT INTO sonos_speaker (id, ip, name, uuid, model, s2) VALUES (?1, ?2, ?3, ?3, 'One', 1)", (id, ip, name)).unwrap();
+        }
+        c
+    }
+
+    fn session(room: i64, coord: &str) -> Session {
+        Session { room_id: room, room: if room == 5 { "Buero".into() } else { "Badezimmer".into() }, coordinator: coord.into(),
+                  user: 1, key: "jellyfin:1:a".into(), queue: vec!["jellyfin:1:a".into(), "jellyfin:1:b".into()], idx: 0,
+                  state: "playing".into(), position_ms: 1000, started_by: "Linux".into() }
+    }
+
+    #[test]
+    fn sessions_survive_a_restart_and_a_group_has_one() {
+        let c = db();
+        open_session(&c, &session(5, "10.0.0.2")).unwrap();
+        assert_eq!(load_sessions(&c).unwrap(), vec![session(5, "10.0.0.2")]);
+        // Badezimmer joined Buero's group and plays there now: one session for the group.
+        open_session(&c, &session(6, "10.0.0.2")).unwrap();
+        let open = load_sessions(&c).unwrap();
+        assert_eq!(open.len(), 1);
+        assert_eq!(open[0].room_id, 6);
+        let mut moved = open[0].clone();
+        (moved.key, moved.idx, moved.position_ms) = ("jellyfin:1:b".into(), 1, 0);
+        save_session(&c, &moved).unwrap();
+        assert_eq!(load_sessions(&c).unwrap(), vec![moved.clone()]);
+        moved.state = "ended".into();
+        save_session(&c, &moved).unwrap();
+        assert!(load_sessions(&c).unwrap().is_empty());
+    }
+
+    #[test]
+    fn the_queue_comes_from_the_playing_device() {
+        let c = db();
+        c.execute(
+            "INSERT INTO queue (user_id, device, current_key, data, updated_at) VALUES (1, 'Linux', 'a:2', ?1, 'x')",
+            [r#"{"items":[{"key":"a:1"},{"key":"a:2"},{"key":"a:3"}],"index":1}"#],
+        )
+        .unwrap();
+        assert_eq!(queue_of(&c, 1, "Linux", "a:2"), (vec!["a:1".into(), "a:2".into(), "a:3".into()], 1));
+        assert_eq!(queue_of(&c, 1, "Linux", "b:9"), (vec!["b:9".into()], 0));
+        assert_eq!(queue_of(&c, 1, "Pixel", "a:2"), (vec!["a:2".into()], 0));
+    }
+
+    #[test]
+    fn heard_only_near_the_end_and_foreign_streams_occupy() {
+        assert!(heard_to_end(580_000, Some(600_000)));
+        assert!(!heard_to_end(500_000, Some(600_000)));
+        assert!(!heard_to_end(599_000, None));
+        assert!(occupied(None, "x-sonos-spotify:abc", 1));
+        assert!(occupied(Some(2), "http://lan/sonos/t", 1));
+        assert!(!occupied(Some(1), "http://lan/sonos/t", 1));
+        assert!(!occupied(None, "", 1));
+    }
+
+    #[test]
+    fn a_failure_is_logged_once_per_reason() {
+        let mut p = Poller::default();
+        assert!(p.warn("10.0.0.2", "not reachable"));
+        assert!(!p.warn("10.0.0.2", "not reachable"));
+        assert!(p.warn("10.0.0.2", "UPnP error 701"));
+        p.ok("10.0.0.2");
+        assert!(p.warn("10.0.0.2", "UPnP error 701"));
+    }
 
     #[test]
     fn times() {

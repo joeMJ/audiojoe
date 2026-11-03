@@ -5,6 +5,7 @@ mod auth;
 mod cli;
 mod config;
 mod db;
+mod devices;
 mod docs;
 mod error;
 mod gpodder;
@@ -56,6 +57,9 @@ pub struct AppState {
     pub jellyfin_users: Arc<Mutex<HashMap<i64, String>>>,
     /// Key that signs the stream URLs given to Sonos speakers (kept across restarts).
     pub sonos_secret: Arc<Vec<u8>>,
+    pub online: devices::Online,
+    /// Wakes the Sonos poll loop right after a command.
+    pub sonos_poke: Arc<tokio::sync::Notify>,
 }
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -109,6 +113,8 @@ async fn main() -> Result<()> {
         events: tokio::sync::broadcast::channel(256).0,
         jellyfin_users: Default::default(),
         sonos_secret,
+        online: Default::default(),
+        sonos_poke: Default::default(),
     };
     tokio::spawn(podcasts::refresh_loop(state.clone()));
     tokio::spawn(audiobookshelf::sync_loop(state.clone()));
@@ -186,6 +192,8 @@ async fn main() -> Result<()> {
         .route("/api/v1/queue", axum::routing::put(playback::put_queue))
         .route("/api/v1/queue/{key}", get(playback::get_queue))
         .route("/api/v1/events", get(playback::events))
+        .route("/api/v1/devices", get(devices::devices))
+        .route("/api/v1/devices/{device}/command", post(devices::command))
         .route("/docs/{file}", get(docs::english))
         .route("/docs/de/{file}", get(docs::german))
         .route("/docs/screenshots/{file}", get(docs::screenshot))
