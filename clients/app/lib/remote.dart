@@ -36,6 +36,8 @@ class Remote extends ChangeNotifier {
   int? durationMs;
   DateTime _at = DateTime.now();
   Timer? _tick;
+  /// Reports of the target received so far (tests check that they keep coming).
+  int reports = 0;
   /// Set when a command failed (target offline): shown once by the view.
   final message = ValueNotifier<String?>(null);
 
@@ -69,6 +71,7 @@ class Remote extends ChangeNotifier {
       devices = [...devices]..[i] = d;
     }
     if (d.name == target) {
+      reports++;
       // Gone or stopped: the target has ended. A speaker ends with its session (event `sonos`).
       if (!d.online || (d.state == 'stopped' && !d.speaker)) {
         unawaited(_ended());

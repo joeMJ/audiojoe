@@ -19,7 +19,7 @@ pactl set-default-sink silent 2>/dev/null || true
 # Fresh app data, so the test starts at the sign-in screen.
 rm -rf "$HOME/.local/share/io.github.joemj.audiojoe"
 
-xvfb-run -a -s "-screen 0 1280x800x24" flutter test integration_test -d linux \
+xvfb-run -a -s "-screen 0 1280x800x24" flutter test integration_test/app_test.dart -d linux \
     --dart-define=SERVER="$SERVER" \
     --dart-define=USER="$(val username)" \
     --dart-define=PASS="$(val password)" \

@@ -9,7 +9,10 @@
 // NEXT when the speaker gets there, that ⏮ and ⏭ play on the speaker, not here. Then prints "CUT <port>": the event stream is cut without
 // notice from outside (tools/dev/cut-events.sh), and positions must arrive again after reconnecting.
 
+import 'dart:io';
+
 import 'package:audiojoe/api.dart';
+import 'package:audiojoe/l10n.dart';
 import 'package:audiojoe/main.dart' as app;
 import 'package:audiojoe/player.dart';
 import 'package:audiojoe/remote.dart';
@@ -27,6 +30,7 @@ const secret = String.fromEnvironment('TOTP_SECRET');
 const roomId = int.fromEnvironment('ROOM');
 const first = String.fromEnvironment('FIRST');
 const next = String.fromEnvironment('NEXT');
+const shots = String.fromEnvironment('SHOTS');
 
 // ignore: avoid_print
 void log(String s) => print('${DateTime.now().toIso8601String().substring(11, 19)} $s');
@@ -64,6 +68,14 @@ void main() {
       await waitUntil(tester, () => player.item?.key == first && player.position > start + 5000, seconds: 30,
           what: 'position follows the speaker (${player.position})');
       log('position follows: ${player.position}');
+      // The shown time runs on every second between the speaker's reports (screenshots 1 s apart).
+      if (shots.isNotEmpty) {
+        for (var i = 0; i < 10; i++) {
+          await Process.run('import', ['-window', 'root', '$shots/sonos-clock-$i.png']);
+          log('clock $i: ${clock(player.position)}');
+          await tester.pump(const Duration(seconds: 1));
+        }
+      }
       expect(player.audio.playing, isFalse, reason: 'the app does not play along');
 
       // The speaker reaches the next title by itself; the app shows it.
@@ -91,10 +103,11 @@ void main() {
       final cut = DateTime.now();
       log('CUT');
       await tester.pump(const Duration(seconds: 15));
-      final frozen = player.position;
-      await waitUntil(tester, () => player.position > frozen + 5000, seconds: 120,
-          what: 'positions arrive again after the cut');
-      log('positions again after ${DateTime.now().difference(cut).inSeconds} s: ${player.position}');
+      // The clock runs on by itself; the speaker's reports must come again over a new stream.
+      final frozen = remote.reports;
+      await waitUntil(tester, () => remote.reports > frozen + 1, seconds: 120,
+          what: 'reports arrive again after the cut');
+      log('reports again after ${DateTime.now().difference(cut).inSeconds} s: ${player.position}');
     } finally {
       await remote.command('pause').catchError((_) => null);
       remote.release();

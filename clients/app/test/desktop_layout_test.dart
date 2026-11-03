@@ -134,6 +134,8 @@ void main() {
       expect(find.text('This device · Linux'), findsOneWidget);
       expect(find.text('busy'), findsOneWidget);
       expect(find.text('switched off'), findsOneWidget);
+      // Pills as wide as their text (at least 84), not the whole row.
+      expect(tester.getSize(find.ancestor(of: find.text('controlled'), matching: find.byType(Container)).first).width, lessThan(200));
       // A busy or switched-off room cannot be chosen; the free ones of the group are controlled.
       final there = tester.widgetList<FilledButton>(find.widgetWithText(FilledButton, 'There')).toList();
       expect(there.length, 2);

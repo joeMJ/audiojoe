@@ -54,9 +54,10 @@ class _Pill extends StatelessWidget {
     return Container(
       constraints: const BoxConstraints(minWidth: _w, minHeight: _h),
       padding: const EdgeInsets.symmetric(horizontal: 10),
-      alignment: Alignment.center,
       decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(_h / 2)),
-      child: Text(text, maxLines: 1, style: TextStyle(color: fg, fontWeight: FontWeight.w700, fontSize: 13)),
+      // As wide as the text (at least as a button), not the whole row.
+      child: Align(widthFactor: 1, heightFactor: 1,
+          child: Text(text, maxLines: 1, style: TextStyle(color: fg, fontWeight: FontWeight.w700, fontSize: 13))),
     );
   }
 }

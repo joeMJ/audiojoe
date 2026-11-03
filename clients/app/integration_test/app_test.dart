@@ -17,6 +17,7 @@ import 'package:audiojoe/downloads.dart';
 import 'package:audiojoe/main.dart' as app;
 import 'package:audiojoe/models.dart';
 import 'package:audiojoe/player.dart';
+import 'package:audiojoe/remote.dart';
 import 'package:audiojoe/sonos.dart';
 import 'package:audiojoe/ui/common.dart' show desktop;
 import 'package:audiojoe/updates.dart';
@@ -138,15 +139,30 @@ void main() {
         Room(i + 1, n, 'One', true, true, 'PAUSED_PLAYBACK', 35 - 10 * i, group: 'g', groupName: 'Wohnzimmer + 2', groupRooms: const [1, 2, 3]),
     ];
     sonos.output = Room(1, 'Wohnzimmer', 'One', true, true, 'PAUSED_PLAYBACK', 35);
+    remote.controlRoom(sonos.output!);
     await again();
     await shot(tester, 'player-sonos');
     sonos.all = rooms;
     sonos.output = rooms.first;
+    remote.controlRoom(rooms.first);
     await again();
-    await tester.tap(find.text('Rooms (3)'));
-    await shot(tester, 'player-sonos-group');
-    sonos.output = null;
+    expect(find.text('Playing on Sonos Wohnzimmer + 2'), findsOneWidget);
+    // The footer button opens the output overlay (devices and rooms as the server lists them).
+    await tester.tap(find.text('Wohnzimmer + 2'));
+    await waitFor(tester, find.text('APPS AND WEB PLAYER'));
+    await tester.pump(const Duration(seconds: 2));
+    await shot(tester, 'output-overlay');
+    await tester.tap(find.byTooltip('Close'));
+    await tester.pump(const Duration(milliseconds: 500));
+    remote.release();
     sonos.all = [];
+    // The smallest window: footer as 2 × 2 below the cover, buttons at the bottom right.
+    await tester.binding.setSurfaceSize(const Size(720, 540));
+    await again();
+    expect(tester.takeException(), isNull);
+    await shot(tester, 'player-720x540');
+    await tester.binding.setSurfaceSize(null);
+    await again();
     await tester.tap(find.text('Settings').first);
     await waitFor(tester, find.text('Add source'));
     await shot(tester, 'settings-sources');
