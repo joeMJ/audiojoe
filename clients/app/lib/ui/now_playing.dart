@@ -1,7 +1,7 @@
-// Now playing: large cover, format chips right above the controls, −15 / play / +30; at the
-// bottom the volume and a fixed footer (sleep timer, speed, output, offline); tabs for
-// details and chapters. On a wide desktop window the cover takes the left third and buttons,
-// Sonos volume and footer sit at the bottom of the right two thirds; no volume of this device.
+// Now playing: large cover, format chips and where it plays, then −15 / play / +30; tabs for
+// details and chapters. Progress and buttons always stay in view. Desktop: the cover takes the
+// left third, progress, buttons and footer (sleep timer, speed, output, offline) sit at the
+// bottom right, no volume (the output overlay has it). Phone: volume and footer at the bottom.
 
 import 'package:flutter/material.dart';
 
@@ -52,7 +52,6 @@ class _PlaybackTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(builder: (context, c) {
         final k = context.tok;
-        final wide = c.maxWidth >= 720;
         final out = sonos.output;
         // Title, subtitle, chapter, format chips.
         final head = [
@@ -78,6 +77,18 @@ class _PlaybackTab extends StatelessWidget {
             ),
           const SizedBox(height: 12),
           _FormatChips(it),
+          if (out != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Icon(Icons.speaker, size: 18, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(t('Playing on {device}', {'device': out.label}), maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w700)),
+                ),
+              ]),
+            ),
         ];
         // Progress (or "Live") and the buttons.
         final play = [
@@ -93,56 +104,45 @@ class _PlaybackTab extends StatelessWidget {
                   textAlign: TextAlign.center, style: TextStyle(color: k.muted)),
             ),
         ];
-        if (desktop && wide) {
-          // Cover in the left third; on the right the title at the top, below it the buttons, the
-          // Sonos volume (only with Sonos) and the footer.
+        if (desktop) {
+          // Cover in the left third; on the right the title at the top, the progress, buttons and
+          // footer fixed at the bottom. Only the title and facts scroll when the window is low.
+          // Too low for all of it: the footer goes as 2 × 2 below the cover.
           const pad = EdgeInsets.fromLTRB(16, 16, 16, 12);
-          final side = [(c.maxWidth - pad.horizontal) / 3, c.maxHeight - pad.vertical].reduce((a, b) => a < b ? a : b);
+          final h = c.maxHeight - pad.vertical;
+          final tight = h < 470;
+          final third = (c.maxWidth - pad.horizontal) / 3;
+          final side = [third, tight ? h - 136 : h].reduce((a, b) => a < b ? a : b).clamp(80.0, 2000.0);
           return Padding(
             padding: pad,
             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              CoverThumb(image: it.image, label: it.subtitle.isEmpty ? it.title : it.subtitle, size: side),
+              SizedBox(
+                width: tight ? third.clamp(side, 2000.0) : side,
+                child: Column(children: [
+                  CoverThumb(image: it.image, label: it.subtitle.isEmpty ? it.title : it.subtitle, size: side),
+                  if (tight) ...[const Spacer(), _Toolbar(it, grid: true)],
+                ]),
+              ),
               const SizedBox(width: 24),
               Expanded(
-                // Title at the top, the rest at the bottom. When the window is too low (a group
-                // with its rooms open) it scrolls from the bottom: the title gives way, the footer
-                // stays in view.
-                child: LayoutBuilder(
-                  builder: (context, rc) => SingleChildScrollView(
-                    reverse: true,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(minHeight: rc.maxHeight),
-                      child: Column(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                        Column(mainAxisSize: MainAxisSize.min, children: head),
-                        Column(mainAxisSize: MainAxisSize.min, children: [
-                          const SizedBox(height: 4),
-                          ...play,
-                          if (out != null) const Padding(padding: EdgeInsets.only(top: 10), child: _Volume()),
-                          const SizedBox(height: 12),
-                          _Toolbar(it),
-                        ]),
-                      ]),
-                    ),
-                  ),
-                ),
+                child: Column(children: [
+                  Expanded(child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: head))),
+                  const SizedBox(height: 4),
+                  ...play,
+                  if (!tight) ...[const SizedBox(height: 12), _Toolbar(it)],
+                ]),
               ),
             ]),
           );
         }
-        final size = wide ? 300.0 : [c.maxWidth - 32, c.maxHeight * 0.36, 420.0].reduce((a, b) => a < b ? a : b);
+        // Phone: cover, title and facts scroll; progress, buttons, volume and footer stay in view.
+        final size = [c.maxWidth - 32, c.maxHeight * 0.36, 420.0].reduce((a, b) => a < b ? a : b);
         final cover = CoverThumb(image: it.image, label: it.subtitle.isEmpty ? it.title : it.subtitle, size: size);
-        final controls = Column(mainAxisSize: MainAxisSize.min, children: [...head, const SizedBox(height: 4), ...play]);
         return Column(children: [
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: wide
-                  ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      cover,
-                      const SizedBox(width: 24),
-                      Expanded(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 560), child: controls)),
-                    ])
-                  : Column(children: [cover, const SizedBox(height: 16), controls]),
+              child: Column(children: [cover, const SizedBox(height: 16), ...head]),
             ),
           ),
           Center(
@@ -150,9 +150,11 @@ class _PlaybackTab extends StatelessWidget {
               constraints: const BoxConstraints(maxWidth: 720),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                // No volume of this device on the desktop (the system has its own).
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  if (!desktop || out != null) ...[const _Volume(), const SizedBox(height: 8)],
+                  ...play,
+                  const SizedBox(height: 8),
+                  const _Volume(),
+                  const SizedBox(height: 8),
                   _Toolbar(it),
                 ]),
               ),
@@ -389,7 +391,9 @@ class _Skip extends StatelessWidget {
 
 class _Toolbar extends StatelessWidget {
   final Item it;
-  const _Toolbar(this.it);
+  /// 2 × 2 instead of one row (desktop window too low).
+  final bool grid;
+  const _Toolbar(this.it, {this.grid = false});
 
   @override
   Widget build(BuildContext context) {
@@ -424,10 +428,7 @@ class _Toolbar extends StatelessWidget {
             ? t('{n} min', {'n': (left.inSeconds / 60).ceil()})
             : player.sleepAtEnd == 'chapter' ? t('End of chapter') : t('End of item');
     final accent = Theme.of(context).colorScheme.primary;
-    return Container(
-      decoration: BoxDecoration(color: k.panel2, borderRadius: BorderRadius.circular(14)),
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Row(children: [
+    final tools = [
         tool(Icon(player.sleeping ? Icons.bedtime : Icons.bedtime_outlined, size: 28, color: player.sleeping ? accent : null), sleepLabel,
             local && !player.live ? () => _sleepSheet(context) : null, tip: t('Sleep timer')),
         tool(Text('${_rate(player.rate)}×', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)), t('Speed'),
@@ -447,7 +448,13 @@ class _Toolbar extends StatelessWidget {
           e == null && !player.live ? () => downloads.add([it]) : null,
           tip: e == null ? t('Save offline') : null,
         ),
-      ]),
+    ];
+    return Container(
+      decoration: BoxDecoration(color: k.panel2, borderRadius: BorderRadius.circular(14)),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: grid
+          ? Column(mainAxisSize: MainAxisSize.min, children: [Row(children: tools.sublist(0, 2)), Row(children: tools.sublist(2))])
+          : Row(children: tools),
     );
   }
 

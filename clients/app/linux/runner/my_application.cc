@@ -98,6 +98,8 @@ static void my_application_activate(GApplication* application) {
       project, self->dart_entrypoint_arguments);
 
   FlView* view = fl_view_new(project);
+  // Smallest window: 720 × 540 of content, below that the desktop layout has no room.
+  gtk_widget_set_size_request(GTK_WIDGET(view), 720, 540);
   GdkRGBA background_color;
   // Background defaults to black, override it here if necessary, e.g. #00000000
   // for transparent.
