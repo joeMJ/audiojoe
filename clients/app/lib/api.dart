@@ -27,6 +27,13 @@ class Api {
   String device = '';
   final online = ValueNotifier<bool>(true);
 
+  /// Called when the server no longer knows our token (401): the session was revoked or lost.
+  void Function()? onRejected;
+
+  void rejected(int status) {
+    if (status == 401 && token != null) onRejected?.call();
+  }
+
   Map<String, String> get authHeaders => token == null ? {} : {'authorization': 'Bearer $token'};
 
   Uri uri(String path, [Map<String, String>? query]) => Uri.parse('$base/api/v1$path').replace(queryParameters: query);
@@ -61,6 +68,7 @@ class Api {
     final json = (res.headers['content-type'] ?? '').contains('json');
     final data = res.body.isEmpty ? null : json ? jsonDecode(res.body) : res.body;
     if (res.statusCode >= 400) {
+      if (!path.startsWith('/auth/')) rejected(res.statusCode);
       throw ApiError(res.statusCode, data is Map ? '${data['error']}' : res.reasonPhrase ?? '${res.statusCode}');
     }
     return data;

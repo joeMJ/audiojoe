@@ -137,6 +137,8 @@ class _OutputOverlayState extends State<OutputOverlay> {
             apps.insert(0, Device(name: api.device, kind: deviceKind, state: 'stopped', key: '', title: '', subtitle: '',
                 updatedAt: '', positionMs: 0, online: true, current: true));
           }
+          // Plays here: this device is the selected card at the top, not again in the list.
+          if (!remote.active && sonos.output == null) apps.removeWhere((d) => d.current);
           Widget section(String s) => Padding(
                 padding: const EdgeInsets.fromLTRB(4, 18, 4, 6),
                 child: Text(s.toUpperCase(), style: TextStyle(color: k.muted, fontWeight: FontWeight.w800, fontSize: 12, letterSpacing: 0.6)),

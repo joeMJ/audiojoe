@@ -148,6 +148,47 @@ void main() {
       remote.release();
     });
 
+    testWidgets('the overlay while this device plays: this device only once, at the top', (tester) async {
+      api.device = 'Linux';
+      api.client = MockClient((req) async => http.Response(
+          jsonEncode(switch (req.url.path) {
+            '/api/v1/devices' => [
+                {'device': 'Linux', 'kind': 'linux', 'state': 'paused', 'online': true, 'current': true},
+                {'device': 'Pixel 8', 'kind': 'android', 'state': 'paused', 'key': 'episode:1', 'online': true},
+              ],
+            _ => [],
+          }),
+          200,
+          headers: {'content-type': 'application/json'}));
+      sonos.output = null;
+      await show(tester, const NowPlayingView(), size: const Size(1100, 1600));
+      await tester.tap(find.text('This device'));
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(find.text('Output'), findsOneWidget);
+      expect(find.text('This device · Linux'), findsOneWidget);
+      expect(find.text('Pixel 8'), findsOneWidget);
+      await tester.tap(find.byTooltip('Close'));
+      await tester.pump();
+      remote.release();
+    });
+
+    test('a rejected token (401) is reported once per answer, sign-in answers are not', () async {
+      var n = 0;
+      api.onRejected = () => n++;
+      api.token = 'old';
+      api.client = MockClient((req) async => http.Response('{"error":"unauthorized"}', 401, headers: {'content-type': 'application/json'}));
+      await expectLater(api.call('GET', '/lists/podcasts'), throwsA(isA<ApiError>()));
+      expect(n, 1);
+      await expectLater(api.call('POST', '/auth/login'), throwsA(isA<ApiError>()));
+      expect(n, 1);
+      api.token = null;
+      await expectLater(api.call('GET', '/lists/podcasts'), throwsA(isA<ApiError>()));
+      expect(n, 1);
+      api.onRejected = null;
+    });
+
     testWidgets('a low window: the footer as 2 × 2 below the cover, the buttons stay at the bottom right', (tester) async {
       await show(tester, const NowPlayingView(), size: const Size(640, 430));
       expect(tester.takeException(), isNull);

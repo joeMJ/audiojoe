@@ -49,6 +49,23 @@ class _AudiojoeAppState extends State<AudiojoeApp> {
   late bool signedIn = widget.signedIn;
   bool started = false;
 
+  @override
+  void initState() {
+    super.initState();
+    api.onRejected = _rejected;
+  }
+
+  /// The server rejected the token: back to the sign-in page, the server address stays filled in.
+  Future<void> _rejected() async {
+    if (!signedIn) return;
+    signedIn = false;
+    remote.release();
+    await player.stop();
+    await sync.stop();
+    await api.clearSession();
+    if (mounted) setState(() => started = false);
+  }
+
   void _start() {
     if (started) return;
     started = true;

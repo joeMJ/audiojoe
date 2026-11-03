@@ -121,7 +121,8 @@ class Sync {
   DateTime _lastData = DateTime.now();
 
   Future<void> _connect() async {
-    if (_connecting) return;
+    // Signed out (or the server rejected the token): no more attempts until the next sign-in.
+    if (_connecting || api.token == null) return;
     _connecting = true;
     await _events?.cancel();
     _events = null;
@@ -130,7 +131,10 @@ class Sync {
         ..headers.addAll(api.authHeaders)
         ..headers['accept'] = 'text/event-stream';
       final res = await api.client.send(req);
-      if (res.statusCode != 200) throw ApiError(res.statusCode, 'events');
+      if (res.statusCode != 200) {
+        api.rejected(res.statusCode);
+        throw ApiError(res.statusCode, 'events');
+      }
       api.online.value = true;
       String event = '';
       _lastData = DateTime.now();
