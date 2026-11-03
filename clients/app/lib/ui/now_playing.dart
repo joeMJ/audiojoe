@@ -9,18 +9,48 @@ import '../downloads.dart';
 import '../l10n.dart';
 import '../models.dart';
 import '../player.dart';
+import '../remote.dart';
 import '../sonos.dart';
 import '../volume.dart';
 import 'common.dart';
 import 'notes.dart';
+import 'output.dart';
 
-class NowPlayingView extends StatelessWidget {
+class NowPlayingView extends StatefulWidget {
   const NowPlayingView({super.key});
 
   @override
+  State<NowPlayingView> createState() => _NowPlayingViewState();
+}
+
+class _NowPlayingViewState extends State<NowPlayingView> {
+  @override
+  void initState() {
+    super.initState();
+    remote.message.addListener(_message);
+  }
+
+  @override
+  void dispose() {
+    remote.message.removeListener(_message);
+    // Phones: leaving the page closes the overlay with it.
+    outputOpen.value = false;
+    super.dispose();
+  }
+
+  /// A controlled device went offline: say so once.
+  void _message() {
+    final m = remote.message.value;
+    if (m == null || !mounted) return;
+    remote.message.value = null;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+  }
+
+  @override
   Widget build(BuildContext context) => ListenableBuilder(
-        listenable: Listenable.merge([player, sonos, downloads]),
+        listenable: Listenable.merge([player, sonos, downloads, remote, outputOpen]),
         builder: (context, _) {
+          if (outputOpen.value) return const OutputOverlay();
           final it = player.item;
           if (it == null) return emptyText(context, t('Nothing is playing.'));
           final tabs = [t('Playback'), t('Details'), if (it.chapters.isNotEmpty) t('Chapters')];
@@ -77,14 +107,15 @@ class _PlaybackTab extends StatelessWidget {
             ),
           const SizedBox(height: 12),
           _FormatChips(it),
-          if (out != null)
+          if (remote.active)
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                 Icon(Icons.speaker, size: 18, color: Theme.of(context).colorScheme.primary),
                 const SizedBox(width: 6),
                 Flexible(
-                  child: Text(t('Playing on {device}', {'device': out.label}), maxLines: 1, overflow: TextOverflow.ellipsis,
+                  child: Text(t('Playing on {device}', {'device': out == null ? remote.target! : 'Sonos ${out.grouped ? out.groupName ?? out.name : out.name}'}),
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w700)),
                 ),
               ]),
@@ -97,7 +128,7 @@ class _PlaybackTab extends StatelessWidget {
           else
             _Progress(),
           _Controls(),
-          if (out == null && player.takenOver != null)
+          if (!remote.active && player.takenOver != null)
             Padding(
               padding: const EdgeInsets.only(top: 10),
               child: Text(t('Taken over from {device} · {ago}', {'device': player.takenOver!.device, 'ago': ago(player.takenOver!.at)}),
@@ -191,7 +222,7 @@ class _FormatChips extends StatelessWidget {
         ? (src.tier == 'hi' ? chip(c, color: k.bad, bg: k.badBg) : chip(c, color: k.warn, bg: k.warnBg))
         : chip(c);
     return Wrap(alignment: WrapAlignment.center, crossAxisAlignment: WrapCrossAlignment.center, spacing: 6, runSpacing: 4, children: [
-      if (out == null && player.fromCache) chip(t('Cache'), color: Theme.of(context).colorScheme.primary),
+      if (!remote.active && player.fromCache) chip(t('Cache'), color: Theme.of(context).colorScheme.primary),
       for (final c in src.chips) fact(c),
       if (target != null && !target.sameAs(src))
         Text(t('(Target: {q})', {'q': target.chips.join(' ')}), style: TextStyle(color: k.muted, fontSize: 13)),
@@ -330,7 +361,7 @@ class _Progress extends StatelessWidget {
 class _Controls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final playing = sonos.output?.playing ?? player.playing;
+    final playing = player.playing;
     // With chapters ⏮ ⏭ go by chapter (after the last one to the next title), else by title.
     final byChapter = player.chapters.isNotEmpty;
     final many = byChapter || player.queue.length > 1;
@@ -350,7 +381,7 @@ class _Controls extends StatelessWidget {
           iconSize: 56,
           tooltip: playing ? t('Pause') : t('Play'),
           style: IconButton.styleFrom(backgroundColor: scheme.onSurface, foregroundColor: scheme.surface),
-          onPressed: () => sonos.output != null ? sonos.toggle() : player.toggle(),
+          onPressed: player.toggle,
           icon: Icon(playing ? Icons.pause : Icons.play_arrow),
         ),
       ),
@@ -399,7 +430,7 @@ class _Toolbar extends StatelessWidget {
   Widget build(BuildContext context) {
     final k = context.tok;
     final out = sonos.output;
-    final local = out == null; // sleep timer and speed act on this device only
+    final local = !remote.active; // sleep timer and speed act on this device only
     final e = downloads.entry(it.key);
     Widget tool(Widget icon, String label, VoidCallback? onTap, {String? tip}) => Expanded(
           child: Tooltip(
@@ -433,8 +464,8 @@ class _Toolbar extends StatelessWidget {
             local && !player.live ? () => _sleepSheet(context) : null, tip: t('Sleep timer')),
         tool(Text('${_rate(player.rate)}×', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)), t('Speed'),
             local && !player.live ? () => _rateSheet(context) : null),
-        tool(Icon(local ? Icons.smartphone : Icons.speaker, size: 28, color: local ? null : accent),
-            local ? t('This device') : out.label, () => showModalBottomSheet(context: context, builder: (_) => const OutputSheet()),
+        tool(Icon(local ? Icons.smartphone : out != null ? Icons.speaker : Icons.devices, size: 28, color: local ? null : accent),
+            local ? t('This device') : out?.short ?? remote.target!, () => outputOpen.value = true,
             tip: t('Output')),
         tool(
           switch (e?.status) {
@@ -572,109 +603,4 @@ class _ChaptersTab extends StatelessWidget {
       },
     );
   }
-}
-
-// ---------------------------------------------------------------- output
-
-/// Ticked: the room plays together with the current output.
-class _GroupBox extends StatefulWidget {
-  final Room room;
-  final VoidCallback reload;
-  const _GroupBox(this.room, this.reload);
-
-  @override
-  State<_GroupBox> createState() => _GroupBoxState();
-}
-
-class _GroupBoxState extends State<_GroupBox> {
-  bool busy = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = widget.room, o = sonos.output!;
-    final inGroup = r.group != null && r.group == o.group;
-    return SizedBox(
-      width: 32,
-      child: busy
-          ? const Padding(padding: EdgeInsets.all(6), child: CircularProgressIndicator(strokeWidth: 2.5))
-          : Checkbox(
-              value: inGroup,
-              semanticLabel: inGroup ? t('Remove from group') : t('Add to group'),
-              onChanged: (v) async {
-                setState(() => busy = true);
-                final messenger = ScaffoldMessenger.of(context);
-                try {
-                  await sonos.setInGroup(r, v ?? false);
-                } catch (e) {
-                  messenger.showSnackBar(SnackBar(content: Text('${t('Error')}: $e')));
-                }
-                if (mounted) setState(() => busy = false);
-                widget.reload();
-              },
-            ),
-    );
-  }
-}
-
-class OutputSheet extends StatelessWidget {
-  const OutputSheet({super.key});
-
-  @override
-  Widget build(BuildContext context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Text(t('Output'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 8),
-            ItemRow(
-              leading: const Icon(Icons.smartphone, size: 32),
-              title: t('This device'),
-              subtitle: t('from cache or stream'),
-              trailing: [
-                FilledButton(
-                  onPressed: sonos.output == null ? null : () {
-                    Navigator.pop(context);
-                    sonos.backToDevice();
-                  },
-                  child: Text(sonos.output == null ? t('active') : t('Switch here')),
-                ),
-              ],
-            ),
-            Flexible(
-              child: Loader<List<Room>>(
-                load: sonos.rooms,
-                builder: (context, rooms, reload) => ListView(shrinkWrap: true, children: [
-                  for (final r in rooms)
-                    ItemRow(
-                      leading: sonos.output == null || !r.reachable
-                          ? const Icon(Icons.speaker, size: 32)
-                          : r.id == sonos.output!.id
-                              ? Icon(Icons.speaker, size: 32, color: Theme.of(context).colorScheme.primary)
-                              : _GroupBox(r, reload),
-                      title: 'Sonos ${r.name}',
-                      subtitle: '${r.model} · ${r.s2 ? t('up to 24 bit / 48 kHz') : t('up to 16 bit / 48 kHz')}',
-                      trailing: [
-                        Badge2(!r.reachable ? t('switched off') : r.playing ? t('playing') : t('available'),
-                            kind: !r.reachable ? 'bad' : r.playing ? 'warn' : 'ok'),
-                        FilledButton(
-                          // Close the sheet at once; an error shows on the player view below.
-                          onPressed: !r.reachable ? null : () async {
-                            final messenger = ScaffoldMessenger.of(context);
-                            Navigator.pop(context);
-                            try {
-                              await sonos.playOn(r);
-                            } catch (e) {
-                              messenger.showSnackBar(SnackBar(content: Text('${t('Error')}: $e')));
-                            }
-                          },
-                          child: Text(t('Play here')),
-                        ),
-                      ],
-                    ),
-                ]),
-              ),
-            ),
-          ]),
-        ),
-      );
 }

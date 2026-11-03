@@ -243,14 +243,8 @@ msgstr "Dieses Gerät"
 msgid "Output"
 msgstr "Ausgabe"
 
-msgid "from cache or stream"
-msgstr "aus dem Cache oder als Strom"
 
-msgid "Switch here"
-msgstr "Hierher wechseln"
 
-msgid "active"
-msgstr "aktiv"
 
 msgid "switched off"
 msgstr "ausgeschaltet"
@@ -258,8 +252,6 @@ msgstr "ausgeschaltet"
 msgid "playing"
 msgstr "spielt"
 
-msgid "Play here"
-msgstr "Hier abspielen"
 
 msgid "up to 24 bit / 48 kHz"
 msgstr "bis 24 Bit / 48 kHz"
@@ -1137,3 +1129,60 @@ msgstr "Bei Tesla ist „Musikleiste“ vorausgewählt."
 
 msgid "Next step"
 msgstr "Weiter"
+
+msgid "Here"
+msgstr "Hierher"
+
+msgid "There"
+msgstr "Dorthin"
+
+msgid "Take over"
+msgstr "Übernehmen"
+
+msgid "Control"
+msgstr "Steuern"
+
+msgid "Stop"
+msgstr "Stoppen"
+
+msgid "controlled"
+msgstr "gesteuert"
+
+msgid "busy"
+msgstr "belegt"
+
+msgid "offline"
+msgstr "offline"
+
+msgid "Playing on {device}"
+msgstr "Spielt auf {device}"
+
+msgid "{device} is offline."
+msgstr "{device} ist offline."
+
+msgid "here"
+msgstr "hier"
+
+msgid "Apps and web player"
+msgstr "Apps und Web-Player"
+
+msgid "Web player"
+msgstr "Web-Player"
+
+msgid "Linux app"
+msgstr "Linux-App"
+
+msgid "Windows app"
+msgstr "Windows-App"
+
+msgid "Android app"
+msgstr "Android-App"
+
+msgid "paused"
+msgstr "pausiert"
+
+msgid "started by {device}"
+msgstr "gestartet von {device}"
+
+msgid "controls {device}"
+msgstr "steuert gerade {device}"

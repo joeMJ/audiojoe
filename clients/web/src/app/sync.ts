@@ -12,6 +12,9 @@ export interface PositionUpdate {
   updated_at: string;
   title: string;
   subtitle: string;
+  /** This device's state, so other devices can take over (the web player takes no commands). */
+  state?: "playing" | "paused" | "stopped";
+  kind?: "web";
 }
 
 type Listener = (p: Playback) => void;
@@ -116,7 +119,7 @@ async function probe() {
 
 function connect() {
   es?.close();
-  es = new EventSource("/api/v1/events");
+  es = new EventSource("/api/v1/events?kind=web");
   lastData = Date.now();
   const alive = () => (lastData = Date.now());
   es.onopen = () => {

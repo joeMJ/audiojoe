@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 
 import 'api.dart';
 import 'player.dart';
+import 'remote.dart';
 
 class Room {
   final int id;
@@ -19,19 +20,29 @@ class Room {
   Room(this.id, this.name, this.model, this.s2, this.reachable, this.state, this.volume,
       {this.visible = true, this.group, this.groupName, this.groupVolume, this.groupRooms = const []});
 
+  /// Plays something not ours (another service or user): cannot be chosen as output.
+  bool busy = false;
+  /// The device that started our session on this room's group (null: none of ours).
+  String? startedBy;
+
   static Room fromJson(Map j) => Room(j['id'] as int, j['name'] as String, (j['model'] ?? '') as String, (j['s2'] ?? true) as bool,
       (j['reachable'] ?? false) as bool, j['state'] as String?, j['volume'] as int?,
       visible: (j['visible'] ?? true) as bool,
       group: j['group'] as String?,
       groupName: j['group_name'] as String?,
       groupVolume: j['group_volume'] as int?,
-      groupRooms: [for (final r in (j['group_rooms'] as List? ?? const [])) r as int]);
+      groupRooms: [for (final r in (j['group_rooms'] as List? ?? const [])) r as int])
+    ..busy = (j['busy'] ?? false) as bool
+    ..startedBy = (j['session'] as Map?)?['started_by'] as String?;
 
   bool get playing => state == 'PLAYING' || state == 'TRANSITIONING';
   bool get grouped => groupRooms.length > 1;
 
   /// "Badezimmer + Buero" when grouped, else "Sonos Buero".
   String get label => grouped ? groupName ?? name : 'Sonos $name';
+
+  /// Short form for the footer button: "Buero + 1".
+  String get short => grouped ? '$name + ${groupRooms.length - 1}' : name;
 }
 
 class Sonos extends ChangeNotifier {
@@ -68,13 +79,31 @@ class Sonos extends ChangeNotifier {
     final it = player.item;
     if (it == null) return;
     final pos = player.position;
-    if (player.playing) await player.audio.pause();
+    // What another controlled device plays moves to the speaker: that device pauses.
+    final other = remote.active && !remote.onSonos ? remote.target : null;
+    if (other != null) unawaited(remote.command('pause').catchError((_) => null));
+    remote.release();
+    await player.pauseHere();
     await api.call('POST', '/sonos/${room.id}/play', body: {'key': it.key, 'position_ms': player.live ? 0 : pos});
     output = room..state = 'PLAYING';
+    remote.controlRoom(room);
+    follow();
+  }
+
+  /// Keeps the output's rooms (state, volumes, group) current.
+  void follow() {
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 5), (_) => _refresh());
     notifyListeners();
     unawaited(_refresh());
+  }
+
+  /// No speaker is the output any more (the controller decides what plays).
+  void clearOutput() {
+    if (output == null) return;
+    output = null;
+    _timer?.cancel();
+    notifyListeners();
   }
 
   Future<void> _refresh() async {
@@ -96,13 +125,6 @@ class Sonos extends ChangeNotifier {
 
   Future<void> refresh() => _refresh();
 
-  Future<void> toggle() async {
-    final o = output;
-    if (o == null) return;
-    await api.call('POST', '/sonos/${o.id}/command', body: {'action': o.playing ? 'pause' : 'resume'});
-    o.state = o.playing ? 'PAUSED_PLAYBACK' : 'PLAYING';
-    notifyListeners();
-  }
 
   /// Volume shown for the output: the group's when grouped.
   int get level => (output?.grouped ?? false) ? output?.groupVolume ?? output?.volume ?? 0 : output?.volume ?? 0;
@@ -155,18 +177,6 @@ class Sonos extends ChangeNotifier {
     await _refresh();
   }
 
-  /// Back to this device: the speaker pauses; its last position arrives via the server.
-  Future<void> backToDevice() async {
-    final o = output;
-    if (o != null) {
-      try {
-        await api.call('POST', '/sonos/${o.id}/command', body: {'action': 'pause'});
-      } catch (_) {}
-    }
-    output = null;
-    _timer?.cancel();
-    notifyListeners();
-  }
 }
 
 final sonos = Sonos.instance;

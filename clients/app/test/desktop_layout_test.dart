@@ -1,12 +1,13 @@
-// Desktop layout (Linux, Windows): player with the cover in the left third and buttons, Sonos
-// volume and footer at the bottom of the right two thirds; no volume of this device; phone
-// layout unchanged; settings on pages.
+// Desktop layout (Linux, Windows): player with the cover in the left third, buttons and footer
+// fixed at the bottom right (in a low window the footer as 2 × 2 below the cover); no volume in
+// the view, the output overlay has it; phone keeps its volume; settings on pages.
 
 import 'dart:convert';
 
 import 'package:audiojoe/api.dart';
 import 'package:audiojoe/models.dart';
 import 'package:audiojoe/player.dart';
+import 'package:audiojoe/remote.dart';
 import 'package:audiojoe/sonos.dart';
 import 'package:audiojoe/ui/common.dart';
 import 'package:audiojoe/ui/now_playing.dart';
@@ -40,6 +41,7 @@ void main() {
     desktop = true;
     player.item = episode;
     player.queue = [episode];
+    remote.release();
     sonos.output = null;
     sonos.all = [];
   });
@@ -80,42 +82,84 @@ void main() {
       expect(rectOf(tester, find.byTooltip('Play')).left, greaterThan(rectOf(tester, find.byType(CoverThumb)).right));
     });
 
-    testWidgets('Sonos: volume as its own row between buttons and footer, right of the cover', (tester) async {
+    testWidgets('Sonos: no volume in the view, where it plays below the facts, the room on the footer', (tester) async {
       sonos.output = room(1, 'Living');
+      remote.controlRoom(sonos.output!);
       await show(tester, const NowPlayingView());
-      final v = rectOf(tester, volume('Volume'));
-      expect(v.left, greaterThan(rectOf(tester, find.byType(CoverThumb)).right));
-      expect(v.top, greaterThan(rectOf(tester, find.byTooltip('Pause')).bottom));
-      expect(v.bottom, lessThan(rectOf(tester, find.text('Sonos Living')).top));
+      expect(volume('Volume'), findsNothing);
+      final where = rectOf(tester, find.text('Playing on Sonos Living'));
+      expect(where.top, greaterThan(rectOf(tester, find.text('Podcast')).bottom));
+      expect(where.bottom, lessThan(rectOf(tester, find.byTooltip('Pause')).top));
+      expect(find.text('Living'), findsOneWidget);
+      remote.release();
     });
 
-    testWidgets('Sonos group: rooms open above the group volume', (tester) async {
+    testWidgets('the footer button opens the output overlay: group volumes, apps, rooms', (tester) async {
       final members = [room(1, 'Living', group: [1, 2, 3]), room(2, 'Kitchen', group: [1, 2, 3]), room(3, 'Bath', group: [1, 2, 3])];
+      Map j(Room r) => {'id': r.id, 'name': r.name, 'model': 'One', 's2': true, 'reachable': true, 'state': 'PLAYING', 'volume': 35,
+            'group': 'g', 'group_name': 'Living + 2', 'group_rooms': [1, 2, 3]};
+      api.device = 'Linux';
+      api.client = MockClient((req) async => http.Response(
+          jsonEncode(switch (req.url.path) {
+            '/api/v1/devices' => [
+                {'device': 'Linux', 'kind': 'linux', 'state': 'paused', 'online': true, 'current': true},
+                {'device': 'Pixel 8', 'kind': 'android', 'state': 'paused', 'key': 'episode:1', 'title': 'Episode 212',
+                 'position_ms': 760000, 'online': true},
+                {'device': 'Firefox', 'kind': 'web', 'state': 'playing', 'key': 'episode:1', 'title': 'Episode 212',
+                 'position_ms': 1000, 'online': true},
+                {'device': 'Windows', 'kind': 'windows', 'state': 'stopped', 'online': false, 'last_seen': '2026-11-02T12:00:00Z'},
+              ],
+            '/api/v1/sonos' => [for (final r in members) j(r), {'id': 4, 'name': 'Office', 'reachable': true, 'busy': true},
+                {'id': 5, 'name': 'Garden', 'reachable': false}],
+            _ => [],
+          }),
+          200,
+          headers: {'content-type': 'application/json'}));
       sonos.all = members;
       sonos.output = members.first;
-      await show(tester, const NowPlayingView());
-      expect(find.text('Rooms (3)'), findsOneWidget);
-      expect(volume('Kitchen'), findsNothing);
-      await tester.tap(find.text('Rooms (3)'));
+      remote.controlRoom(members.first);
+      await show(tester, const NowPlayingView(), size: const Size(1100, 1600));
+      await tester.tap(find.text('Living + 2'));
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(find.text('Output'), findsOneWidget);
+      for (final v in ['Group', 'Living', 'Kitchen', 'Bath']) {
+        expect(volume(v), findsOneWidget, reason: v);
+      }
+      expect(find.text('Here'), findsNWidgets(3)); // the group, Pixel 8, the offline Windows app
+      expect(find.text('Control'), findsNWidgets(2)); // Pixel 8 and the offline Windows app
+      expect(find.text('Take over'), findsOneWidget);
+      expect(find.text('Web player · Firefox'), findsOneWidget);
+      expect(find.text('This device · Linux'), findsOneWidget);
+      expect(find.text('busy'), findsOneWidget);
+      expect(find.text('switched off'), findsOneWidget);
+      // A busy or switched-off room cannot be chosen; the free ones of the group are controlled.
+      final there = tester.widgetList<FilledButton>(find.widgetWithText(FilledButton, 'There')).toList();
+      expect(there.length, 2);
+      expect(there.every((b) => b.onPressed == null), isTrue);
+      await tester.tap(find.byTooltip('Close'));
       await tester.pump();
-      final kitchen = rectOf(tester, volume('Kitchen'));
-      final groupVolume = rectOf(tester, volume('Group volume'));
-      expect(kitchen.bottom, lessThan(groupVolume.top));
-      expect(find.text('Group'), findsOneWidget);
-      expect(groupVolume.bottom, lessThan(rectOf(tester, find.text('Living + 2')).top));
-      expect(kitchen.left, greaterThan(rectOf(tester, find.byType(CoverThumb)).right));
+      expect(find.text('Output'), findsNothing);
+      expect(find.byTooltip('Pause'), findsOneWidget);
+      remote.release();
     });
 
-    testWidgets('a low window scrolls instead of overflowing', (tester) async {
-      final members = [room(1, 'Living', group: [1, 2, 3]), room(2, 'Kitchen', group: [1, 2, 3]), room(3, 'Bath', group: [1, 2, 3])];
-      sonos.all = members;
-      sonos.output = members.first;
-      await show(tester, const NowPlayingView(), size: const Size(900, 420));
-      await tester.tap(find.text('Rooms (3)'));
-      await tester.pump();
+    testWidgets('a low window: the footer as 2 × 2 below the cover, the buttons stay at the bottom right', (tester) async {
+      await show(tester, const NowPlayingView(), size: const Size(640, 430));
       expect(tester.takeException(), isNull);
-      // The footer stays in view, the title gives way.
-      expect(rectOf(tester, find.text('Living + 2')).bottom, lessThanOrEqualTo(420));
+      final cover = rectOf(tester, find.byType(CoverThumb));
+      final sleep = rectOf(tester, find.text('Sleep timer'));
+      final speed = rectOf(tester, find.text('Speed'));
+      final output = rectOf(tester, find.text('This device'));
+      final play = rectOf(tester, find.byTooltip('Play'));
+      expect(sleep.top, greaterThan(cover.bottom));
+      expect(sleep.right, lessThanOrEqualTo(cover.right + 1));
+      expect(speed.top, sleep.top);
+      expect(output.top, greaterThan(sleep.bottom));
+      expect(play.left, greaterThan(cover.right));
+      expect(play.bottom, lessThanOrEqualTo(430));
+      expect(rectOf(tester, find.byTooltip('Back 15 s')).bottom, lessThanOrEqualTo(430));
     });
   });
 

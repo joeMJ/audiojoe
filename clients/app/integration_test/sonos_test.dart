@@ -12,6 +12,7 @@
 import 'package:audiojoe/api.dart';
 import 'package:audiojoe/main.dart' as app;
 import 'package:audiojoe/player.dart';
+import 'package:audiojoe/remote.dart';
 import 'package:audiojoe/sonos.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -52,7 +53,7 @@ void main() {
       await api.call('POST', '/sonos/$roomId/command', body: {'action': 'volume', 'volume': 5});
       final a = (await player.meta(first))!, b = (await player.meta(next))!;
       await player.play([a, b]);
-      await waitUntil(tester, () => player.playing, what: 'playing here');
+      await waitUntil(tester, () => player.audio.playing, what: 'playing here');
       await player.seekTo(a.durationMs! - 40000);
       await tester.pump(const Duration(seconds: 1));
       await sonos.playOn(room);
@@ -63,27 +64,27 @@ void main() {
       await waitUntil(tester, () => player.item?.key == first && player.position > start + 5000, seconds: 30,
           what: 'position follows the speaker (${player.position})');
       log('position follows: ${player.position}');
-      expect(player.playing, isFalse, reason: 'the app does not play along');
+      expect(player.audio.playing, isFalse, reason: 'the app does not play along');
 
       // The speaker reaches the next title by itself; the app shows it.
       await waitUntil(tester, () => player.item?.key == next, seconds: 60, what: 'app switches to the next title');
       await waitUntil(tester, () => player.position > 3000, seconds: 30, what: 'position of the next title');
       log('next title shown at ${player.position}, queue index ${player.index}');
-      expect(player.playing, isFalse);
+      expect(player.audio.playing, isFalse);
 
       // ⏮ while the speaker plays: the speaker plays the title before, this device stays silent.
       await player.skip(-1);
       await tester.pump(const Duration(seconds: 2));
-      expect(player.playing, isFalse, reason: '⏮ must not play here');
+      expect(player.audio.playing, isFalse, reason: '⏮ must not play here');
       await waitUntil(tester, () => player.item?.key == first && player.position > 5000, seconds: 40,
           what: 'speaker plays the title before (${player.item?.key} ${player.position})');
-      expect(player.playing, isFalse, reason: 'still not playing here');
+      expect(player.audio.playing, isFalse, reason: 'still not playing here');
       log('skip back on the speaker: ${player.position}, queue index ${player.index}');
       // And ⏭ again, so the rest of the test runs on the next title as before.
       await player.skip(1);
       await waitUntil(tester, () => player.item?.key == next && player.position > 3000, seconds: 40,
           what: 'speaker plays the next title again');
-      expect(player.playing, isFalse);
+      expect(player.audio.playing, isFalse);
       log('skip forward on the speaker: ${player.position}');
 
       // Cut the event stream without notice; the app must notice the silence and reconnect.
@@ -95,7 +96,8 @@ void main() {
           what: 'positions arrive again after the cut');
       log('positions again after ${DateTime.now().difference(cut).inSeconds} s: ${player.position}');
     } finally {
-      await sonos.backToDevice();
+      await remote.command('pause').catchError((_) => null);
+      remote.release();
       await api.call('POST', '/sonos/$roomId/command', body: {'action': 'volume', 'volume': volume});
       await player.stop();
       await api.call('POST', '/auth/logout');

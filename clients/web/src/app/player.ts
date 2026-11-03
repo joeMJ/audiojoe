@@ -324,6 +324,9 @@ async function persist(finished = false) {
     updated_at: new Date().toISOString(),
     title: it.title,
     subtitle: it.subtitle ?? it.podcast ?? "",
+    // Other devices see what plays here and can take it over.
+    state: finished ? "stopped" : audio.paused ? "paused" : "playing",
+    kind: "web",
   });
 }
 
@@ -350,6 +353,7 @@ audio.addEventListener("play", () => {
   state.playing = true;
   clearInterval(saveTimer);
   saveTimer = window.setInterval(() => void persist(), 10000);
+  void persist();
   notify();
 });
 audio.addEventListener("pause", () => {

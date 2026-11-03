@@ -39,6 +39,18 @@ class Sync {
   /// A continue list changed (on any device): the name of the list.
   final _lists = StreamController<String>.broadcast();
   Stream<String> get lists => _lists.stream;
+  /// A device of the account changed (state, position, online): its row as from `GET /devices`.
+  final _devices = StreamController<Device>.broadcast();
+  Stream<Device> get devices => _devices.stream;
+  /// A command from another device for this one.
+  final _commands = StreamController<Map<String, dynamic>>.broadcast();
+  Stream<Map<String, dynamic>> get commands => _commands.stream;
+  /// A Sonos session ended (stop, takeover, the speaker plays something else).
+  final _sonosEnded = StreamController<Map<String, dynamic>>.broadcast();
+  Stream<Map<String, dynamic>> get sonosEnded => _sonosEnded.stream;
+  /// The event stream (re)connected: views reload what they show from other devices.
+  final _reconnected = StreamController<void>.broadcast();
+  Stream<void> get reconnected => _reconnected.stream;
 
   StreamSubscription<String>? _events;
   Timer? _probe;
@@ -114,7 +126,7 @@ class Sync {
     await _events?.cancel();
     _events = null;
     try {
-      final req = http.Request('GET', api.uri('/events'))
+      final req = http.Request('GET', api.uri('/events', {'kind': deviceKind}))
         ..headers.addAll(api.authHeaders)
         ..headers['accept'] = 'text/event-stream';
       final res = await api.client.send(req);
@@ -122,6 +134,7 @@ class Sync {
       api.online.value = true;
       String event = '';
       _lastData = DateTime.now();
+      _reconnected.add(null);
       _events = res.stream.transform(utf8.decoder).transform(const LineSplitter()).listen((line) {
         // Any line counts as a sign of life, also the server's keep-alive comment every 15 s.
         _lastData = DateTime.now();
@@ -133,6 +146,14 @@ class Sync {
           _remote.add(p);
         } else if (line.startsWith('data:') && event == 'lists') {
           _lists.add((jsonDecode(line.substring(5))['list'] ?? '') as String);
+        } else if (line.startsWith('data:') && event == 'device') {
+          _devices.add(Device.fromJson(jsonDecode(line.substring(5))['device'] as Map));
+        } else if (line.startsWith('data:') && event == 'command') {
+          final c = (jsonDecode(line.substring(5)) as Map).cast<String, dynamic>();
+          if (c['target'] == api.device) _commands.add(c);
+        } else if (line.startsWith('data:') && event == 'sonos') {
+          final e = (jsonDecode(line.substring(5)) as Map).cast<String, dynamic>();
+          if (e['state'] == 'ended') _sonosEnded.add(e);
         }
       }, onDone: _lost, onError: (_) => _lost(), cancelOnError: true);
     } catch (_) {

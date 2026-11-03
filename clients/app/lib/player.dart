@@ -11,7 +11,7 @@ import 'package:audio_service/audio_service.dart' show MediaItem;
 import 'api.dart';
 import 'downloads.dart';
 import 'models.dart';
-import 'sonos.dart';
+import 'remote.dart';
 import 'store.dart';
 import 'sync.dart';
 
@@ -27,6 +27,7 @@ class Player extends ChangeNotifier {
     });
     audio.currentIndexStream.listen((_) => notifyListeners());
     sync.remote.listen(_onRemote);
+    sync.commands.listen((c) => unawaited(_onCommand(c)));
   }
   static final instance = Player._();
 
@@ -75,9 +76,13 @@ class Player extends ChangeNotifier {
   bool _cued = false;
   int _cuedMs = 0;
 
-  int get position => _cued ? _cuedMs : (_parts.isEmpty ? 0 : _parts[_part].startMs) + audio.position.inMilliseconds;
-  int get duration => _parts.isNotEmpty ? (item?.durationMs ?? 0) : (audio.duration?.inMilliseconds ?? item?.durationMs ?? 0);
-  bool get playing => audio.playing;
+  /// While another device is controlled: its position and state (its title is shown here).
+  int get position => remote.active ? remote.position : _localPosition;
+  int get _localPosition => _cued ? _cuedMs : (_parts.isEmpty ? 0 : _parts[_part].startMs) + audio.position.inMilliseconds;
+  int get duration => remote.active
+      ? (remote.durationMs ?? item?.durationMs ?? 0)
+      : _parts.isNotEmpty ? (item?.durationMs ?? 0) : (audio.duration?.inMilliseconds ?? item?.durationMs ?? 0);
+  bool get playing => remote.active ? remote.playing : audio.playing;
   bool get live => item?.kind == 'radio';
 
   List<Chapter> get chapters => item?.chapters ?? const [];
@@ -114,20 +119,8 @@ class Player extends ChangeNotifier {
     return _jump(position - c.startMs < 3000 && i > 0 ? chapters[i - 1].startMs : c.startMs);
   }
 
-  /// A chapter jump (⏮ ⏭): on a Sonos speaker while it is the output, else here.
-  Future<void> _jump(int ms) async {
-    await seekTo(ms);
-    final room = sonos.output;
-    if (room != null) {
-      _jumpedAt = DateTime.now();
-      await sonos.playOn(room);
-    }
-  }
-
-  /// When ⏮ ⏭ last moved on while Sonos is the output: until the speaker plays the new title or
-  /// position, positions it still reports for the old one must not pull the view back.
-  DateTime _jumpedAt = DateTime.fromMillisecondsSinceEpoch(0);
-  bool get _justJumped => DateTime.now().difference(_jumpedAt) < const Duration(seconds: 15);
+  /// A chapter jump (⏮ ⏭): here, or on the controlled device.
+  Future<void> _jump(int ms) => seekTo(ms);
 
   /// Metadata for an item: from the server, else from the local copy (offline).
   Future<Item?> meta(String key) async {
@@ -144,12 +137,14 @@ class Player extends ChangeNotifier {
 
   /// The queue (e.g. an album) on this device, so a restart continues it instead of one title.
   /// The server keeps it too, so another device taking over the title continues the queue.
+  Map<String, dynamic> get queueJson => {
+        'items': [for (final q in queue) q.toJson()],
+        'index': index,
+        'entry': entry == null ? null : {'list': entry!.list, 'key': entry!.key},
+      };
+
   void _saveQueue() {
-    final q = {
-      'items': [for (final q in queue) q.toJson()],
-      'index': index,
-      'entry': entry == null ? null : {'list': entry!.list, 'key': entry!.key},
-    };
+    final q = queueJson;
     Stores.device.put('queue', q);
     if (api.online.value) unawaited(api.call('PUT', '/queue', body: q).catchError((_) => null));
   }
@@ -297,6 +292,10 @@ class Player extends ChangeNotifier {
   }
 
   Future<void> seekTo(int ms) async {
+    if (remote.active) {
+      await remote.command('seek', positionMs: ms.clamp(0, duration > 0 ? duration : ms));
+      return;
+    }
     if (_cued) {
       _cuedMs = ms.clamp(0, duration);
       return notifyListeners();
@@ -309,6 +308,10 @@ class Player extends ChangeNotifier {
   Future<void> seekBy(int ms) => seekTo(position + ms);
 
   void toggle() {
+    if (remote.active) {
+      unawaited(remote.command(remote.playing ? 'pause' : 'resume'));
+      return;
+    }
     if (_cued && item != null) {
       final it = item!;
       // The cued position is the start: save it first, so loading begins there.
@@ -350,6 +353,10 @@ class Player extends ChangeNotifier {
   /// [afterEnd]: the title has just been saved as heard; saving again would store its end
   /// position as not heard. The next title of a queue starts at its beginning.
   Future<void> skip(int d, {bool afterEnd = false}) async {
+    if (remote.active) {
+      await remote.command(d > 0 ? 'next' : 'prev');
+      return;
+    }
     final i = index + d;
     if (i < 0 || i >= queue.length) return;
     if (!afterEnd) await _persist();
@@ -358,30 +365,28 @@ class Player extends ChangeNotifier {
     if (full != null) queue[i] = full;
     _saveQueue();
     await _load(queue[i], fromStart: true);
-    // While a Sonos speaker is the output, the speaker plays the new title, not this device.
-    final room = sonos.output;
-    if (room != null) {
-      _jumpedAt = DateTime.now();
-      return sonos.playOn(room);
-    }
     // just_audio's play() completes only when playback stops: do not wait for it.
     unawaited(audio.play());
   }
 
-  Future<void> _persist({bool finished = false}) async {
+  /// Saves the position with this device's state. [report]: also right at the start of a title
+  /// (other devices see at once what plays here).
+  Future<void> _persist({bool finished = false, bool report = false, bool stopped = false}) async {
     final it = item;
     // Live radio has no position to continue from.
-    // A cued item has not been played here: nothing new to save.
-    if (it == null || _cued || it.kind == 'radio' || (!finished && position < 1000)) return;
+    // A cued item has not been played here, and while another device is controlled nothing plays here.
+    if (it == null || _cued || remote.active || it.kind == 'radio' || (!finished && !report && _localPosition < 1000)) return;
+    final d = _parts.isNotEmpty ? (it.durationMs ?? 0) : (audio.duration?.inMilliseconds ?? it.durationMs ?? 0);
     sync.savePosition(Playback(
       key: it.key,
-      positionMs: position,
-      durationMs: duration > 0 ? duration : null,
+      positionMs: _localPosition,
+      durationMs: d > 0 ? d : null,
       finished: finished,
       title: it.title,
       subtitle: it.subtitle,
       device: api.device,
       updatedAt: DateTime.now().toUtc().toIso8601String(),
+      state: stopped || finished ? 'stopped' : audio.playing ? 'playing' : 'paused',
     ));
   }
 
@@ -391,6 +396,7 @@ class Player extends ChangeNotifier {
       _wasPlaying = s.playing;
       _saveTimer?.cancel();
       if (s.playing) {
+        unawaited(_persist(report: true));
         _saveTimer = Timer.periodic(const Duration(seconds: 10), (_) => _persist());
       } else {
         unawaited(_persist());
@@ -424,14 +430,13 @@ class Player extends ChangeNotifier {
   /// Another device moved on: follow it while this device is not playing the item. When it moved
   /// to another title of this queue (a Sonos speaker reached the next track), switch to that title.
   void _onRemote(Playback p) {
-    if (item == null || audio.playing || p.device == api.device) return;
+    // While another device is controlled, its reports (event `device`) drive the view.
+    if (item == null || audio.playing || remote.active || p.device == api.device) return;
     if (p.key != item!.key) {
       final i = queue.indexWhere((q) => q.key == p.key);
-      if (i >= 0 && !p.finished && !_justJumped) unawaited(_follow(i));
+      if (i >= 0 && !p.finished) unawaited(_follow(i));
       return;
     }
-    // Right after ⏮ ⏭ on Sonos the speaker may still report the position before the jump.
-    if (_justJumped && sonos.output != null && (p.positionMs - position).abs() > 5000) return;
     takenOver = (device: p.device, at: p.updatedAt);
     if (_cued) {
       _cuedMs = p.positionMs;
@@ -453,11 +458,104 @@ class Player extends ChangeNotifier {
   }
 
   Future<void> stop() async {
-    await _persist();
+    await _persist(stopped: true);
     await audio.stop();
     item = null;
     _cued = false;
     notifyListeners();
+  }
+
+  // ---------------------------------------------------------------- other devices
+
+  /// Pauses this device (before it controls another one).
+  Future<void> pauseHere() async {
+    if (audio.playing) await audio.pause();
+  }
+
+  /// Shows the item another device plays, paused here, without loading its stream.
+  Future<void> _show(String key, int ms) async {
+    if (item?.key != key) {
+      final i = queue.indexWhere((q) => q.key == key);
+      Item? it = i >= 0 ? queue[i] : null;
+      final full = await meta(key);
+      it = full ?? it;
+      if (it == null) return;
+      if (i >= 0) {
+        index = i;
+        queue[i] = it;
+      } else {
+        final other = await _serverQueue(key);
+        if (other == null || !_restoreQueue(it, other)) {
+          queue = [it];
+          index = 0;
+          entry = Player.entryOf(it);
+        }
+      }
+      if (audio.playing) await audio.pause();
+      item = it;
+      fromCache = downloads.isOffline(it.key);
+    }
+    _cued = true;
+    _cuedMs = ms;
+    notifyListeners();
+  }
+
+  /// The controlled device moved to another title: show it.
+  Future<void> mirror(String key) => _show(key, remote.position);
+
+  /// The controlled device ended: its title stays here, paused at its last position.
+  Future<void> cueAt(String key, int ms) => _show(key, ms);
+
+  /// "Here": continues an item here at a position another device left it.
+  Future<void> takeOver(String key, int ms) async {
+    await _show(key, ms);
+    final it = item;
+    if (it == null || it.key != key) return;
+    sync.savePosition(Playback(key: key, positionMs: ms, durationMs: it.durationMs, finished: false, title: it.title,
+        subtitle: it.subtitle, device: api.device, updatedAt: DateTime.now().toUtc().toIso8601String()));
+    toggle();
+  }
+
+  /// A command from another device; this device reports its state right after it.
+  Future<void> _onCommand(Map<String, dynamic> c) async {
+    final at = c['position_ms'] as int?;
+    switch (c['action']) {
+      case 'pause' || 'takeover':
+        await pauseHere();
+      case 'resume':
+        if (!audio.playing) toggle();
+      case 'stop':
+        await pauseHere();
+        await _persist(report: true, stopped: true);
+        return;
+      case 'next':
+        await skip(1);
+      case 'prev':
+        await skip(-1);
+      case 'seek' when at != null:
+        await seekTo(at);
+      case 'play':
+        final q = c['queue'] as Map?;
+        final items = [for (final j in q?['items'] as List? ?? const []) Item.fromJson((j as Map).cast<String, dynamic>())];
+        final i = q?['index'] as int? ?? 0;
+        final key = c['key'] as String? ?? '';
+        if (items.isEmpty || i >= items.length || items[i].key != key) {
+          final it = await meta(key);
+          if (it == null) return;
+          items
+            ..clear()
+            ..add(it);
+        }
+        final idx = items.length == 1 ? 0 : i;
+        final e = q?['entry'] as Map?;
+        if ((at ?? 0) > 0) {
+          sync.savePosition(Playback(key: key, positionMs: at!, finished: false, title: items[idx].title,
+              subtitle: items[idx].subtitle, device: api.device, updatedAt: DateTime.now().toUtc().toIso8601String()));
+        }
+        await play(items, idx, e == null ? null : (list: e['list'] as String, key: e['key'] as String));
+        return;
+    }
+    await _persist(report: true);
   }
 }
 

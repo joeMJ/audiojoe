@@ -1,5 +1,7 @@
 // Data types of the audiojoe API.
 
+import 'dart:io';
+
 class Quality {
   final String codec;
   final int? sampleRate, bitDepth, bitrate, channels;
@@ -171,6 +173,8 @@ class Playback {
   final int positionMs;
   final int? durationMs;
   final bool finished;
+  /// The reporting device's state (playing | paused | stopped); sent, not stored per item.
+  final String? state;
 
   const Playback({
     required this.key,
@@ -181,6 +185,7 @@ class Playback {
     this.subtitle = '',
     this.device = '',
     required this.updatedAt,
+    this.state,
   });
 
   static Playback fromJson(Map<String, dynamic> j, {String? key}) => Playback(
@@ -203,5 +208,46 @@ class Playback {
         'subtitle': subtitle,
         'device': device,
         'updated_at': updatedAt,
+        if (state != null) 'state': state,
+        if (state != null) 'kind': deviceKind,
       };
+}
+
+/// This app's kind in the server's device list.
+String get deviceKind => Platform.isWindows
+    ? 'windows'
+    : Platform.isAndroid
+        ? 'android'
+        : 'linux';
+
+/// A device of the account as listed by the server (`GET /devices`, event `device`).
+class Device {
+  final String name, kind, state, key, title, subtitle, updatedAt;
+  final String? lastSeen;
+  final int positionMs;
+  final int? durationMs;
+  final bool online, current;
+
+  const Device({required this.name, required this.kind, required this.state, required this.key, required this.title,
+      required this.subtitle, required this.updatedAt, this.lastSeen, required this.positionMs, this.durationMs,
+      required this.online, this.current = false});
+
+  static Device fromJson(Map j) => Device(
+        name: j['device'] as String,
+        kind: (j['kind'] ?? '') as String,
+        state: (j['state'] ?? 'stopped') as String,
+        key: (j['key'] ?? '') as String,
+        title: (j['title'] ?? '') as String,
+        subtitle: (j['subtitle'] ?? '') as String,
+        updatedAt: (j['updated_at'] ?? '') as String,
+        lastSeen: j['last_seen'] as String?,
+        positionMs: (j['position_ms'] ?? 0) as int,
+        durationMs: j['duration_ms'] as int?,
+        online: (j['online'] ?? false) as bool,
+        current: (j['current'] ?? false) as bool,
+      );
+
+  bool get playing => state == 'playing';
+  bool get web => kind == 'web';
+  bool get speaker => kind == 'sonos';
 }

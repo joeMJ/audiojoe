@@ -10,6 +10,7 @@ import 'api.dart';
 import 'appearance.dart';
 import 'downloads.dart';
 import 'media_session.dart';
+import 'remote.dart';
 import 'player.dart';
 import 'l10n.dart';
 import 'store.dart';
@@ -54,7 +55,7 @@ class _AudiojoeAppState extends State<AudiojoeApp> {
     sync.start();
     downloads.check();
     connectLists();
-    unawaited(player.cueLast());
+    unawaited(player.cueLast().then((_) => remote.findPlaying()));
     unawaited(_offerUpdate());
   }
 
