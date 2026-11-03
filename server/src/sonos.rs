@@ -453,22 +453,59 @@ fn track(state: &AppState, lan: SocketAddr, meta: &Value, claim: &Claim) -> (Str
     (url, didl)
 }
 
-/// Multi-file books: hands the speaker the following file, so it continues on its own.
+/// Hands the speaker what follows, so it continues on its own: the next file of a multi-file
+/// book, else the next title of the queue the item was played from (an album, a list).
 async fn queue_next(state: &AppState, lan: SocketAddr, coord: &str, meta: &Value, claim: &Claim) {
-    let Some(part) = claim.part else { return };
-    let Some(next) = meta["parts"].as_array().and_then(|p| p.get(part + 1)) else { return };
-    let claim = Claim {
-        part: Some(part + 1),
-        offset_ms: next["start_ms"].as_i64().unwrap_or(0),
-        start_ms: 0,
-        exp: Utc::now().timestamp() + URL_HOURS * 3600,
-        ..claim.clone()
+    let next_part = claim.part.and_then(|part| meta["parts"].as_array().and_then(|p| p.get(part + 1)).map(|n| (part + 1, n.clone())));
+    let (meta, claim) = if let Some((part, next)) = next_part {
+        let claim = Claim {
+            part: Some(part),
+            offset_ms: next["start_ms"].as_i64().unwrap_or(0),
+            start_ms: 0,
+            exp: Utc::now().timestamp() + URL_HOURS * 3600,
+            ..claim.clone()
+        };
+        (meta.clone(), claim)
+    } else {
+        let Some(key) = next_in_queue(state, claim.user, &claim.key).await else { return };
+        let Ok(meta) = media::meta_for(state, &stream_user(claim), &key).await else { return };
+        if meta["kind"] == "radio" {
+            return;
+        }
+        let multi = meta["parts"].as_array().is_some_and(|p| p.len() > 1);
+        let claim = Claim {
+            key,
+            part: multi.then_some(0),
+            offset_ms: 0,
+            start_ms: 0,
+            exp: Utc::now().timestamp() + URL_HOURS * 3600,
+            ..claim.clone()
+        };
+        (meta, claim)
     };
-    let (url, didl) = track(state, lan, meta, &claim);
+    let (url, didl) = track(state, lan, &meta, &claim);
     if let Err(e) = soap(&state.http, coord, AVT, "SetNextAVTransportURI",
                          &format!("<InstanceID>0</InstanceID><NextURI>{}</NextURI><NextURIMetaData>{}</NextURIMetaData>", xml_escape(&url), xml_escape(&didl))).await {
-        tracing::warn!("sonos {coord}: next file not queued: {e:?}");
+        tracing::warn!("sonos {coord}: next title not queued: {e:?}");
     }
+}
+
+/// The title after `key` in the user's most recent queue that contains it.
+async fn next_in_queue(state: &AppState, user: i64, key: &str) -> Option<String> {
+    let key = key.to_string();
+    with_db(&state.db, move |c| {
+        let mut st = c.prepare("SELECT data FROM queue WHERE user_id = ?1 ORDER BY current_key = ?2 DESC, updated_at DESC")?;
+        let rows: Vec<String> = st.query_map((user, &key), |r| r.get(0))?.collect::<Result<_, _>>()?;
+        Ok(rows.iter().find_map(|d| {
+            let q: Value = serde_json::from_str(d).ok()?;
+            let items = q["items"].as_array()?;
+            let i = items.iter().position(|it| it["key"] == key.as_str())?;
+            items.get(i + 1)?["key"].as_str().map(str::to_string)
+        }))
+    })
+    .await
+    .ok()
+    .flatten()
 }
 
 /// The owner of a stream, as seen by the media layer.
@@ -589,19 +626,18 @@ pub async fn command(
 /// Stores the position of speakers that play one of our streams.
 pub async fn poll_loop(state: AppState) {
     let mut last: HashMap<String, i64> = HashMap::new();
-    // Per coordinator: the multi-file track whose successor has been queued.
+    // Per coordinator: the track whose successor has been queued, and the item playing.
     let mut queued: HashMap<String, String> = HashMap::new();
+    let mut playing: HashMap<String, (i64, String, String, i64)> = HashMap::new(); // user, room, key, position
     // Title and subtitle per item, so a position stored by the speaker carries them.
     let mut titles: HashMap<String, (String, String)> = HashMap::new();
     loop {
         tokio::time::sleep(POLL_EVERY).await;
         let Ok(list) = speakers(&state).await else { continue };
-        let mut coords = std::collections::HashSet::new();
-        for sp in list {
-            let Ok(coord) = coordinator(&state, &sp).await else { continue };
-            if !coords.insert(coord.clone()) {
-                continue;
-            }
+        // All at once: speakers that are switched off would otherwise hold up the round by their timeout.
+        let found = futures_util::future::join_all(list.iter().map(|sp| coordinator(&state, sp))).await;
+        let coords: std::collections::BTreeSet<String> = found.into_iter().flatten().collect();
+        for coord in coords {
             let Ok(pos) = soap(&state.http, &coord, AVT, "GetPositionInfo", "<InstanceID>0</InstanceID>").await else { continue };
             let uri = unescape(&tag(&pos, "TrackURI").unwrap_or_default());
             let Some(c) = decode_uri(&state, &uri) else { continue };
@@ -613,8 +649,8 @@ pub async fn poll_loop(state: AppState) {
             if !matches!(tag(&transport, "CurrentTransportState").as_deref(), Some("PLAYING" | "PAUSED_PLAYBACK")) {
                 continue;
             }
-            if c.part.is_some() && queued.get(&coord) != Some(&uri) {
-                // The speaker moved on to a file queued earlier: queue the one after it.
+            if queued.get(&coord) != Some(&uri) {
+                // A new track (started here or reached by the speaker): queue what follows it.
                 if let (Some(lan), Ok(meta)) = (lan_addr(&state), media::meta_for(&state, &stream_user(&c), &c.key).await) {
                     queue_next(&state, lan, &coord, &meta, &c).await;
                 }
@@ -622,6 +658,16 @@ pub async fn poll_loop(state: AppState) {
             }
             let Some(ms) = tag(&pos, "RelTime").and_then(|t| parse_time(&t)) else { continue };
             let global = c.offset_ms + c.start_ms + ms;
+            let device = format!("Sonos {}", c.room);
+            // The speaker moved on to another title: the one before is heard to the end.
+            if let Some((user, room, key, at)) = playing.get(&coord).cloned() {
+                if key != c.key {
+                    let done = playback::External { position_ms: at, duration_ms: None, finished: true, updated_at: Utc::now(),
+                                                    title: String::new(), subtitle: String::new() };
+                    let _ = playback::apply_external(&state, user, &format!("Sonos {room}"), &key, done).await;
+                }
+            }
+            playing.insert(coord.clone(), (c.user, c.room.clone(), c.key.clone(), global));
             if last.get(&coord).is_some_and(|&p| (p - global).abs() < 2000) {
                 continue; // paused or unchanged
             }
@@ -641,7 +687,7 @@ pub async fn poll_loop(state: AppState) {
                 title,
                 subtitle,
             };
-            let _ = playback::apply_external(&state, c.user, &format!("Sonos {}", c.room), &c.key, ext).await;
+            let _ = playback::apply_external(&state, c.user, &device, &c.key, ext).await;
         }
     }
 }

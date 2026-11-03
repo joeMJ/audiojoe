@@ -399,9 +399,15 @@ class Player extends ChangeNotifier {
     }
   }
 
-  /// Another device moved on: follow it while this device is not playing the item.
+  /// Another device moved on: follow it while this device is not playing the item. When it moved
+  /// to another title of this queue (a Sonos speaker reached the next track), switch to that title.
   void _onRemote(Playback p) {
-    if (item == null || p.key != item!.key || audio.playing || p.device == api.device) return;
+    if (item == null || audio.playing || p.device == api.device) return;
+    if (p.key != item!.key) {
+      final i = queue.indexWhere((q) => q.key == p.key);
+      if (i >= 0 && !p.finished) unawaited(_follow(i));
+      return;
+    }
     takenOver = (device: p.device, at: p.updatedAt);
     if (_cued) {
       _cuedMs = p.positionMs;
@@ -409,6 +415,16 @@ class Player extends ChangeNotifier {
     }
     final (part, local) = _locate(p.positionMs, _parts);
     unawaited(audio.seek(Duration(milliseconds: local), index: _parts.isEmpty ? null : part));
+    notifyListeners();
+  }
+
+  /// Shows title `i` of the queue at the position another device reported, without playing here.
+  Future<void> _follow(int i) async {
+    index = i;
+    final full = await meta(queue[i].key);
+    if (full != null) queue[i] = full;
+    _saveQueue();
+    await _load(queue[i]);
     notifyListeners();
   }
 

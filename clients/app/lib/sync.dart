@@ -89,6 +89,12 @@ class Sync {
     _connect();
     // While offline, check every 20 s whether the server is back.
     _probe = Timer.periodic(const Duration(seconds: 20), (_) async {
+      if (api.online.value && _events != null && DateTime.now().difference(_lastData) > const Duration(seconds: 45)) {
+        // No keep-alive for three rounds: the stream is dead, open a new one.
+        await _events?.cancel();
+        _events = null;
+        return _connect();
+      }
       if (api.online.value && _events != null) return;
       try {
         await api.call('GET', '/health');
@@ -97,6 +103,10 @@ class Sync {
   }
 
   bool _connecting = false;
+
+  /// When the event stream last delivered anything. A connection that died without notice (the
+  /// router changed the public address, a proxy dropped it) delivers nothing and never ends.
+  DateTime _lastData = DateTime.now();
 
   Future<void> _connect() async {
     if (_connecting) return;
@@ -111,7 +121,10 @@ class Sync {
       if (res.statusCode != 200) throw ApiError(res.statusCode, 'events');
       api.online.value = true;
       String event = '';
+      _lastData = DateTime.now();
       _events = res.stream.transform(utf8.decoder).transform(const LineSplitter()).listen((line) {
+        // Any line counts as a sign of life, also the server's keep-alive comment every 15 s.
+        _lastData = DateTime.now();
         if (line.startsWith('event:')) {
           event = line.substring(6).trim();
         } else if (line.startsWith('data:') && event == 'playback') {
