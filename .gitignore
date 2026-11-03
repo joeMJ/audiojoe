@@ -13,6 +13,8 @@ clients/web/dist/
 *.env
 secrets.*
 .claude/settings.local.json
+.claude/hooks/
+.claude/freigabe.flag
 
 # Signing keys
 *.pfx
