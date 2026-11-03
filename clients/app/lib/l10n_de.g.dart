@@ -204,7 +204,6 @@ const deStrings = <String, String>{
   "Results": "Treffer",
   "Resume": "Weiter",
   "Rooms ({n})": "Räume ({n})",
-  "Running": "Läuft",
   "Samplers": "Sampler",
   "Save offline": "Offline",
   "Saved: {path}": "Gespeichert: {path}",

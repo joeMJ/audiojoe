@@ -4,9 +4,9 @@
 //     --dart-define=PASS=… --dart-define=TOTP_SECRET=… --dart-define=ROOM=6 \
 //     --dart-define=FIRST=jellyfin:… --dart-define=NEXT=jellyfin:…
 //
-// Starts FIRST 20 s before its end on room ROOM (volume 5, restored afterwards), with NEXT after it
+// Starts FIRST 40 s before its end on room ROOM (volume 5, restored afterwards), with NEXT after it
 // in the queue. Checks that the shown position follows the speaker and that the app switches to
-// NEXT when the speaker gets there. Then prints "CUT <port>": the event stream is cut without
+// NEXT when the speaker gets there, that ⏮ and ⏭ play on the speaker, not here. Then prints "CUT <port>": the event stream is cut without
 // notice from outside (tools/dev/cut-events.sh), and positions must arrive again after reconnecting.
 
 import 'package:audiojoe/api.dart';
@@ -53,7 +53,7 @@ void main() {
       final a = (await player.meta(first))!, b = (await player.meta(next))!;
       await player.play([a, b]);
       await waitUntil(tester, () => player.playing, what: 'playing here');
-      await player.seekTo(a.durationMs! - 20000);
+      await player.seekTo(a.durationMs! - 40000);
       await tester.pump(const Duration(seconds: 1));
       await sonos.playOn(room);
       final start = player.position;
@@ -70,6 +70,21 @@ void main() {
       await waitUntil(tester, () => player.position > 3000, seconds: 30, what: 'position of the next title');
       log('next title shown at ${player.position}, queue index ${player.index}');
       expect(player.playing, isFalse);
+
+      // ⏮ while the speaker plays: the speaker plays the title before, this device stays silent.
+      await player.skip(-1);
+      await tester.pump(const Duration(seconds: 2));
+      expect(player.playing, isFalse, reason: '⏮ must not play here');
+      await waitUntil(tester, () => player.item?.key == first && player.position > 5000, seconds: 40,
+          what: 'speaker plays the title before (${player.item?.key} ${player.position})');
+      expect(player.playing, isFalse, reason: 'still not playing here');
+      log('skip back on the speaker: ${player.position}, queue index ${player.index}');
+      // And ⏭ again, so the rest of the test runs on the next title as before.
+      await player.skip(1);
+      await waitUntil(tester, () => player.item?.key == next && player.position > 3000, seconds: 40,
+          what: 'speaker plays the next title again');
+      expect(player.playing, isFalse);
+      log('skip forward on the speaker: ${player.position}');
 
       // Cut the event stream without notice; the app must notice the silence and reconnect.
       final cut = DateTime.now();

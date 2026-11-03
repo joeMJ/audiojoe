@@ -611,7 +611,7 @@ class _MaintenanceSettingsState extends State<MaintenanceSettings> {
             final requested = m['request'] == 'now' || (m['request'] == null && m['requested'] == true);
             return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               SettingsGroup(title: t('Server'), children: [
-                KeyValue(t('Running'), Text('${m['version']}')),
+                KeyValue(t('Installed'), Text('${m['version']}')),
                 if (older) KeyValue(t('Available'), Text(t('unknown – not checked yet'))),
                 const SizedBox(height: 6),
                 if (!older) Text(t('Updates are not managed here (server not installed from the package, see the installation guide).'), style: muted),
@@ -662,7 +662,7 @@ class _MaintenanceSettingsState extends State<MaintenanceSettings> {
 
           return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             SettingsGroup(title: t('Server'), children: [
-              KeyValue(t('Running'), Text(running)),
+              KeyValue(t('Installed'), Text(running)),
               KeyValue(
                 t('Available'),
                 latest == null
@@ -848,7 +848,7 @@ class _AppUpdateRowState extends State<_AppUpdateRow> {
           final latest = widget.latest;
           final android = Platform.isAndroid;
           return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            KeyValue(t('Running'), Text(v)),
+            KeyValue(t('Installed'), Text(v)),
             KeyValue(
               t('Available'),
               !appUpdatesEnabled

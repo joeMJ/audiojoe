@@ -802,8 +802,6 @@ msgstr "Verfügbar"
 msgid "Debian"
 msgstr "Debian"
 
-msgid "Running"
-msgstr "Läuft"
 
 msgid "Download version"
 msgstr "Version herunterladen"

@@ -11,6 +11,7 @@ import 'package:audio_service/audio_service.dart' show MediaItem;
 import 'api.dart';
 import 'downloads.dart';
 import 'models.dart';
+import 'sonos.dart';
 import 'store.dart';
 import 'sync.dart';
 
@@ -101,17 +102,32 @@ class Player extends ChangeNotifier {
   /// Next chapter; after the last one the next item, if any.
   Future<void> nextChapter() async {
     final i = chapterIndex;
-    if (i >= 0 && i + 1 < chapters.length) return seekTo(chapters[i + 1].startMs);
+    if (i >= 0 && i + 1 < chapters.length) return _jump(chapters[i + 1].startMs);
     if (index + 1 < queue.length) return skip(1);
   }
 
   /// Start of the chapter; within its first 3 seconds the previous chapter.
   Future<void> previousChapter() async {
     final i = chapterIndex;
-    if (i < 0) return index > 0 ? skip(-1) : seekTo(0);
+    if (i < 0) return index > 0 ? skip(-1) : _jump(0);
     final c = chapters[i];
-    return seekTo(position - c.startMs < 3000 && i > 0 ? chapters[i - 1].startMs : c.startMs);
+    return _jump(position - c.startMs < 3000 && i > 0 ? chapters[i - 1].startMs : c.startMs);
   }
+
+  /// A chapter jump (⏮ ⏭): on a Sonos speaker while it is the output, else here.
+  Future<void> _jump(int ms) async {
+    await seekTo(ms);
+    final room = sonos.output;
+    if (room != null) {
+      _jumpedAt = DateTime.now();
+      await sonos.playOn(room);
+    }
+  }
+
+  /// When ⏮ ⏭ last moved on while Sonos is the output: until the speaker plays the new title or
+  /// position, positions it still reports for the old one must not pull the view back.
+  DateTime _jumpedAt = DateTime.fromMillisecondsSinceEpoch(0);
+  bool get _justJumped => DateTime.now().difference(_jumpedAt) < const Duration(seconds: 15);
 
   /// Metadata for an item: from the server, else from the local copy (offline).
   Future<Item?> meta(String key) async {
@@ -342,6 +358,12 @@ class Player extends ChangeNotifier {
     if (full != null) queue[i] = full;
     _saveQueue();
     await _load(queue[i], fromStart: true);
+    // While a Sonos speaker is the output, the speaker plays the new title, not this device.
+    final room = sonos.output;
+    if (room != null) {
+      _jumpedAt = DateTime.now();
+      return sonos.playOn(room);
+    }
     // just_audio's play() completes only when playback stops: do not wait for it.
     unawaited(audio.play());
   }
@@ -405,9 +427,11 @@ class Player extends ChangeNotifier {
     if (item == null || audio.playing || p.device == api.device) return;
     if (p.key != item!.key) {
       final i = queue.indexWhere((q) => q.key == p.key);
-      if (i >= 0 && !p.finished) unawaited(_follow(i));
+      if (i >= 0 && !p.finished && !_justJumped) unawaited(_follow(i));
       return;
     }
+    // Right after ⏮ ⏭ on Sonos the speaker may still report the position before the jump.
+    if (_justJumped && sonos.output != null && (p.positionMs - position).abs() > 5000) return;
     takenOver = (device: p.device, at: p.updatedAt);
     if (_cued) {
       _cuedMs = p.positionMs;
