@@ -206,14 +206,21 @@ class Remote extends ChangeNotifier {
   }
 
   /// "There" to an app: it plays this device's title and queue from here on, this device controls it.
+  /// When another device plays (an app or a Sonos room under control), that one is paused first.
   Future<void> sendTo(String name) async {
     final it = player.item;
     if (it == null) return;
+    final position = player.live ? 0 : player.position;
+    final queue = player.queueJson;
+    if (active) {
+      await command('pause');
+      release();
+    }
     await api.call('POST', '/devices/${Uri.encodeComponent(name)}/command', body: {
       'action': 'play',
       'key': it.key,
-      'position_ms': player.live ? 0 : player.position,
-      'queue': player.queueJson,
+      'position_ms': position,
+      'queue': queue,
     });
     await control(name);
   }

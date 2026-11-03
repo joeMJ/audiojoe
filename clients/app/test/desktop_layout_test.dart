@@ -136,10 +136,11 @@ void main() {
       expect(find.text('switched off'), findsOneWidget);
       // Pills as wide as their text (at least 84), not the whole row.
       expect(tester.getSize(find.ancestor(of: find.text('controlled'), matching: find.byType(Container)).first).width, lessThan(200));
-      // A busy or switched-off room cannot be chosen; the free ones of the group are controlled.
+      // A busy or switched-off room cannot be chosen; the free ones of the group are controlled. The apps get
+      // "There" as well: Pixel 8 takes the title, the offline Windows app does not.
       final there = tester.widgetList<FilledButton>(find.widgetWithText(FilledButton, 'There')).toList();
-      expect(there.length, 2);
-      expect(there.every((b) => b.onPressed == null), isTrue);
+      expect(there.length, 4); // Pixel 8, Windows, Office, Garden
+      expect([for (final b in there) b.onPressed != null], [true, false, false, false]);
       await tester.tap(find.byTooltip('Close'));
       await tester.pump();
       expect(find.text('Output'), findsNothing);

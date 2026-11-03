@@ -281,6 +281,7 @@ class _OutputOverlayState extends State<OutputOverlay> {
               _secondary(t('Control'), d.online ? () => _run(() => remote.control(d.name), close: true) : null),
             _primary(t('Here'), d.online && d.key.isNotEmpty ? () => _run(() => remote.takeHere(d.name), close: true) : null),
             _secondary(t('Stop'), d.online && d.state != 'stopped' ? () => _run(() => remote.stop(d.name)) : null),
+            _secondary(t('There'), d.online && !controlled && player.item != null ? () => _run(() => remote.sendTo(d.name), close: true) : null),
           ];
     return _card(
       context,
