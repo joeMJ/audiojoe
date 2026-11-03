@@ -78,6 +78,12 @@ export async function flush() {
 
 let es: EventSource | null = null;
 let healthTimer: number | undefined;
+let watchTimer: number | undefined;
+/** When the stream last delivered anything (an event, or the server's "ping" every 15 s). */
+let lastData = 0;
+/** A stream without a sign of life for `silenceMs` is dead: a connection the router or a proxy
+ *  dropped without notice delivers nothing and never ends. Checked every `everyMs`. */
+export const watchdog = { everyMs: 20_000, silenceMs: 45_000 };
 
 export function startSync() {
   void refreshCount();
@@ -92,6 +98,10 @@ export function startSync() {
   healthTimer = window.setInterval(() => {
     if (!online) void probe();
   }, 20000);
+  // No sign of life for three pings: open a new stream (the old one is closed).
+  watchTimer = window.setInterval(() => {
+    if (es?.readyState === EventSource.OPEN && Date.now() - lastData > watchdog.silenceMs) connect();
+  }, watchdog.everyMs);
 }
 
 async function probe() {
@@ -107,21 +117,35 @@ async function probe() {
 function connect() {
   es?.close();
   es = new EventSource("/api/v1/events");
-  es.onopen = () => setOnline(true);
+  lastData = Date.now();
+  const alive = () => (lastData = Date.now());
+  es.onopen = () => {
+    alive();
+    setOnline(true);
+  };
   es.onerror = () => {
     if (es?.readyState === EventSource.CLOSED) setOnline(false);
   };
+  es.addEventListener("ping", alive);
   es.addEventListener("playback", (e) => {
+    alive();
     const p = JSON.parse((e as MessageEvent).data).state as Playback;
     void idbPut("positions", p.key, p);
     remoteListeners.forEach((l) => l(p));
   });
-  es.addEventListener("resync", () => remoteListeners.forEach((l) => l({ key: "" } as Playback)));
+  es.addEventListener("resync", () => {
+    alive();
+    remoteListeners.forEach((l) => l({ key: "" } as Playback));
+  });
   // A continue list changed on some device: views reload like after a resync.
-  es.addEventListener("lists", () => remoteListeners.forEach((l) => l({ key: "" } as Playback)));
+  es.addEventListener("lists", () => {
+    alive();
+    remoteListeners.forEach((l) => l({ key: "" } as Playback));
+  });
 }
 
 export function stopSync() {
   es?.close();
   clearInterval(healthTimer);
+  clearInterval(watchTimer);
 }

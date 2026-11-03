@@ -200,7 +200,9 @@ pub async fn events(State(state): State<AppState>, user: CurrentUser) -> Sse<imp
             }
         }
     });
-    Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
+    // The keep-alive is a named event, not a comment: a browser's EventSource does not pass
+    // comments on, and the clients watch for a sign of life to notice a stream that died quietly.
+    Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15)).event(Event::default().event("ping").data("{}")))
 }
 
 #[derive(Deserialize)]
