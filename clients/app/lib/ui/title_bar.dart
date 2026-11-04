@@ -87,7 +87,7 @@ class TitleBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final k = context.tok, scheme = Theme.of(context).colorScheme;
-    return Material(
+    final bar = Material(
       color: scheme.surface,
       child: Container(
         height: titleBarHeight,
@@ -121,6 +121,18 @@ class TitleBar extends StatelessWidget implements PreferredSizeWidget {
             if (windowButtons) const WindowButtons(),
           ]),
         ]),
+      ),
+    );
+    // Windows: with the hidden title bar the top border lies under the bar (window_manager 0.5.2
+    // moves only left, right and bottom inwards), so dragging it moved the window. The top
+    // edge and corners resize again (Windows VM 2026-11-04).
+    if (!windowButtons || !Platform.isWindows) return bar;
+    return SizedBox(
+      height: titleBarHeight,
+      child: DragToResizeArea(
+        resizeEdgeSize: 6,
+        enableResizeEdges: const [ResizeEdge.topLeft, ResizeEdge.top, ResizeEdge.topRight],
+        child: bar,
       ),
     );
   }
