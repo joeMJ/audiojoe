@@ -20,30 +20,22 @@ flowchart LR
     api["audiojoe-server<br/>HTTP"]
     db[("Datenbank")]
   end
-  subgraph sources["Deine Quellen"]
-    media["Jellyfin · Emby · Plex"]
-    abs["Audiobookshelf"]
+  subgraph outside["Nur vom Server erreicht"]
+    media["Jellyfin · Emby · Plex<br/>lesen"]
+    abs["Audiobookshelf<br/>lesen · Hörstand abgleichen"]
+    feeds["Podcast-Feeds · CDNs<br/>stündlich"]
+    dirs["Radio Browser · fyyd · MusicBrainz<br/>suchen"]
+    stations["Radiosender<br/>Strom durchgereicht"]
+    gh["GitHub-Releases<br/>nachts prüfen"]
+    sonos["Sonos-Lautsprecher<br/>Heimnetz"]
   end
-  subgraph internet["Internet"]
-    feeds["Podcast-Feeds · CDNs"]
-    dirs["Radio Browser · fyyd · MusicBrainz"]
-    stations["Radiosender"]
-    gh["GitHub-Releases"]
-  end
-  sonos["Sonos-Lautsprecher<br/>Heimnetz"]
 
-  app -- "HTTPS" --> proxy
-  web -- "HTTPS" --> proxy
-  proxy -- "HTTP" --> api
+  app -->|HTTPS| proxy
+  web -->|HTTPS| proxy
+  proxy -->|HTTP| api
   api --- db
-  api -- "lesen" --> media
-  api -- "lesen · Hörstand abgleichen" --> abs
-  api -- "stündlich abrufen" --> feeds
-  api -- "suchen" --> dirs
-  api -- "Strom durchreichen" --> stations
-  api -- "nachts prüfen · Paket" --> gh
-  api -- "Port 1400: steuern" --> sonos
-  sonos -- "Stromport (nur Heimnetz)" --> api
+  api --> media & abs & feeds & dirs & stations & gh & sonos
+  sonos -.->|"Stromport, nur Heimnetz"| api
 ```
 
 - **Anmeldung** mit Kennwort und Code der Authenticator-App (TOTP); danach hält das Gerät einen

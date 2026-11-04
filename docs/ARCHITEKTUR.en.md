@@ -20,30 +20,22 @@ flowchart LR
     api["audiojoe-server<br/>HTTP"]
     db[("Database")]
   end
-  subgraph sources["Your sources"]
-    media["Jellyfin · Emby · Plex"]
-    abs["Audiobookshelf"]
+  subgraph outside["Reached by the server only"]
+    media["Jellyfin · Emby · Plex<br/>read"]
+    abs["Audiobookshelf<br/>read · sync progress"]
+    feeds["Podcast feeds · CDNs<br/>hourly"]
+    dirs["Radio Browser · fyyd · MusicBrainz<br/>search"]
+    stations["Radio stations<br/>stream relayed"]
+    gh["GitHub releases<br/>nightly check"]
+    sonos["Sonos speakers<br/>home network"]
   end
-  subgraph internet["Internet"]
-    feeds["Podcast feeds · CDNs"]
-    dirs["Radio Browser · fyyd · MusicBrainz"]
-    stations["Radio stations"]
-    gh["GitHub releases"]
-  end
-  sonos["Sonos speakers<br/>home network"]
 
-  app -- "HTTPS" --> proxy
-  web -- "HTTPS" --> proxy
-  proxy -- "HTTP" --> api
+  app -->|HTTPS| proxy
+  web -->|HTTPS| proxy
+  proxy -->|HTTP| api
   api --- db
-  api -- "read" --> media
-  api -- "read · sync progress" --> abs
-  api -- "fetch hourly" --> feeds
-  api -- "search" --> dirs
-  api -- "relay stream" --> stations
-  api -- "nightly check · package" --> gh
-  api -- "port 1400: control" --> sonos
-  sonos -- "stream port (LAN only)" --> api
+  api --> media & abs & feeds & dirs & stations & gh & sonos
+  sonos -.->|"stream port, LAN only"| api
 ```
 
 - **Sign-in** with password and authenticator code (TOTP); the device then holds an access key.
