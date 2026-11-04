@@ -109,10 +109,10 @@ class _ShellState extends State<Shell> {
       leadingWidth: wide ? null : 44,
       leading: wide
           ? null
-          : Padding(padding: const EdgeInsets.only(left: 12), child: Semantics(label: 'audiojoe', child: lineIcon(context, size: 28))),
+          : Padding(padding: const EdgeInsets.only(left: 12), child: Semantics(label: 'audiojoe', child: headerIcon(context, size: 28))),
       title: wide
           ? Row(mainAxisSize: MainAxisSize.min, children: [
-              lineIcon(context, size: 26),
+              headerIcon(context, size: 26),
               const SizedBox(width: 8),
               const Text('audiojoe', style: TextStyle(fontWeight: FontWeight.w800)),
               if (appVersion.isNotEmpty) ...[

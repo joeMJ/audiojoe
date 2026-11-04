@@ -38,10 +38,9 @@ for d in mdpi:108 hdpi:162 xhdpi:216 xxhdpi:324 xxxhdpi:432; do
 done
 mkdir -p "$APP/assets"
 render 256 "$APP/assets/icon.png"
-# Title bar of the apps: the Android line drawing (user 2026-11-04), white on transparent; the
-# app tints it black (light) or white (dark).
-convert design/icon-line.png -channel RGB -evaluate set 100% +channel -trim +repage \
-    -filter Lanczos -resize 128x128 -strip "$APP/assets/icon-line.png"
+# Title bar of the apps: the head with headphones in colour (user 2026-11-04: the line drawing
+# was too fine at 24–28 px), 128 px for up to 5× pixel density.
+convert "$SMALL" -filter Lanczos -resize 128x128 -strip "$APP/assets/icon-header.png"
 tmp=$(mktemp -d)
 for s in 16 24 32 48 64 128 256; do render "$s" "$tmp/$s.png"; done
 convert "$tmp"/{16,24,32,48,64,128,256}.png "$APP/windows/runner/resources/app_icon.ico"

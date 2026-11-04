@@ -40,7 +40,8 @@ String clock(int ms) {
 
 /// Decimal units (user 2026-11-04: 5 GB = 5 × 10^9 bytes, as GNOME and Android show them).
 String bytes(int n) {
-  if (n >= 1000000000) return '${(n / 1000000000).toStringAsFixed(1)} GB';
+  // German writes the decimal comma (Windows VM 2026-11-04: „20.8 GB frei“).
+  if (n >= 1000000000) return '${(n / 1000000000).toStringAsFixed(1).replaceAll('.', isDe ? ',' : '.')} GB';
   if (n >= 1000000) return '${(n / 1000000).round()} MB';
   return '${(n / 1000).round()} kB';
 }

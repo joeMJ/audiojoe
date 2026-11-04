@@ -1,5 +1,5 @@
 // Linux and Windows: the app draws the title bar itself (window_manager 0.5.2), one line as in
-// tvjoe, but the name on the left (user 2026-11-04): line icon, "audiojoe" and the version on the
+// tvjoe, but the name on the left (user 2026-11-04): icon, "audiojoe" and the version on the
 // left; on the right the pills, the moon and the window buttons in the look of the system
 // (Ubuntu: round GNOME buttons, always on the right; Windows: the Windows 11 caption buttons).
 
@@ -70,9 +70,9 @@ class _DesktopFrameState extends State<DesktopFrame> {
   Widget build(BuildContext context) => Overlay(initialEntries: [entry]);
 }
 
-/// The line icon (Android monochrome icon): black when light, white when dark.
-Widget lineIcon(BuildContext context, {double size = 24}) => Image.asset('assets/icon-line.png',
-    height: size, width: size, color: Theme.of(context).colorScheme.onSurface, semanticLabel: 'audiojoe');
+/// The head with headphones in colour (its own dark blue circle, fits light and dark).
+Widget headerIcon(BuildContext context, {double size = 24}) => Image.asset('assets/icon-header.png',
+    height: size, width: size, filterQuality: FilterQuality.medium, semanticLabel: 'audiojoe');
 
 class TitleBar extends StatelessWidget implements PreferredSizeWidget {
   /// Pills and buttons between the name and the window buttons.
@@ -99,7 +99,7 @@ class TitleBar extends StatelessWidget implements PreferredSizeWidget {
             const SizedBox(width: 12),
             IgnorePointer(
               child: Row(children: [
-                lineIcon(context),
+                headerIcon(context),
                 const SizedBox(width: 8),
                 const Text('audiojoe', key: ValueKey('app-name'), style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
                 if (appVersion.isNotEmpty) ...[
