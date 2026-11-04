@@ -48,6 +48,8 @@ HTTP durch; zwischengespeichert wird nur auf den Geräten.
 - [`docs/ERSTE-SCHRITTE.md`](docs/ERSTE-SCHRITTE.md) – Benutzer, Anmeldung, Quellen, Podcasts, Radio, Musik
 - [`docs/ANLEITUNG.md`](docs/ANLEITUNG.md) – Bedienung: Weiterhören, Player, Kapitel, Offline, im Auto
 - [`docs/DATENSCHUTZ.md`](docs/DATENSCHUTZ.md) – alle Netzzugriffe und was wo gespeichert wird
+- [`docs/ARCHITEKTUR.md`](docs/ARCHITEKTUR.md) – so arbeitet audiojoe: Netzschema und wo Daten liegen
+- [`docs/SECURITY-COMPONENTS.md`](docs/SECURITY-COMPONENTS.md) – über HTTPS erreichbare Bibliotheken, vor und nach der Anmeldung (bei welcher Schwachstelle ein Update anzuraten ist)
 - [`THIRD_PARTY.md`](THIRD_PARTY.md) – verwendete Bibliotheken Dritter und Datenquellen mit Lizenzen
 
 > [!WARNING]

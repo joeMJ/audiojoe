@@ -47,6 +47,8 @@ HTTP; caching happens on the devices only.
 - [`docs/ERSTE-SCHRITTE.en.md`](docs/ERSTE-SCHRITTE.en.md) – getting started: users, sign-in, sources, podcasts, radio, music
 - [`docs/ANLEITUNG.en.md`](docs/ANLEITUNG.en.md) – manual: continue listening, player, chapters, offline, in the car
 - [`docs/DATENSCHUTZ.en.md`](docs/DATENSCHUTZ.en.md) – privacy: every network access and what is stored where
+- [`docs/ARCHITEKTUR.en.md`](docs/ARCHITEKTUR.en.md) – how audiojoe works: network diagram and where data lies
+- [`docs/SECURITY-COMPONENTS.en.md`](docs/SECURITY-COMPONENTS.en.md) – libraries reachable over HTTPS, before and after sign-in (which vulnerabilities call for an update)
 - [`THIRD_PARTY.md`](THIRD_PARTY.md) – third-party libraries and data sources with licences (German)
 
 > [!WARNING]
