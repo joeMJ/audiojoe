@@ -10,31 +10,30 @@ The devices only talk to your audiojoe server. Everything outside – your media
 feeds, directories, updates – is reached by the server alone.
 
 ```mermaid
-flowchart LR
+%%{init: {"flowchart": {"wrappingWidth": 400}}}%%
+flowchart TB
   subgraph devices["Devices"]
+    direction LR
     app["Apps<br/>Android · Linux · Windows"]
     web["Web player<br/>browser · car"]
   end
   proxy["Reverse proxy<br/>HTTPS 443"]
   subgraph server["audiojoe server"]
+    direction LR
     api["audiojoe-server<br/>HTTP"]
     db[("Database")]
   end
   subgraph outside["Reached by the server only"]
-    media["Jellyfin · Emby · Plex<br/>read"]
-    abs["Audiobookshelf<br/>read · sync progress"]
-    feeds["Podcast feeds · CDNs<br/>hourly"]
-    dirs["Radio Browser · fyyd · MusicBrainz<br/>search"]
-    stations["Radio stations<br/>stream relayed"]
-    gh["GitHub releases<br/>nightly check"]
+    direction LR
     sonos["Sonos speakers<br/>home network"]
+    net["Jellyfin · Emby · Plex: read<br/>Audiobookshelf: read, sync progress<br/>Podcast feeds · CDNs: hourly<br/>Radio Browser · fyyd · MusicBrainz: search<br/>Radio stations: stream relayed<br/>GitHub releases: nightly check"]
   end
 
   app -->|HTTPS| proxy
   web -->|HTTPS| proxy
   proxy -->|HTTP| api
   api --- db
-  api --> media & abs & feeds & dirs & stations & gh & sonos
+  api --> net & sonos
   sonos -.->|"stream port, LAN only"| api
 ```
 
