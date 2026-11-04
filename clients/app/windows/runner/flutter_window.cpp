@@ -113,6 +113,28 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  // Smallest window: 720 × 540 of content, below that the desktop layout has no room. Handled
+  // before the plugins: window_manager 0.5.2 answers WM_GETMINMAXINFO itself and returns, so the
+  // limit in Win32Window never came into effect (0.1.7, Windows VM / user 2026-11-04). With the
+  // hidden title bar the client area is the window minus invisible borders; they are taken from
+  // the window as it is, since window_manager sets them (8 px left, right, bottom; 1 px top on
+  // Windows 10).
+  if (message == WM_GETMINMAXINFO) {
+    UINT dpi = FlutterDesktopGetDpiForMonitor(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST));
+    double scale = dpi / 96.0;
+    RECT window, client;
+    LONG dx = 16, dy = 9;
+    if (!IsIconic(hwnd) && GetWindowRect(hwnd, &window) && GetClientRect(hwnd, &client) &&
+        client.right > 0 && client.bottom > 0) {
+      dx = (window.right - window.left) - client.right;
+      dy = (window.bottom - window.top) - client.bottom;
+    }
+    auto info = reinterpret_cast<MINMAXINFO*>(lparam);
+    info->ptMinTrackSize.x = static_cast<LONG>(720 * scale) + dx;
+    info->ptMinTrackSize.y = static_cast<LONG>(540 * scale) + dy;
+    return 0;
+  }
+
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =

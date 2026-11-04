@@ -197,17 +197,7 @@ Win32Window::MessageHandler(HWND hwnd,
 
       return 0;
     }
-    case WM_GETMINMAXINFO: {
-      // Smallest window: 720 × 540 of content, below that the desktop layout has no room.
-      UINT dpi = FlutterDesktopGetDpiForMonitor(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST));
-      double scale_factor = dpi / 96.0;
-      RECT frame = {0, 0, Scale(720, scale_factor), Scale(540, scale_factor)};
-      AdjustWindowRectEx(&frame, static_cast<DWORD>(GetWindowLongPtr(hwnd, GWL_STYLE)), FALSE, 0);
-      auto info = reinterpret_cast<MINMAXINFO*>(lparam);
-      info->ptMinTrackSize.x = frame.right - frame.left;
-      info->ptMinTrackSize.y = frame.bottom - frame.top;
-      return 0;
-    }
+    // WM_GETMINMAXINFO (smallest window): in FlutterWindow::MessageHandler, before the plugins.
     case WM_SIZE: {
       RECT rect = GetClientArea();
       if (child_content_ != nullptr) {
