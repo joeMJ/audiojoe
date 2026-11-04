@@ -1,5 +1,9 @@
 # Datenschutz und Netzzugriffe
 
+*Diese Seite beschreibt das aktuelle Release. Für eine ältere Version gilt dieselbe Seite unter dem
+Schild dieser Version auf GitHub (`https://github.com/joeMJ/audiojoe/tree/vX.Y.Z/docs`). Die im
+Server eingebauten Hilfeseiten unter `/docs/` passen immer zur installierten Version.*
+
 audiojoe sendet keine Nutzungsdaten und hat keine Telemetrie und keine Absturzberichte. Die
 einzige Prüfung auf neue Versionen macht der Server, wenn er aus dem Paket installiert ist
 ([Updates](#updates-nur-mit-dem-server-paket)). Alle Zugriffe nach außen macht der **Server**; die Apps und der Web-Player

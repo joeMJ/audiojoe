@@ -1,5 +1,9 @@
 # Components reachable over HTTPS
 
+*This page describes the current release. For an older version, see the same page under that
+version's tag on GitHub (`https://github.com/joeMJ/audiojoe/tree/vX.Y.Z/docs`). The help pages
+built into your server under `/docs/` always match the installed version.*
+
 Which libraries handle requests that reach the audiojoe server through your HTTPS address (port
 443), and which of them already do so **before** sign-in. Use it to judge a published
 vulnerability: if it concerns a library in the first table, the part of audiojoe that anyone who

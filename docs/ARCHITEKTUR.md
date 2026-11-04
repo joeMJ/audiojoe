@@ -1,5 +1,9 @@
 # So arbeitet audiojoe
 
+*Diese Seite beschreibt das aktuelle Release. Für eine ältere Version gilt dieselbe Seite unter dem
+Schild dieser Version auf GitHub (`https://github.com/joeMJ/audiojoe/tree/vX.Y.Z/docs`). Die im
+Server eingebauten Hilfeseiten unter `/docs/` passen immer zur installierten Version.*
+
 Ein schematischer Überblick: wer mit wem über das Netz spricht und welche Daten wo liegen. Die
 Einzelheiten jedes Zugriffs stehen unter [Datenschutz](DATENSCHUTZ.md); welche Bibliotheken von
 außen erreichbar sind, unter [Über HTTPS erreichbare Bestandteile](SECURITY-COMPONENTS.md).

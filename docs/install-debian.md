@@ -1,5 +1,9 @@
 # audiojoe unter Debian installieren
 
+*Diese Seite beschreibt das aktuelle Release. Für eine ältere Version gilt dieselbe Seite unter dem
+Schild dieser Version auf GitHub (`https://github.com/joeMJ/audiojoe/tree/vX.Y.Z/docs`). Die im
+Server eingebauten Hilfeseiten unter `/docs/` passen immer zur installierten Version.*
+
 Für Debian 13 (amd64) passt dasselbe Paket (`.deb`) wie für [Ubuntu](install-ubuntu.md). Die App
 braucht einen audiojoe-Server ([Server installieren](install-server.md)). Fehlt `curl`, zuerst
 `sudo apt install curl` (bzw. als `root` ohne `sudo`). Am einfachsten installiert das Skript das

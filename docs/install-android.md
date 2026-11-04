@@ -1,5 +1,9 @@
 # audiojoe unter Android installieren
 
+*Diese Seite beschreibt das aktuelle Release. Für eine ältere Version gilt dieselbe Seite unter dem
+Schild dieser Version auf GitHub (`https://github.com/joeMJ/audiojoe/tree/vX.Y.Z/docs`). Die im
+Server eingebauten Hilfeseiten unter `/docs/` passen immer zur installierten Version.*
+
 **Voraussetzungen:** Android 7.0 oder neuer. Die App braucht einen audiojoe-Server
 ([Server installieren](install-server.md)). audiojoe steht nicht im Play Store; installiert wird
 die signierte APK aus dem Release.

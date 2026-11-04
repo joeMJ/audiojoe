@@ -1042,6 +1042,13 @@ class AboutPanel extends StatelessWidget {
     return (app, server);
   }
 
+  /// Troubleshooting lives on GitHub only: it must work while the own server is unreachable.
+  static Widget _troubleshooting() => TextButton.icon(
+        icon: const Icon(Icons.open_in_new, size: 18),
+        label: Text(t('Troubleshooting')),
+        onPressed: () => launchUrl(Uri.parse(troubleshootingUrl), mode: LaunchMode.externalApplication),
+      );
+
   static Widget _link(String label, String page) => TextButton.icon(
         icon: const Icon(Icons.open_in_new, size: 18),
         label: Text(label),
@@ -1073,6 +1080,7 @@ class AboutPanel extends StatelessWidget {
             const SizedBox(height: 8),
             _link(t('Manual'), 'manual'),
             _link(t('Privacy'), 'privacy'),
+            _troubleshooting(),
             TextButton.icon(
               icon: const Icon(Icons.description_outlined, size: 18),
               label: Text(t('Third-party licences')),
@@ -1082,6 +1090,10 @@ class AboutPanel extends StatelessWidget {
         },
       );
 }
+
+/// Troubleshooting on GitHub (not built into the server, so it opens while the server is down).
+String get troubleshootingUrl =>
+    'https://github.com/joeMJ/audiojoe/blob/main/docs/TROUBLESHOOTING${isDe ? '' : '.en'}.md';
 
 Future<void> showAbout(BuildContext context) async {
   final app = await PackageInfo.fromPlatform();
@@ -1115,6 +1127,11 @@ Future<void> showAbout(BuildContext context) async {
         const SizedBox(height: 8),
         link(t('Manual'), 'manual'),
         link(t('Privacy'), 'privacy'),
+        TextButton.icon(
+          icon: const Icon(Icons.open_in_new, size: 18),
+          label: Text(t('Troubleshooting')),
+          onPressed: () => launchUrl(Uri.parse(troubleshootingUrl), mode: LaunchMode.externalApplication),
+        ),
       ]),
       actions: [
         TextButton(

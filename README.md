@@ -42,6 +42,10 @@ HTTP; caching happens on the devices only.
 
 ## Documentation
 
+*The documentation describes the current release. For an older version, see `docs/` under that
+version's tag (`https://github.com/joeMJ/audiojoe/tree/vX.Y.Z/docs`). The help pages built into
+your server under `/docs/` always match the installed version.*
+
 - [`docs/install-server.en.md`](docs/install-server.en.md) – install the server (Proxmox, Ubuntu Server, package, source), HTTPS proxy, Sonos
 - apps: [Ubuntu](docs/install-ubuntu.en.md) · [Debian](docs/install-debian.en.md) · [Windows](docs/install-windows.en.md) · [Android](docs/install-android.en.md)
 - [`docs/ERSTE-SCHRITTE.en.md`](docs/ERSTE-SCHRITTE.en.md) – getting started: users, sign-in, sources, podcasts, radio, music
@@ -49,6 +53,9 @@ HTTP; caching happens on the devices only.
 - [`docs/DATENSCHUTZ.en.md`](docs/DATENSCHUTZ.en.md) – privacy: every network access and what is stored where
 - [`docs/ARCHITEKTUR.en.md`](docs/ARCHITEKTUR.en.md) – how audiojoe works: network diagram and where data lies
 - [`docs/SECURITY-COMPONENTS.en.md`](docs/SECURITY-COMPONENTS.en.md) – libraries reachable over HTTPS, before and after sign-in (which vulnerabilities call for an update)
+- [`docs/BACKUP.en.md`](docs/BACKUP.en.md) – backup and restore: what to back up, consistent copies, restore, after losing the server
+- [`docs/BETRIEB.en.md`](docs/BETRIEB.en.md) – running audiojoe securely: ports and firewall, container and service, accounts, updates and the way back, internet access
+- [`docs/TROUBLESHOOTING.en.md`](docs/TROUBLESHOOTING.en.md) – troubleshooting: server, proxy, audio, Sonos, synchronisation, updates, damaged database
 - [`THIRD_PARTY.md`](THIRD_PARTY.md) – third-party libraries and data sources with licences (German)
 
 > [!WARNING]

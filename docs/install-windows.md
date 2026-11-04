@@ -1,5 +1,9 @@
 # audiojoe unter Windows installieren
 
+*Diese Seite beschreibt das aktuelle Release. Für eine ältere Version gilt dieselbe Seite unter dem
+Schild dieser Version auf GitHub (`https://github.com/joeMJ/audiojoe/tree/vX.Y.Z/docs`). Die im
+Server eingebauten Hilfeseiten unter `/docs/` passen immer zur installierten Version.*
+
 **Voraussetzungen:** Windows 10 oder 11 (64 Bit), keine Administratorrechte nötig. Die App braucht
 einen audiojoe-Server ([Server installieren](install-server.md)).
 

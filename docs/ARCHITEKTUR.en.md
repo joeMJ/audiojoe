@@ -1,5 +1,9 @@
 # How audiojoe works
 
+*This page describes the current release. For an older version, see the same page under that
+version's tag on GitHub (`https://github.com/joeMJ/audiojoe/tree/vX.Y.Z/docs`). The help pages
+built into your server under `/docs/` always match the installed version.*
+
 A schematic overview: who talks to whom over the network, and which data lies where. The details
 of every access are in [Privacy](DATENSCHUTZ.en.md); which libraries are reachable from outside is
 in [Components reachable over HTTPS](SECURITY-COMPONENTS.en.md).

@@ -282,6 +282,7 @@ const deStrings = <String, String>{
   "This device": "Dieses Gerät",
   "Titles": "Titel",
   "Too many attempts. Please wait 15 minutes.": "Zu viele Versuche. Bitte 15 Minuten warten.",
+  "Troubleshooting": "Fehlerbehebung",
   "Undo": "Rückgängig",
   "Unsubscribe": "Abbestellen",
   "Up next": "Als Nächstes",

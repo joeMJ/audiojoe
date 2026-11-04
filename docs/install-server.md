@@ -1,5 +1,9 @@
 # Server installieren
 
+*Diese Seite beschreibt das aktuelle Release. Für eine ältere Version gilt dieselbe Seite unter dem
+Schild dieser Version auf GitHub (`https://github.com/joeMJ/audiojoe/tree/vX.Y.Z/docs`). Die im
+Server eingebauten Hilfeseiten unter `/docs/` passen immer zur installierten Version.*
+
 audiojoe besteht aus dem **Server** (ein Programm mit SQLite-Datenbank, gedacht für einen
 Linux-Container oder eine VM im Heimnetz) und den **Apps** für Ubuntu, Debian, Windows und Android
 (eigene Seiten, siehe [Apps](#apps)) sowie dem Web-Player, den der Server selbst ausliefert.
@@ -166,6 +170,10 @@ Stand.
 - **Von Hand:** `audiojoe-update --check` prüft nur, `audiojoe-update --now` aktualisiert sofort.
   Ganz abschalten: `systemctl disable --now audiojoe-update.timer audiojoe-update.path`.
 - **Quelle:** `/etc/audiojoe/update.conf` (`SOURCE`, Vorgabe das GitHub-Repository).
+
+Eigene Sicherungen, Firewall, der Weg zurück von Hand und Hilfe bei Fehlern:
+[Sicherung und Wiederherstellung](BACKUP.md), [audiojoe sicher betreiben](BETRIEB.md),
+[Fehlerbehebung](TROUBLESHOOTING.md).
 
 ### HTTPS über den Proxy
 

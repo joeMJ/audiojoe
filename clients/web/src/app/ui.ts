@@ -1087,5 +1087,7 @@ function about() {
     h("div", {}, "John Lose (joeMJ)"),
     h("div", { className: "muted" }, t("Licence: Apache 2.0")),
     h("div", { className: "links" }, link(t("Manual"), "manual"), link(t("Privacy"), "privacy"),
+      // Troubleshooting on GitHub only: it must open while the own server is unreachable.
+      h("a", { href: `https://github.com/joeMJ/audiojoe/blob/main/docs/TROUBLESHOOTING${de ? "" : ".en"}.md`, target: "_blank", rel: "noopener" }, t("Troubleshooting")),
       h("a", { href: "/testcar/" }, t("Car test"))));
 }

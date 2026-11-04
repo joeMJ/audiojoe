@@ -1,5 +1,9 @@
 # Manual
 
+*This page describes the current release. For an older version, see the same page under that
+version's tag on GitHub (`https://github.com/joeMJ/audiojoe/tree/vX.Y.Z/docs`). The help pages
+built into your server under `/docs/` always match the installed version.*
+
 audiojoe has five areas: **Continue**, **Podcasts**, **Audiobooks**, **Music** and **Radio**. The
 app shows them at the bottom (phone) or on the left (desktop, web player). At the top are the state
 of the connection and of the positions, the button for offline titles, light/dark and the settings.

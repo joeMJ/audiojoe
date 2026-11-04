@@ -569,6 +569,9 @@ msgstr "Anleitung"
 msgid "Privacy"
 msgstr "Datenschutz"
 
+msgid "Troubleshooting"
+msgstr "Fehlerbehebung"
+
 msgid "Third-party licences"
 msgstr "Lizenzen Dritter"
 

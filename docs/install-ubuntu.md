@@ -1,5 +1,9 @@
 # audiojoe unter Ubuntu installieren
 
+*Diese Seite beschreibt das aktuelle Release. Für eine ältere Version gilt dieselbe Seite unter dem
+Schild dieser Version auf GitHub (`https://github.com/joeMJ/audiojoe/tree/vX.Y.Z/docs`). Die im
+Server eingebauten Hilfeseiten unter `/docs/` passen immer zur installierten Version.*
+
 Für Ubuntu 24.04 und 26.04 (amd64) gibt es ein Paket (`.deb`); dasselbe Paket passt auch für
 [Debian 13](install-debian.md). Die App braucht einen audiojoe-Server
 ([Server installieren](install-server.md)). Am einfachsten installiert das Skript das Paket aus

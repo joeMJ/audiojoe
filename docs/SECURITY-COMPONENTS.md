@@ -1,5 +1,9 @@
 # Über HTTPS erreichbare Bestandteile
 
+*Diese Seite beschreibt das aktuelle Release. Für eine ältere Version gilt dieselbe Seite unter dem
+Schild dieser Version auf GitHub (`https://github.com/joeMJ/audiojoe/tree/vX.Y.Z/docs`). Die im
+Server eingebauten Hilfeseiten unter `/docs/` passen immer zur installierten Version.*
+
 Welche Bibliotheken Anfragen verarbeiten, die über deine HTTPS-Adresse (Port 443) beim
 audiojoe-Server ankommen, und welche davon das schon **vor** der Anmeldung tun. Damit lässt sich
 eine veröffentlichte Schwachstelle einordnen: Betrifft sie eine Bibliothek aus der ersten Tabelle,

@@ -1,5 +1,9 @@
 # Anleitung
 
+*Diese Seite beschreibt das aktuelle Release. Für eine ältere Version gilt dieselbe Seite unter dem
+Schild dieser Version auf GitHub (`https://github.com/joeMJ/audiojoe/tree/vX.Y.Z/docs`). Die im
+Server eingebauten Hilfeseiten unter `/docs/` passen immer zur installierten Version.*
+
 audiojoe hat fünf Bereiche: **Weiterhören**, **Podcasts**, **Hörbücher**, **Musik** und
 **Radio**. Die App zeigt sie unten (am Telefon) bzw. links (Desktop, Web-Player). Oben stehen der
 Zustand der Verbindung und der Hörstände, der Knopf für die Offline-Titel, Hell/Dunkel und die

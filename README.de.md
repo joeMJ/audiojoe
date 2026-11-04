@@ -43,6 +43,10 @@ HTTP durch; zwischengespeichert wird nur auf den Geräten.
 
 ## Dokumentation
 
+*Die Dokumentation beschreibt das aktuelle Release. Für eine ältere Version gilt `docs/` unter dem
+Schild dieser Version (`https://github.com/joeMJ/audiojoe/tree/vX.Y.Z/docs`). Die im Server
+eingebauten Hilfeseiten unter `/docs/` passen immer zur installierten Version.*
+
 - [`docs/install-server.md`](docs/install-server.md) – Server installieren (Proxmox, Ubuntu Server, Paket, Quelltext), HTTPS-Proxy, Sonos
 - Apps: [Ubuntu](docs/install-ubuntu.md) · [Debian](docs/install-debian.md) · [Windows](docs/install-windows.md) · [Android](docs/install-android.md)
 - [`docs/ERSTE-SCHRITTE.md`](docs/ERSTE-SCHRITTE.md) – Benutzer, Anmeldung, Quellen, Podcasts, Radio, Musik
@@ -50,6 +54,9 @@ HTTP durch; zwischengespeichert wird nur auf den Geräten.
 - [`docs/DATENSCHUTZ.md`](docs/DATENSCHUTZ.md) – alle Netzzugriffe und was wo gespeichert wird
 - [`docs/ARCHITEKTUR.md`](docs/ARCHITEKTUR.md) – so arbeitet audiojoe: Netzschema und wo Daten liegen
 - [`docs/SECURITY-COMPONENTS.md`](docs/SECURITY-COMPONENTS.md) – über HTTPS erreichbare Bibliotheken, vor und nach der Anmeldung (bei welcher Schwachstelle ein Update anzuraten ist)
+- [`docs/BACKUP.md`](docs/BACKUP.md) – Sicherung und Wiederherstellung: was zu sichern ist, stimmige Kopien, Zurückspielen, nach Verlust des Servers
+- [`docs/BETRIEB.md`](docs/BETRIEB.md) – audiojoe sicher betreiben: Ports und Firewall, Container und Dienst, Konten, Updates und der Weg zurück, Internet
+- [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) – Fehlerbehebung: Server, Proxy, Ton, Sonos, Abgleich, Updates, beschädigte Datenbank
 - [`THIRD_PARTY.md`](THIRD_PARTY.md) – verwendete Bibliotheken Dritter und Datenquellen mit Lizenzen
 
 > [!WARNING]

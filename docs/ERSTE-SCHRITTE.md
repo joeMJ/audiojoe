@@ -1,5 +1,9 @@
 # Erste Schritte
 
+*Diese Seite beschreibt das aktuelle Release. Für eine ältere Version gilt dieselbe Seite unter dem
+Schild dieser Version auf GitHub (`https://github.com/joeMJ/audiojoe/tree/vX.Y.Z/docs`). Die im
+Server eingebauten Hilfeseiten unter `/docs/` passen immer zur installierten Version.*
+
 Voraussetzung ist ein laufender audiojoe-Server ([Installation](install-server.md)) und eine
 Authenticator-App auf dem Telefon (z. B. Aegis, 2FAS, FreeOTP oder die des Passwortmanagers).
 

@@ -211,7 +211,10 @@ mod tests {
             for de in [true, false] {
                 let html = page(p.0, de).unwrap();
                 assert!(html.contains("<h1"), "{} has no heading", p.0);
-                assert!(!html.contains(".md\""), "{} still links a .md file", p.0);
+                // Pages that are not built in may be linked on GitHub; no other link may end in .md.
+                let local_md = html.split("href=\"").skip(1).filter_map(|r| r.split('"').next())
+                    .any(|u| u.split('#').next().unwrap_or("").ends_with(".md") && !u.starts_with(REPO));
+                assert!(!local_md, "{} still links a .md file", p.0);
                 assert!(!html.contains("src=\"screenshots/"), "{} has a picture path of the repository", p.0);
             }
         }

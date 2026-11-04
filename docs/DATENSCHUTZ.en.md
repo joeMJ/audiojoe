@@ -1,5 +1,9 @@
 # Privacy and network access
 
+*This page describes the current release. For an older version, see the same page under that
+version's tag on GitHub (`https://github.com/joeMJ/audiojoe/tree/vX.Y.Z/docs`). The help pages
+built into your server under `/docs/` always match the installed version.*
+
 audiojoe sends no usage data and has no telemetry and no crash reports. The only check for new
 versions is made by the server when it is installed from the package
 ([Updates](#updates-only-with-the-server-package)). All
