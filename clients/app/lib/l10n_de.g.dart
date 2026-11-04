@@ -162,7 +162,6 @@ const deStrings = <String, String>{
   "Nothing found.": "Nichts gefunden.",
   "Nothing here yet. Add albums with Next.": "Noch leer. Alben mit „Next“ hinzufügen.",
   "Nothing is playing.": "Es läuft nichts.",
-  "Nothing plays on this device. Is an audio output available?": "Auf diesem Gerät spielt nichts. Ist ein Audioausgabegerät vorhanden?",
   "Nothing saved offline yet.": "Noch nichts offline gespeichert.",
   "Nothing to continue.": "Nichts zum Weiterhören.",
   "Now playing": "Jetzt läuft",
