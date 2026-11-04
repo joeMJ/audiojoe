@@ -101,9 +101,15 @@ class _ShellState extends State<Shell> {
   PreferredSizeWidget? _bar(bool wide) {
     if (desktop) return null;
     final pills = [const CachePill(), const StatusPills()];
-    final settings = IconButton(tooltip: t('Settings'), onPressed: () => index = 6, icon: const Icon(Icons.settings));
+    final settings = IconButton(visualDensity: VisualDensity.compact, tooltip: t('Settings'), onPressed: () => index = 6, icon: const Icon(Icons.settings));
     return AppBar(
       titleSpacing: 12,
+      // Phones: the icon in the fixed leading place, so the pills cannot push it out (411 dp).
+      automaticallyImplyLeading: false,
+      leadingWidth: wide ? null : 44,
+      leading: wide
+          ? null
+          : Padding(padding: const EdgeInsets.only(left: 12), child: Semantics(label: 'audiojoe', child: lineIcon(context, size: 28))),
       title: wide
           ? Row(mainAxisSize: MainAxisSize.min, children: [
               lineIcon(context, size: 26),
@@ -114,11 +120,11 @@ class _ShellState extends State<Shell> {
                 Text(appVersion, style: TextStyle(fontSize: 14, color: context.tok.muted, fontWeight: FontWeight.w600)),
               ],
             ])
-          // The icon instead of the name: the pills need the width on phones.
-          : Semantics(label: 'audiojoe', child: lineIcon(context, size: 30)),
+          : null,
       actions: [
         Flexible(child: SingleChildScrollView(scrollDirection: Axis.horizontal, reverse: true, child: Row(mainAxisSize: MainAxisSize.min, children: pills))),
         IconButton(
+          visualDensity: VisualDensity.compact,
           tooltip: t('Offline'),
           isSelected: index == 7,
           onPressed: () => index = 7,
