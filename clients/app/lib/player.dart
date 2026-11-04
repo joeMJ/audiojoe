@@ -28,8 +28,55 @@ class Player extends ChangeNotifier {
     audio.currentIndexStream.listen((_) => notifyListeners());
     sync.remote.listen(_onRemote);
     sync.commands.listen((c) => unawaited(_onCommand(c)));
+    // An error of the platform player (libmpv: no audio output, a stream it cannot open).
+    audio.playbackEventStream.listen((_) {}, onError: (Object e, StackTrace _) => _cannotPlay());
   }
   static final instance = Player._();
+
+  /// Text (to translate) for the user when nothing plays on this device although it should.
+  static const cannotPlayText = 'Nothing plays on this device. Is an audio output available?';
+  final problems = StreamController<String>.broadcast();
+  Timer? _stallTimer;
+  Duration _stallAt = Duration.zero;
+  int _stalled = 0;
+
+  /// While playing: a position that does not move for 6 s without buffering means nothing plays
+  /// (seen on Windows without an audio output: "playing", the clock stands still). Not for radio,
+  /// a live stream may report no position.
+  void _watchStall(bool playing) {
+    _stallTimer?.cancel();
+    _stalled = 0;
+    if (!playing) return;
+    _stallAt = audio.position;
+    _stallTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      final p = audio.position;
+      if (!audio.playing || remote.active || item?.kind == 'radio' ||
+          audio.processingState != ProcessingState.ready || p != _stallAt) {
+        _stallAt = p;
+        _stalled = 0;
+        return;
+      }
+      if (++_stalled >= 3) _cannotPlay();
+    });
+  }
+
+  /// Where the current title was loaded (without an audio output the player reports 0 instead).
+  int _loadedAtMs = 0;
+
+  void _cannotPlay() {
+    _stallTimer?.cancel();
+    _stalled = 0;
+    // Keep the position (a taken-over one too): the title stays cued there, so nothing saves 0
+    // and ▶ loads it again from that point.
+    final at = _localPosition;
+    if (item != null && item!.kind != 'radio') {
+      _cued = true;
+      _cuedMs = at > 0 ? at : _loadedAtMs;
+    }
+    if (audio.playing) unawaited(audio.pause());
+    problems.add(cannotPlayText);
+    notifyListeners();
+  }
 
   // Headers (session token) go straight to the platform player: just_audio's default local
   // proxy needs cleartext HTTP to 127.0.0.1, which Android blocks.
@@ -210,6 +257,7 @@ class Player extends ChangeNotifier {
     _cued = false;
     fromCache = downloads.isOffline(it.key);
     final start = it.kind == 'radio' || fromStart ? (ms: 0, from: null) : _startPosition(it);
+    _loadedAtMs = start.ms;
     takenOver = start.from == null ? null : (device: start.from!.device, at: start.from!.updatedAt);
     final parts = it.multiPart ? it.parts : const <Part>[];
     final (part, local) = _locate(start.ms, parts);
@@ -394,6 +442,7 @@ class Player extends ChangeNotifier {
   void _onState(PlayerState s) {
     if (s.playing != _wasPlaying) {
       _wasPlaying = s.playing;
+      _watchStall(s.playing);
       _saveTimer?.cancel();
       if (s.playing) {
         unawaited(_persist(report: true));
@@ -403,6 +452,13 @@ class Player extends ChangeNotifier {
       }
     }
     if (s.processingState == ProcessingState.completed) {
+      // "Completed" far before the end is no end (Windows without an audio output reported it a
+      // second after the start): stay on the title, say so, do not go to the next one.
+      final d = audio.duration;
+      if (d != null && d - audio.position > const Duration(seconds: 5)) {
+        _cannotPlay();
+        return;
+      }
       final stopHere = sleepAtEnd != null;
       if (stopHere) setSleep();
       unawaited(_ended(stopHere));

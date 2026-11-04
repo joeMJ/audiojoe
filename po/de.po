@@ -179,6 +179,9 @@ msgstr "Abonniert"
 msgid "Taken over from {device} · {ago}"
 msgstr "Übernommen von {device} · {ago}"
 
+msgid "Nothing plays on this device. Is an audio output available?"
+msgstr "Auf diesem Gerät spielt nichts. Ist ein Audioausgabegerät vorhanden?"
+
 msgid "The browser may clear this storage when space runs low; missing titles are downloaded again automatically."
 msgstr "Der Browser kann diesen Speicher bei Platzmangel leeren; fehlende Titel werden automatisch nachgeladen."
 

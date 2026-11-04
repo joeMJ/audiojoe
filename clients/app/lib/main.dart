@@ -53,6 +53,7 @@ class _AudiojoeAppState extends State<AudiojoeApp> {
   void initState() {
     super.initState();
     api.onRejected = _rejected;
+    player.problems.stream.listen((s) => messenger.currentState?.showSnackBar(SnackBar(content: Text(t(s)))));
   }
 
   /// The server rejected the token: back to the sign-in page, the server address stays filled in.
