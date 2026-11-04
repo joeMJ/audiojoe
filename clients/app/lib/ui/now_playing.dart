@@ -119,6 +119,13 @@ class _PlaybackTab extends StatelessWidget {
                       style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w700)),
                 ),
               ]),
+            )
+          // Below the facts as in the web player, so the fixed block with the buttons never moves.
+          else if (player.takenOver != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(t('Taken over from {device} · {ago}', {'device': player.takenOver!.device, 'ago': ago(player.takenOver!.at)}),
+                  textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: k.muted)),
             ),
         ];
         // Progress (or "Live") and the buttons.
@@ -128,12 +135,6 @@ class _PlaybackTab extends StatelessWidget {
           else
             _Progress(),
           _Controls(),
-          if (!remote.active && player.takenOver != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: Text(t('Taken over from {device} · {ago}', {'device': player.takenOver!.device, 'ago': ago(player.takenOver!.at)}),
-                  textAlign: TextAlign.center, style: TextStyle(color: k.muted)),
-            ),
         ];
         if (desktop) {
           // Cover in the left third; on the right the title at the top, the progress, buttons and

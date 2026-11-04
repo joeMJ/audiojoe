@@ -70,6 +70,19 @@ void main() {
       expect(find.byTooltip('Back 15 s'), findsOneWidget);
     });
 
+    testWidgets('"Taken over from …" below the facts: the buttons do not move', (tester) async {
+      await show(tester, const NowPlayingView());
+      final before = rectOf(tester, find.byTooltip('Play'));
+      player.takenOver = (device: 'Claude Sim', at: DateTime.now().toUtc().toIso8601String());
+      await show(tester, const SizedBox());
+      await show(tester, const NowPlayingView());
+      final line = rectOf(tester, find.textContaining('Taken over from Claude Sim'));
+      expect(rectOf(tester, find.byTooltip('Play')), before);
+      expect(line.bottom, lessThan(before.top));
+      expect(line.top, greaterThan(rectOf(tester, find.text('Podcast')).bottom));
+      player.takenOver = null;
+    });
+
     testWidgets('radio: only play/pause with Live', (tester) async {
       player.item = radio;
       player.queue = [radio];
@@ -216,6 +229,17 @@ void main() {
       final cover = rectOf(tester, find.byType(CoverThumb));
       expect(rectOf(tester, find.byTooltip('Play')).top, greaterThan(cover.bottom));
       expect(find.text('Group'), findsNothing);
+    });
+
+    testWidgets('phone: "Taken over from …" does not move the buttons either', (tester) async {
+      await show(tester, const NowPlayingView(), size: const Size(400, 800));
+      final before = rectOf(tester, find.byTooltip('Play'));
+      player.takenOver = (device: 'Claude Sim', at: DateTime.now().toUtc().toIso8601String());
+      await show(tester, const SizedBox(), size: const Size(400, 800));
+      await show(tester, const NowPlayingView(), size: const Size(400, 800));
+      expect(find.textContaining('Taken over from Claude Sim'), findsOneWidget);
+      expect(rectOf(tester, find.byTooltip('Play')), before);
+      player.takenOver = null;
     });
   });
 
