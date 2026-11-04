@@ -159,12 +159,14 @@ check("stream without login: 401", s == 401, str(s))
 
 # ------------------------------------------------------------------ playback sync + events
 events = []
+sse_headers = {}
 
 
 def listen():
     req = urllib.request.Request(BASE + "/api/v1/events", headers={"authorization": "Bearer " + B})
     try:
         with urllib.request.urlopen(req, timeout=20) as r:
+            sse_headers.update({k.lower(): v for k, v in r.headers.items()})
             for line in r:
                 line = line.decode().strip()
                 if line.startswith("data:"):
@@ -182,8 +184,10 @@ s, b, _ = call("PUT", f"/api/v1/playback/{ep['key']}", {
     "position_ms": 842000, "duration_ms": ep["duration_ms"], "updated_at": iso(now),
     "title": ep["title"], "subtitle": ep["podcast"]}, token=A)
 check("device A saves position 14:02", s == 200 and b["applied"], json.dumps(b.get("state", b))[:120])
+check("event stream asks nginx not to buffer (X-Accel-Buffering: no)",
+      sse_headers.get("x-accel-buffering") == "no", str(sse_headers.get("x-accel-buffering")))
 time.sleep(1.5)
-ev = [e for e in events if e[1]["state"]["key"] == ep["key"]]
+ev = [e for e in events if e[1].get("state", {}).get("key") == ep["key"]]
 check("device B receives the change live (SSE)", bool(ev) and ev[0][1]["state"]["position_ms"] == 842000,
       f"after {ev[0][0] - t0:.2f} s, from {ev[0][1]['state']['device']}" if ev else "no event")
 s, b, _ = call("GET", f"/api/v1/playback/{ep['key']}", token=B)

@@ -9,11 +9,14 @@ use std::{convert::Infallible, time::Duration};
 
 use axum::{
     extract::{Path, Query, State},
-    response::sse::{Event, KeepAlive, Sse},
+    http::{header::HeaderName, HeaderValue},
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        IntoResponse,
+    },
     Json,
 };
 use chrono::{DateTime, Utc};
-use futures_util::Stream;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::sync::broadcast;
@@ -232,7 +235,7 @@ pub async fn events(
     State(state): State<AppState>,
     user: CurrentUser,
     Query(q): Query<EventsQuery>,
-) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+) -> impl IntoResponse {
     if let Some(kind) = q.kind.filter(|k| devices::valid_kind(k) && k != "sonos") {
         let (uid, dev) = (user.id, user.device.clone());
         let _ = with_db(&state.db, move |c| Ok(devices::set_kind(c, uid, &dev, &kind)?)).await;
@@ -244,12 +247,12 @@ pub async fn events(
             match rx.recv().await {
                 Ok((u, v)) if u == uid => {
                     let name = v["type"].as_str().unwrap_or("playback").to_string();
-                    return Some((Ok(Event::default().event(name).data(v.to_string())), (rx, uid, guard)));
+                    return Some((Ok::<_, Infallible>(Event::default().event(name).data(v.to_string())), (rx, uid, guard)));
                 }
                 Ok(_) => continue,
                 // Missed events: tell the client to reload instead of silently dropping them.
                 Err(broadcast::error::RecvError::Lagged(_)) => {
-                    return Some((Ok(Event::default().event("resync").data("{}")), (rx, uid, guard)))
+                    return Some((Ok::<_, Infallible>(Event::default().event("resync").data("{}")), (rx, uid, guard)))
                 }
                 Err(broadcast::error::RecvError::Closed) => return None,
             }
@@ -257,7 +260,10 @@ pub async fn events(
     });
     // The keep-alive is a named event, not a comment: a browser's EventSource does not pass
     // comments on, and the clients watch for a sign of life to notice a stream that died quietly.
-    Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15)).event(Event::default().event("ping").data("{}")))
+    let sse = Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15)).event(Event::default().event("ping").data("{}")));
+    // nginx (and Nginx Proxy Manager) pass each event on at once instead of buffering this one
+    // response; other proxies ignore the header.
+    ([(HeaderName::from_static("x-accel-buffering"), HeaderValue::from_static("no"))], sse)
 }
 
 #[derive(Deserialize)]
