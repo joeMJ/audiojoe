@@ -38,8 +38,9 @@ String clock(int ms) {
   return '${h > 0 ? '$h:' : ''}$mm:${sec.toString().padLeft(2, '0')}';
 }
 
+/// Decimal units (user 2026-11-04: 5 GB = 5 × 10^9 bytes, as GNOME and Android show them).
 String bytes(int n) {
-  if (n >= 1 << 30) return '${(n / (1 << 30)).toStringAsFixed(1)} GB';
-  if (n >= 1 << 20) return '${(n / (1 << 20)).round()} MB';
-  return '${(n / 1024).round()} kB';
+  if (n >= 1000000000) return '${(n / 1000000000).toStringAsFixed(1)} GB';
+  if (n >= 1000000) return '${(n / 1000000).round()} MB';
+  return '${(n / 1000).round()} kB';
 }

@@ -1186,3 +1186,37 @@ msgstr "gestartet von {device}"
 
 msgid "controls {device}"
 msgstr "steuert gerade {device}"
+
+# 0.1.7: title bar, cache pill, storage, appearance (user 2026-11-04)
+msgid "Storage"
+msgstr "Ablage"
+
+msgid "Appearance"
+msgstr "Darstellung"
+
+msgid "System"
+msgstr "System"
+
+msgid "Light"
+msgstr "Hell"
+
+msgid "Dark"
+msgstr "Dunkel"
+
+msgid "Keep at least free"
+msgstr "Mindestens frei lassen"
+
+msgid "Below it no download starts."
+msgstr "Darunter beginnt kein Download."
+
+msgid "Keep at least {n} GB free"
+msgstr "Mindestens {n} GB frei lassen"
+
+msgid "{used} used"
+msgstr "{used} belegt"
+
+msgid "{used} used · {free} free"
+msgstr "{used} belegt · {free} frei"
+
+msgid "Waiting for space"
+msgstr "Wartet auf Platz"

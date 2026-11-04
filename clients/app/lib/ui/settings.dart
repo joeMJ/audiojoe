@@ -12,7 +12,10 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api.dart';
+import '../appearance.dart';
+import '../downloads.dart';
 import '../l10n.dart';
+import '../storage.dart';
 import '../updates.dart';
 import 'common.dart';
 
@@ -117,20 +120,26 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   /// One line per page: sources and libraries, speakers, devices, versions; fixed text where nothing is counted.
-  Future<Map<int, String>> _summary() async {
-    final out = <int, String>{
-      1: t('OPML, sync with podcast apps'),
-      2: t('MusicBrainz labels'),
-      6: t('Version, guide, privacy, licences'),
+  Future<Map<String, String>> _summary() async {
+    final out = <String, String>{
+      'podcasts': t('OPML, sync with podcast apps'),
+      'music': t('MusicBrainz labels'),
+      'storage': t('Keep at least {n} GB free', {'n': storage.keepFreeGb}),
+      'appearance': switch (appearance.value) {
+        ThemeMode.light => t('Light'),
+        ThemeMode.dark => t('Dark'),
+        _ => t('System'),
+      },
+      'about': t('Version, guide, privacy, licences'),
     };
-    Future<void> one(int i, Future<String> Function() f) async {
+    Future<void> one(String i, Future<String> Function() f) async {
       try {
         out[i] = await f();
       } catch (_) {}
     }
 
     await Future.wait([
-      one(0, () async {
+      one('sources', () async {
         final list = (await api.call('GET', '/sources') as List).cast<Map>();
         if (list.isEmpty) return t('No sources yet');
         var libs = 0;
@@ -142,12 +151,12 @@ class _SettingsViewState extends State<SettingsView> {
         }
         return '${list.map((s) => '${s['name']}').join(', ')} · ${t('{n} libraries', {'n': libs})}';
       }),
-      one(3, () async {
+      one('sonos', () async {
         if ((await api.call('GET', '/sonos/setup') as Map)['enabled'] != true) return t('not set up');
         return t('{n} speakers', {'n': (await api.call('GET', '/sonos') as List).length});
       }),
-      one(4, () async => t('{n} signed in · sign out this device', {'n': (await api.call('GET', '/sessions') as List).length})),
-      one(5, () async {
+      one('devices', () async => t('{n} signed in · sign out this device', {'n': (await api.call('GET', '/sessions') as List).length})),
+      one('maintenance', () async {
         final m = await api.call('GET', '/maintenance') as Map;
         final app = (await PackageInfo.fromPlatform()).version;
         final latest = (m['status'] as Map?)?['latest'] as String?;
@@ -164,15 +173,15 @@ class _SettingsViewState extends State<SettingsView> {
 
   Widget _overview(BuildContext context) {
     final k = context.tok;
-    return Loader<Map<int, String>>(
+    return Loader<Map<String, String>>(
       key: ValueKey('sum$_gen'),
       load: _summary,
       builder: (context, sum, reload) => ListView(padding: const EdgeInsets.all(12), children: [
         _h(t('Settings')),
         const SizedBox(height: 8),
-        for (final (i, (icon, label)) in _pages.indexed) ...[
+        for (final (i, (id, icon, label)) in _pages.indexed) ...[
           ListTile(
-            key: ValueKey('settings-page-$i'),
+            key: ValueKey('settings-page-$id'),
             contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             leading: Container(
               width: 36,
@@ -181,7 +190,7 @@ class _SettingsViewState extends State<SettingsView> {
               child: Icon(icon, size: 20),
             ),
             title: Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-            subtitle: sum[i] == null ? null : Text(sum[i]!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: k.muted)),
+            subtitle: sum[id] == null ? null : Text(sum[id]!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: k.muted)),
             trailing: Icon(Icons.chevron_right, color: k.muted),
             onTap: () => setState(() => _phonePage = i),
           ),
@@ -195,7 +204,7 @@ class _SettingsViewState extends State<SettingsView> {
     return ListView(key: PageStorageKey('phone-settings$page'), padding: const EdgeInsets.fromLTRB(4, 4, 12, 12), children: [
       Row(children: [
         IconButton(tooltip: t('Back'), icon: const Icon(Icons.arrow_back), onPressed: () => setState(() => _phonePage = null)),
-        Expanded(child: _h(_pages[page].$2)),
+        Expanded(child: _h(_pages[page].$3)),
       ]),
       const SizedBox(height: 8),
       Padding(
@@ -208,20 +217,23 @@ class _SettingsViewState extends State<SettingsView> {
     ]);
   }
 
-  /// Desktop: the pages on the left, the chosen page on the right in groups.
-  List<(IconData, String)> get _pages => [
-        (Icons.storage, t('Sources')),
-        (Icons.podcasts, t('Podcasts')),
-        (Icons.library_music, t('Music')),
-        (Icons.speaker, t('Sonos')),
-        (Icons.devices, t('Devices')),
-        (Icons.system_update_alt, t('Maintenance')),
-        (Icons.info_outline, t('About')),
+  /// The pages (mockup android-einstellungen); "Storage" in all apps (user 2026-11-04, moved forward
+  /// from 0.2.0), "Appearance" on Android only (the desktop has the moon in the title bar).
+  List<(String, IconData, String)> get _pages => [
+        ('sources', Icons.storage, t('Sources')),
+        ('podcasts', Icons.podcasts, t('Podcasts')),
+        ('music', Icons.library_music, t('Music')),
+        ('sonos', Icons.speaker, t('Sonos')),
+        ('storage', Icons.download_for_offline_outlined, t('Storage')),
+        if (!desktop) ('appearance', Icons.dark_mode_outlined, t('Appearance')),
+        ('devices', Icons.devices, t('Devices')),
+        ('maintenance', Icons.system_update_alt, t('Maintenance')),
+        ('about', Icons.info_outline, t('About')),
       ];
 
-  List<Widget> _pageContent(BuildContext context, [int? page]) => switch (page ?? _page) {
-        0 => [_sources(grouped: true)],
-        1 => [
+  List<Widget> _pageContent(BuildContext context, [int? page]) => switch (_pages[page ?? _page].$1) {
+        'sources' => [_sources(grouped: true)],
+        'podcasts' => [
             SettingsGroup(
               title: 'OPML',
               desc: t('Subscriptions as OPML file, the format other podcast apps read and write.'),
@@ -229,13 +241,15 @@ class _SettingsViewState extends State<SettingsView> {
             ),
             SettingsGroup(title: t('Sync with other podcast apps'), children: [GpodderSettings(key: ValueKey('gpodder$_gen'))]),
           ],
-        2 => [SettingsGroup(children: [MusicSettings(key: ValueKey('music$_gen'))])],
-        3 => [const SettingsGroup(children: [SonosSettings()])],
-        4 => [
+        'music' => [SettingsGroup(children: [MusicSettings(key: ValueKey('music$_gen'))])],
+        'sonos' => [const SettingsGroup(children: [SonosSettings()])],
+        'storage' => [const StorageSettings()],
+        'appearance' => [const AppearanceSettings()],
+        'devices' => [
             SettingsGroup(children: [_devices()]),
             SettingsGroup(children: [Align(alignment: Alignment.centerLeft, child: _signOut())]),
           ],
-        5 => [MaintenanceSettings(key: ValueKey('maint$_gen'))],
+        'maintenance' => [MaintenanceSettings(key: ValueKey('maint$_gen'))],
         _ => [
             const SettingsGroup(children: [AboutPanel()]),
             // As in tvjoe (prefs.rs, group "Mitwirkende").
@@ -256,9 +270,9 @@ class _SettingsViewState extends State<SettingsView> {
         width: 200,
         decoration: BoxDecoration(color: scheme.surface, border: Border(right: BorderSide(color: k.line))),
         child: ListView(padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8), children: [
-          for (final (i, (icon, label)) in _pages.indexed)
+          for (final (i, (id, icon, label)) in _pages.indexed)
             Padding(
-              key: ValueKey('settings-page-$i'),
+              key: ValueKey('settings-page-$id'),
               padding: const EdgeInsets.only(bottom: 2),
               child: Material(
                 color: i == _page ? k.panel2 : Colors.transparent,
@@ -284,7 +298,7 @@ class _SettingsViewState extends State<SettingsView> {
       ),
       Expanded(
         child: ListView(key: PageStorageKey('settings$_page'), padding: const EdgeInsets.fromLTRB(20, 16, 20, 16), children: [
-          Row(children: [_h(_pages[_page].$2), const Spacer(), if (_page == 0) _addSource()]),
+          Row(children: [_h(_pages[_page].$3), const Spacer(), if (_page == 0) _addSource()]),
           const SizedBox(height: 12),
           ..._pageContent(context),
         ]),
@@ -1111,4 +1125,71 @@ Future<void> showAbout(BuildContext context) async {
       ],
     ),
   );
+}
+
+/// "Storage": free space and "Keep at least … free" (5 GB the default and the smallest value,
+/// steps of 1 GB). Below it no download starts. Per device, not synced.
+class StorageSettings extends StatelessWidget {
+  const StorageSettings({super.key});
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: Listenable.merge([storage, downloads]),
+        builder: (context, _) {
+          final k = context.tok;
+          final used = downloads.entries.fold<int>(0, (s, e) => s + e.bytes);
+          final n = storage.keepFreeGb;
+          return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            SettingsGroup(children: [
+              Text(
+                  storage.free == null
+                      ? t('{used} used', {'used': bytes(used)})
+                      : t('{used} used · {free} free', {'used': bytes(used), 'free': bytes(storage.free!)}),
+                  key: const ValueKey('storage-usage'),
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+            ]),
+            SettingsGroup(title: t('Keep at least free'), desc: t('Below it no download starts.'), children: [
+              Row(children: [
+                IconButton.outlined(
+                  key: const ValueKey('keep-free-minus'),
+                  tooltip: '−1 GB',
+                  onPressed: n > Storage.minKeepFreeGb ? () => storage.keepFreeGb = n - 1 : null,
+                  icon: const Icon(Icons.remove),
+                ),
+                SizedBox(
+                  width: 90,
+                  child: Text('$n GB', key: const ValueKey('keep-free'), textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                ),
+                IconButton.outlined(key: const ValueKey('keep-free-plus'), tooltip: '+1 GB', onPressed: () => storage.keepFreeGb = n + 1, icon: const Icon(Icons.add)),
+                const SizedBox(width: 12),
+                if (storage.low)
+                  Flexible(child: Text(t('Waiting for space'), style: TextStyle(color: k.bad, fontWeight: FontWeight.w700))),
+              ]),
+            ]),
+          ]);
+        },
+      );
+}
+
+/// Android "Appearance": system, light or dark (the desktop has the moon in the title bar).
+class AppearanceSettings extends StatelessWidget {
+  const AppearanceSettings({super.key});
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder(
+        valueListenable: appearance,
+        builder: (context, mode, _) => SettingsGroup(children: [
+          SegmentedButton<ThemeMode>(
+            key: const ValueKey('appearance-mode'),
+            segments: [
+              ButtonSegment(value: ThemeMode.system, label: Text(t('System')), icon: const Icon(Icons.brightness_auto)),
+              ButtonSegment(value: ThemeMode.light, label: Text(t('Light')), icon: const Icon(Icons.light_mode)),
+              ButtonSegment(value: ThemeMode.dark, label: Text(t('Dark')), icon: const Icon(Icons.dark_mode)),
+            ],
+            selected: {mode},
+            onSelectionChanged: (s) => setAppearance(s.first),
+          ),
+        ]),
+      );
 }

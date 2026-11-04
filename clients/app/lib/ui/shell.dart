@@ -9,7 +9,9 @@ import 'books.dart';
 import 'common.dart';
 import 'lists.dart';
 import 'now_playing.dart';
+import 'pills.dart';
 import 'settings.dart';
+import 'title_bar.dart';
 import 'views.dart';
 
 class Shell extends StatefulWidget {
@@ -19,8 +21,27 @@ class Shell extends StatefulWidget {
   State<Shell> createState() => _ShellState();
 }
 
+/// The page shown (see `_dest`; 7 the offline titles). Shared with the desktop title bar, whose
+/// storage pill and settings button open pages.
+final shellPage = ValueNotifier<int>(0);
+
 class _ShellState extends State<Shell> {
-  int index = 0;
+  int get index => shellPage.value;
+  set index(int i) => shellPage.value = i;
+
+  void _changed() => setState(() {});
+
+  @override
+  void initState() {
+    super.initState();
+    shellPage.addListener(_changed);
+  }
+
+  @override
+  void dispose() {
+    shellPage.removeListener(_changed);
+    super.dispose();
+  }
 
   // Wide: 0 now playing, 1 continue, 2 podcasts, 3 audiobooks, 4 music, 5 radio, 6 settings.
   // Phone: the same without "now playing" (opened from the mini player). 7 offline, opened
@@ -36,7 +57,7 @@ class _ShellState extends State<Shell> {
   ];
 
   Widget _view(int i, bool wide) {
-    void opened() => wide ? setState(() => index = 0) : _openNowPlaying();
+    void opened() => wide ? (index = 0) : _openNowPlaying();
     return switch (i) {
       0 => const NowPlayingView(),
       1 => ContinueView(key: const ValueKey('cont'), onPlay: opened),
@@ -57,34 +78,63 @@ class _ShellState extends State<Shell> {
               resizeToAvoidBottomInset: false,
               appBar: AppBar(
                 leading: IconButton(tooltip: t('Back'), onPressed: () => Navigator.pop(context), icon: const Icon(Icons.arrow_back)),
-                actions: const [StatusPills(), SizedBox(width: 8)],
+                // Linux and Windows: the pills are in the title bar above.
+                actions: desktop
+                    ? null
+                    : [
+                        Flexible(
+                          child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              reverse: true,
+                              child: const Row(mainAxisSize: MainAxisSize.min, children: [CachePill(), StatusPills()])),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
               ),
               body: const SafeArea(top: false, child: NowPlayingView()),
             )));
   }
 
+  /// The top line on Android: icon (wide: name and version as well), Cache, Server, Position, the
+  /// offline button and the settings; the moon is in the settings ("Appearance"). Linux and
+  /// Windows have the title bar of the window instead (title_bar.dart).
+  PreferredSizeWidget? _bar(bool wide) {
+    if (desktop) return null;
+    final pills = [const CachePill(), const StatusPills()];
+    final settings = IconButton(tooltip: t('Settings'), onPressed: () => index = 6, icon: const Icon(Icons.settings));
+    return AppBar(
+      titleSpacing: 12,
+      title: wide
+          ? Row(mainAxisSize: MainAxisSize.min, children: [
+              lineIcon(context, size: 26),
+              const SizedBox(width: 8),
+              const Text('audiojoe', style: TextStyle(fontWeight: FontWeight.w800)),
+              if (appVersion.isNotEmpty) ...[
+                const SizedBox(width: 6),
+                Text(appVersion, style: TextStyle(fontSize: 14, color: context.tok.muted, fontWeight: FontWeight.w600)),
+              ],
+            ])
+          // The icon instead of the name: the pills need the width on phones.
+          : Semantics(label: 'audiojoe', child: lineIcon(context, size: 30)),
+      actions: [
+        Flexible(child: SingleChildScrollView(scrollDirection: Axis.horizontal, reverse: true, child: Row(mainAxisSize: MainAxisSize.min, children: pills))),
+        IconButton(
+          tooltip: t('Offline'),
+          isSelected: index == 7,
+          onPressed: () => index = 7,
+          icon: const Icon(Icons.download_for_offline_outlined),
+          selectedIcon: const Icon(Icons.download_for_offline),
+        ),
+        if (!wide) settings,
+        const SizedBox(width: 4),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) => LayoutBuilder(builder: (context, c) {
         final wide = c.maxWidth >= 720;
-        final bar = AppBar(
-          // The app icon instead of the name: the status pills need the width on phones.
-          title: wide
-              ? const Text('audiojoe', style: TextStyle(fontWeight: FontWeight.w800))
-              : Semantics(label: 'audiojoe', child: Image.asset('assets/icon.png', height: 36)),
-          actions: [
-            Flexible(child: SingleChildScrollView(scrollDirection: Axis.horizontal, reverse: true, child: const StatusPills())),
-            IconButton(
-              tooltip: t('Offline'),
-              isSelected: index == 7,
-              onPressed: () => setState(() => index = 7),
-              icon: const Icon(Icons.download_for_offline_outlined),
-              selectedIcon: const Icon(Icons.download_for_offline),
-            ),
-            const AppearanceButton(),
-            if (!wide) IconButton(onPressed: () => setState(() => index = 6), icon: const Icon(Icons.settings)),
-            const SizedBox(width: 4),
-          ],
-        );
+        final bar = _bar(wide);
         if (wide) {
           return Scaffold(
             appBar: bar,
@@ -92,7 +142,7 @@ class _ShellState extends State<Shell> {
               NavigationRail(
                 selectedIndex: index < _dest.length ? index : null,
                 labelType: NavigationRailLabelType.all,
-                onDestinationSelected: (i) => setState(() => index = i),
+                onDestinationSelected: (i) => index = i,
                 destinations: [for (final d in _dest) NavigationRailDestination(icon: Icon(d.$1), label: Text(t(d.$2)))],
               ),
               const VerticalDivider(width: 2),
@@ -108,7 +158,7 @@ class _ShellState extends State<Shell> {
             MiniPlayer(onOpen: _openNowPlaying),
             NavigationBar(
               selectedIndex: (phoneIndex - 1).clamp(0, 4),
-              onDestinationSelected: (i) => setState(() => index = i + 1),
+              onDestinationSelected: (i) => index = i + 1,
               destinations: [for (final d in _dest.sublist(1, 6)) NavigationDestination(icon: Icon(d.$1), label: t(d.$2))],
             ),
           ]),

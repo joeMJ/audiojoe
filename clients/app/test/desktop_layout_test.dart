@@ -294,14 +294,16 @@ void main() {
       for (var i = 0; i < 5; i++) {
         await tester.pump(const Duration(milliseconds: 50));
       }
-      for (final p in ['Sources', 'Podcasts', 'Music', 'Sonos', 'Devices', 'Maintenance', 'About']) {
+      for (final p in ['Sources', 'Podcasts', 'Music', 'Sonos', 'Storage', 'Appearance', 'Devices', 'Maintenance', 'About']) {
         expect(find.text(p), findsOneWidget, reason: p);
       }
+      // Storage moved forward from 0.2.0, Appearance only on Android (user 2026-11-04).
+      expect(find.text('Keep at least 5 GB free'), findsOneWidget);
+      expect(find.text('System'), findsOneWidget);
       expect(find.text('Jellyfin · 2 libraries'), findsOneWidget);
       expect(find.text('2 speakers'), findsOneWidget);
       expect(find.text('1 signed in · sign out this device'), findsOneWidget);
       expect(find.text('Server 0.1.4 · App 0.1.0 · update available'), findsOneWidget);
-      expect(find.text('Storage'), findsNothing); // "Ablage" comes with 0.2.0
       expect(find.text('Import OPML'), findsNothing);
 
       await tester.tap(find.text('Podcasts'));

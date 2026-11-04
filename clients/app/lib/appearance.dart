@@ -27,6 +27,12 @@ void toggleDark(BuildContext context) {
   Stores.device.put('appearance', {'mode': appearance.value.name});
 }
 
+/// Android settings "Appearance": system, light or dark.
+void setAppearance(ThemeMode mode) {
+  appearance.value = mode;
+  Stores.device.put('appearance', {'mode': mode.name});
+}
+
 bool? _titleBarDark;
 
 /// Tells the window (GTK header bar, Windows title bar) whether to be dark; only on change.

@@ -1,6 +1,6 @@
 // Now playing: large cover, format chips and where it plays, then −15 / play / +30; tabs for
 // details and chapters. Progress and buttons always stay in view. Desktop: the cover takes the
-// left third, progress, buttons and footer (sleep timer, speed, output, offline) sit at the
+// left third, progress, buttons and footer (sleep timer, speed, output, up next) sit at the
 // bottom right, no volume (the output overlay has it). Phone: volume and footer at the bottom.
 
 import 'package:flutter/material.dart';
@@ -15,6 +15,7 @@ import '../volume.dart';
 import 'common.dart';
 import 'notes.dart';
 import 'output.dart';
+import 'up_next.dart';
 
 class NowPlayingView extends StatefulWidget {
   const NowPlayingView({super.key});
@@ -432,7 +433,6 @@ class _Toolbar extends StatelessWidget {
     final k = context.tok;
     final out = sonos.output;
     final local = !remote.active; // sleep timer and speed act on this device only
-    final e = downloads.entry(it.key);
     Widget tool(Widget icon, String label, VoidCallback? onTap, {String? tip}) => Expanded(
           child: Tooltip(
             message: tip ?? label,
@@ -468,18 +468,8 @@ class _Toolbar extends StatelessWidget {
         tool(Icon(local ? Icons.smartphone : out != null ? Icons.speaker : Icons.devices, size: 28, color: local ? null : accent),
             local ? t('This device') : out?.short ?? remote.target!, () => outputOpen.value = true,
             tip: t('Output')),
-        tool(
-          switch (e?.status) {
-            'done' => Icon(Icons.download_done, size: 28, color: k.ok),
-            'loading' => SizedBox(width: 24, height: 24, child: CircularProgressIndicator(value: e?.progress, strokeWidth: 3)),
-            'error' => Icon(Icons.error_outline, size: 28, color: k.bad),
-            String() => Icon(Icons.schedule, size: 28, color: k.warn),
-            null => const Icon(Icons.download, size: 28),
-          },
-          e?.status == 'done' ? t('in cache') : t('Offline'),
-          e == null && !player.live ? () => downloads.add([it]) : null,
-          tip: e == null ? t('Save offline') : null,
-        ),
+        // "Up next" in place of "Offline" (user 2026-11-04; the cache pill at the top saves).
+        tool(const Icon(Icons.queue_music, size: 28), t('Up next'), player.live ? null : () => showUpNext(context, it)),
     ];
     return Container(
       decoration: BoxDecoration(color: k.panel2, borderRadius: BorderRadius.circular(14)),

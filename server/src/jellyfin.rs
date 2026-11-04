@@ -152,6 +152,8 @@ fn normalize(prefix: &str, source: i64, v: &Value) -> Value {
         "description": v["Overview"].as_str().map(crate::podcasts::plain_text),
         "notes": v["Overview"].as_str().map(crate::notes::html).filter(|s| !s.is_empty()),
         "quality": if kind == "track" { quality(v) } else { Value::Null },
+        // The album of a title: the apps' cache pill saves the whole album.
+        "album": v["AlbumId"].as_str().filter(|a| kind == "track" && valid_id(a)).map(|a| format!("{prefix}:{source}:{a}")),
     })
 }
 
@@ -453,6 +455,17 @@ pub async fn check(state: &AppState, kind: &str, url: &str, key: &str) -> ApiRes
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn track_names_its_album() {
+        // 0.1.7: the apps' cache pill saves the whole album of a single title.
+        let t = normalize("jellyfin", 2, &json!({ "Id": "t1", "Type": "Audio", "Name": "So What", "AlbumId": "a9" }));
+        assert_eq!(t["album"], "jellyfin:2:a9");
+        let a = normalize("jellyfin", 2, &json!({ "Id": "a9", "Type": "MusicAlbum", "Name": "Kind of Blue" }));
+        assert!(a["album"].is_null());
+        let bad = normalize("jellyfin", 2, &json!({ "Id": "t2", "Type": "Audio", "AlbumId": "../x" }));
+        assert!(bad["album"].is_null());
+    }
 
     #[test]
     fn shelf_groups_files_by_folder_and_counts_authors() {

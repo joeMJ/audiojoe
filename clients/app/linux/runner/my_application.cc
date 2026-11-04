@@ -1,6 +1,8 @@
 #include "my_application.h"
 
+#include <cerrno>
 #include <cstring>
+#include <sys/statvfs.h>
 
 #include <flutter_linux/flutter_linux.h>
 #ifdef GDK_WINDOWING_X11
@@ -13,6 +15,7 @@ struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
   FlMethodChannel* window_channel;
+  FlMethodChannel* storage_channel;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
@@ -53,6 +56,24 @@ static void window_call_cb(FlMethodChannel* channel, FlMethodCall* call,
   fl_method_call_respond_success(call, nullptr, nullptr);
 }
 
+// "free" with a path: free bytes for this user on its volume (statvfs, no root needed).
+static void storage_call_cb(FlMethodChannel* channel, FlMethodCall* call,
+                            gpointer user_data) {
+  FlValue* args = fl_method_call_get_args(call);
+  if (strcmp(fl_method_call_get_name(call), "free") != 0 || args == nullptr ||
+      fl_value_get_type(args) != FL_VALUE_TYPE_STRING) {
+    fl_method_call_respond_not_implemented(call, nullptr);
+    return;
+  }
+  struct statvfs st;
+  if (statvfs(fl_value_get_string(args), &st) != 0) {
+    fl_method_call_respond_error(call, "statvfs", g_strerror(errno), nullptr, nullptr);
+    return;
+  }
+  g_autoptr(FlValue) result = fl_value_new_int((int64_t)st.f_bavail * (int64_t)st.f_frsize);
+  fl_method_call_respond_success(call, result, nullptr);
+}
+
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
@@ -82,8 +103,11 @@ static void my_application_activate(GApplication* application) {
   }
 #endif
   if (use_header_bar) {
+    // The app draws its title bar itself (window_manager, title_bar.dart). The header bar stays
+    // hidden from the start: the window keeps its client-side frame (shadow, resize edges) and
+    // never shows the system's bar.
     GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
-    gtk_widget_show(GTK_WIDGET(header_bar));
+    gtk_window_set_title(window, "audiojoe");
     gtk_header_bar_set_title(header_bar, "audiojoe");
     gtk_header_bar_set_show_close_button(header_bar, TRUE);
     gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
@@ -122,6 +146,11 @@ static void my_application_activate(GApplication* application) {
       "io.github.joemj.audiojoe/window", FL_METHOD_CODEC(codec));
   fl_method_channel_set_method_call_handler(self->window_channel,
                                             window_call_cb, self, nullptr);
+  self->storage_channel = fl_method_channel_new(
+      fl_engine_get_binary_messenger(fl_view_get_engine(view)),
+      "io.github.joemj.audiojoe/storage", FL_METHOD_CODEC(codec));
+  fl_method_channel_set_method_call_handler(self->storage_channel,
+                                            storage_call_cb, self, nullptr);
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
@@ -170,6 +199,7 @@ static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
   g_clear_object(&self->window_channel);
+  g_clear_object(&self->storage_channel);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }
 

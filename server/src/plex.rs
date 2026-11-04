@@ -131,6 +131,8 @@ fn normalize(src: i64, m: &Value) -> Value {
         "description": m["summary"].as_str().filter(|s| !s.is_empty()).map(crate::podcasts::plain_text),
         "notes": m["summary"].as_str().map(crate::notes::html).filter(|s| !s.is_empty()),
         "quality": if kind == "track" { quality(m) } else { Value::Null },
+        // The album of a title: the apps' cache pill saves the whole album.
+        "album": if kind == "track" { m["parentRatingKey"].as_str().map(|a| format!("plex:{src}:{a}")) } else { None },
     })
 }
 
@@ -310,6 +312,13 @@ mod tests {
         assert!(is_book_section(&json!({ "type": "artist", "agent": "tv.plex.agents.music", "title": "Hörbücher" })));
         assert!(!is_book_section(&json!({ "type": "artist", "agent": "tv.plex.agents.music", "title": "Musik" })));
         assert!(!is_book_section(&json!({ "type": "movie", "agent": "x", "title": "Audiobooks" })));
+    }
+
+    #[test]
+    fn track_names_its_album() {
+        let t = normalize(3, &json!({ "ratingKey": "123", "type": "track", "title": "So What", "parentRatingKey": "77" }));
+        assert_eq!(t["album"], "plex:3:77");
+        assert!(normalize(3, &json!({ "ratingKey": "77", "type": "album", "title": "Kind of Blue" }))["album"].is_null());
     }
 
     #[test]

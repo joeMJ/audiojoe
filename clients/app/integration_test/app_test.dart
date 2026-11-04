@@ -124,6 +124,19 @@ void main() {
     await const MethodChannel('io.github.joemj.audiojoe/window').invokeMethod('dark', false);
     await tester.tap(find.text('Now playing').first);
     await waitFor(tester, find.byTooltip('Play'));
+    // 0.1.7: the own title bar – name and version, Cache, Server, Position, Storage, moon.
+    expect(find.byKey(const ValueKey('app-name')), findsOneWidget);
+    expect(find.byKey(const ValueKey('app-version')), findsOneWidget);
+    expect(find.byKey(const ValueKey('storage-pill')), findsOneWidget);
+    await waitUntil(tester, () => find.textContaining('Cache 0 %').evaluate().isNotEmpty, seconds: 10, what: 'cache pill');
+    // "Up next" in the footer instead of "Offline".
+    expect(find.text('Up next'), findsOneWidget);
+    await tester.tap(find.text('Up next'));
+    await waitFor(tester, find.byKey(const ValueKey('up-next')));
+    await tester.pump(const Duration(seconds: 1));
+    await shot(tester, 'up-next');
+    await tester.tapAt(const Offset(640, 100)); // above the sheet, below the title bar
+    await tester.pump(const Duration(seconds: 1));
     // No volume of this device on the desktop.
     expect(find.byWidgetPredicate((w) => w is Semantics && w.properties.label == 'Volume'), findsNothing);
     await shot(tester, 'player');
@@ -166,8 +179,8 @@ void main() {
     await tester.tap(find.text('Settings').first);
     await waitFor(tester, find.text('Add source'));
     await shot(tester, 'settings-sources');
-    for (final (i, name) in [(1, 'podcasts'), (4, 'devices'), (5, 'maintenance'), (6, 'about')]) {
-      await tester.tap(find.byKey(ValueKey('settings-page-$i')));
+    for (final name in ['podcasts', 'storage', 'devices', 'maintenance', 'about']) {
+      await tester.tap(find.byKey(ValueKey('settings-page-$name')));
       await tester.pump(const Duration(seconds: 2));
       await shot(tester, 'settings-$name');
     }
@@ -181,7 +194,7 @@ void main() {
       await tester.tap(find.text('Settings').last);
       await waitFor(tester, find.textContaining(' · App '));
       await shot(tester, 'phone-settings');
-      for (final (page, name) in [('Sources', 'sources'), ('Maintenance', 'maintenance')]) {
+      for (final (page, name) in [('Sources', 'sources'), ('Storage', 'storage'), ('Appearance', 'appearance'), ('Maintenance', 'maintenance')]) {
         await tester.tap(find.text(page));
         await tester.pump(const Duration(seconds: 2));
         await shot(tester, 'phone-$name');

@@ -94,6 +94,8 @@ class Item {
   final String key, kind, title, subtitle;
   final int? durationMs, track, year;
   final String? image, published, description, notes, series;
+  /// Music: key of the album a title belongs to (the cache pill saves the whole album).
+  final String? album;
   final List<String> genres;
   final Quality? quality;
   final List<Part> parts;
@@ -115,6 +117,7 @@ class Item {
     this.description,
     this.notes,
     this.series,
+    this.album,
     this.genres = const [],
     this.quality,
     this.parts = const [],
@@ -138,6 +141,7 @@ class Item {
         description: j['description'] as String?,
         notes: j['notes'] as String?,
         series: j['series'] as String?,
+        album: j['album'] as String?,
         genres: (j['genres'] as List? ?? []).map((g) => '$g').toList(),
         quality: Quality.fromJson(j['quality']),
         parts: (j['parts'] as List? ?? []).map(Part.fromJson).toList(),
@@ -160,6 +164,7 @@ class Item {
         'published': published,
         'description': description,
         'notes': notes,
+        'album': album,
         'quality': quality?.toJson(),
         'parts': parts.map((p) => p.toJson()).toList(),
         'chapters': chapters.map((c) => c.toJson()).toList(),

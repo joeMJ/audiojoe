@@ -293,9 +293,9 @@ class AlbumPage extends StatelessWidget {
                 }(),
                 onTap: () => startPlayback(context, tracks, tracks.indexOf(it), onPlay),
                 onLongPress: () => openDetails(context, it, onPlay),
+                // No single titles offline (user 2026-11-04): the album button saves the album.
                 trailing: [
                   if (it.quality?.badge.isNotEmpty == true) Badge2(it.quality!.badge),
-                  saveOfflineButton(it),
                 ],
               ),
           ]);

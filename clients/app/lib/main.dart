@@ -5,6 +5,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:just_audio_media_kit/just_audio_media_kit.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'api.dart';
 import 'appearance.dart';
@@ -12,6 +14,7 @@ import 'downloads.dart';
 import 'media_session.dart';
 import 'remote.dart';
 import 'player.dart';
+import 'storage.dart';
 import 'l10n.dart';
 import 'store.dart';
 import 'sync.dart';
@@ -20,6 +23,7 @@ import 'ui/common.dart';
 import 'ui/lists.dart';
 import 'ui/login.dart';
 import 'ui/shell.dart';
+import 'ui/title_bar.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,7 +34,14 @@ Future<void> main() async {
     // Desktop: libmpv (bit-exact FLAC, any sample rate).
     JustAudioMediaKit.ensureInitialized(linux: true, windows: true);
     JustAudioMediaKit.title = 'audiojoe';
+    // The app draws the title bar itself (title_bar.dart); before the first frame, so the
+    // system's bar never shows.
+    await windowManager.ensureInitialized();
+    await windowManager.setTitleBarStyle(TitleBarStyle.hidden, windowButtonVisibility: false);
   }
+  try {
+    appVersion = (await PackageInfo.fromPlatform()).version;
+  } catch (_) {}
   await Stores.open();
   final signedIn = await api.loadSession();
   runApp(AudiojoeApp(signedIn: signedIn));
@@ -53,6 +64,8 @@ class _AudiojoeAppState extends State<AudiojoeApp> {
   void initState() {
     super.initState();
     api.onRejected = _rejected;
+    // Below "Keep at least … free" (user: "wartet auf Platz").
+    downloads.refused.stream.listen((_) => messenger.currentState?.showSnackBar(SnackBar(content: Text(t('Waiting for space')))));
   }
 
   /// The server rejected the token: back to the sign-in page, the server address stays filled in.
@@ -70,6 +83,7 @@ class _AudiojoeAppState extends State<AudiojoeApp> {
     if (started) return;
     started = true;
     sync.start();
+    storage.start();
     downloads.check();
     connectLists();
     unawaited(player.cueLast().then((_) => remote.findPlaying()));
@@ -140,7 +154,7 @@ class _AudiojoeAppState extends State<AudiojoeApp> {
         // Below the app the platform brightness is known: the title bar follows the moon button.
         builder: (context, child) {
           syncTitleBar(isDark(context));
-          return child!;
+          return desktop ? DesktopFrame(signedIn: signedIn, child: child!) : child!;
         },
         home: signedIn ? Shell(onSignOut: _signOut) : LoginView(onDone: () => setState(() => signedIn = true)),
       ),

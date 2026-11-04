@@ -4,6 +4,7 @@
 #include <flutter/standard_method_codec.h>
 
 #include <optional>
+#include <string>
 
 #include "flutter/generated_plugin_registrant.h"
 
@@ -51,6 +52,32 @@ bool FlutterWindow::OnCreate() {
         ApplyDark();
         result->Success();
       });
+  storage_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(),
+          "io.github.joemj.audiojoe/storage",
+          &flutter::StandardMethodCodec::GetInstance());
+  storage_channel_->SetMethodCallHandler(
+      [](const flutter::MethodCall<flutter::EncodableValue>& call,
+         std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+             result) {
+        const auto* path = std::get_if<std::string>(call.arguments());
+        if (call.method_name() != "free" || path == nullptr) {
+          result->NotImplemented();
+          return;
+        }
+        int n = MultiByteToWideChar(CP_UTF8, 0, path->c_str(), -1, nullptr, 0);
+        std::wstring wide(n > 0 ? n : 1, L'\0');
+        MultiByteToWideChar(CP_UTF8, 0, path->c_str(), -1, wide.data(), n);
+        // Free bytes available to this user (quotas included), no elevation needed.
+        ULARGE_INTEGER available;
+        if (!GetDiskFreeSpaceExW(wide.c_str(), &available, nullptr, nullptr)) {
+          result->Error("GetDiskFreeSpaceExW", std::to_string(GetLastError()));
+          return;
+        }
+        result->Success(flutter::EncodableValue(
+            static_cast<int64_t>(available.QuadPart)));
+      });
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -74,6 +101,7 @@ void FlutterWindow::ApplyDark() {
 
 void FlutterWindow::OnDestroy() {
   window_channel_ = nullptr;
+  storage_channel_ = nullptr;
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }

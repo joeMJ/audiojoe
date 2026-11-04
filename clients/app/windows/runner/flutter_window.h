@@ -34,6 +34,8 @@ class FlutterWindow : public Win32Window {
 
   // "dark" from the app (the moon button): the title bar follows instead of the system.
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> window_channel_;
+  // "free" with a path: free bytes for this user on its volume.
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> storage_channel_;
   std::optional<bool> dark_;
   void ApplyDark();
 };

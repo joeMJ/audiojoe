@@ -1,5 +1,6 @@
 // Offline titles: download queue into the app's data directory. Interrupted downloads
-// resume with Range requests; files that disappeared are fetched again.
+// resume with Range requests; files that disappeared are fetched again. Below "Keep at least …
+// free" (storage.dart) no download starts and nothing new is queued.
 
 import 'dart:async';
 import 'dart:io';
@@ -9,6 +10,7 @@ import 'package:http/http.dart' as http;
 
 import 'api.dart';
 import 'models.dart';
+import 'storage.dart';
 import 'store.dart';
 
 class OfflineEntry {
@@ -63,7 +65,16 @@ class Downloads extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> add(List<Item> items) async {
+  /// Said when a download was asked for below the limit (the app shows "Waiting for space").
+  final refused = StreamController<void>.broadcast();
+
+  /// Queues the items; false (nothing queued) when the free space is below the limit.
+  Future<bool> add(List<Item> items) async {
+    await storage.refresh();
+    if (storage.low) {
+      refused.add(null);
+      return false;
+    }
     for (var it in items.where((i) => const ['track', 'episode', 'book'].contains(i.kind))) {
       if (entry(it.key) != null) continue;
       if (it.kind == 'book' && it.parts.isEmpty) {
@@ -77,6 +88,7 @@ class Downloads extends ChangeNotifier {
       _save(OfflineEntry(it.key, it.title, it.subtitle, DateTime.now().toUtc().toIso8601String(), quality: it.quality));
     }
     unawaited(_process());
+    return true;
   }
 
   Future<void> remove(String key) async {
@@ -97,6 +109,9 @@ class Downloads extends ChangeNotifier {
       while (api.online.value) {
         final next = entries.where((e) => e.status == 'queued' || e.status == 'missing').firstOrNull;
         if (next == null) break;
+        // Below the limit the rest waits (it starts again with the next download asked for).
+        await storage.refresh();
+        if (storage.low) break;
         await _fetch(next);
       }
     } finally {

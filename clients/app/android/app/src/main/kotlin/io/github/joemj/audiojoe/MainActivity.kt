@@ -1,6 +1,7 @@
 package io.github.joemj.audiojoe
 
 import android.content.Intent
+import android.os.StatFs
 import androidx.core.content.FileProvider
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -25,6 +26,15 @@ class MainActivity : AudioServiceActivity() {
                 result.success(null)
             } catch (e: Exception) {
                 result.error("install", e.message, null)
+            }
+        }
+        // "free" with a path: free bytes on its volume (the app's own storage, no permission).
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "io.github.joemj.audiojoe/storage").setMethodCallHandler { call, result ->
+            if (call.method != "free") return@setMethodCallHandler result.notImplemented()
+            try {
+                result.success(StatFs(call.arguments as String).availableBytes)
+            } catch (e: Exception) {
+                result.error("statfs", e.message, null)
             }
         }
     }

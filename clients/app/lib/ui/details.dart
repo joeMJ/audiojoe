@@ -84,7 +84,8 @@ class DetailsPage extends StatelessWidget {
             onPressed: () => startPlayback(context, [it], 0, onPlay),
           ),
           const SizedBox(width: 8),
-          saveOfflineButton(it),
+          // No single titles offline (user 2026-11-04): music is saved as an album.
+          if (it.kind != 'track') saveOfflineButton(it),
           if (it.kind == 'episode' || it.kind == 'book') NextButton(it),
         ]),
         const SizedBox(height: 20),
