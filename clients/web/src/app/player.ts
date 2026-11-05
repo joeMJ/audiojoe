@@ -105,6 +105,14 @@ export async function itemMeta(key: string): Promise<Item | undefined> {
   return idbGet<Item>("items", key);
 }
 
+// Podcasts and books continue 10 s earlier after another device or after a pause of 5 minutes.
+const REWIND_MS = 10000;
+const LONG_PAUSE_MS = 5 * 60 * 1000;
+let pausedAt: number | undefined;
+const rewinds = (it: Item) => it.kind === "episode" || it.kind === "book";
+const back = (it: Item, ms: number) => (rewinds(it) ? Math.max(0, ms - REWIND_MS) : ms);
+const longAgo = (at: string) => Date.now() - Date.parse(at) >= LONG_PAUSE_MS;
+
 async function startPosition(it: Item): Promise<{ ms: number; from?: Playback }> {
   const local = await localPosition(it.key);
   const remote = it.playback ?? undefined;
@@ -112,7 +120,8 @@ async function startPosition(it: Item): Promise<{ ms: number; from?: Playback }>
   // A position in the last seconds counts as heard (else the title ends at once and the next follows).
   const length = best?.duration_ms ?? it.duration_ms ?? 0;
   if (!best || best.finished || (length > 0 && best.position_ms >= length - 5000)) return { ms: 0 };
-  return { ms: best.position_ms, from: best.device && best.device !== myDevice ? best : undefined };
+  const other = !!best.device && best.device !== myDevice;
+  return { ms: other || longAgo(best.updated_at) ? back(it, best.position_ms) : best.position_ms, from: other ? best : undefined };
 }
 
 let nextAfter: ((e: Entry) => Promise<(() => Promise<void>) | null>) | null = null;
@@ -271,8 +280,10 @@ export function toggle() {
   if (!audio.src) {
     if (state.item.kind === "radio") void load(state.item, true);
     else void seekGlobal(cuedMs, true);
-  } else if (audio.paused) void audio.play();
-  else audio.pause();
+  } else if (!audio.paused) audio.pause();
+  else if (pausedAt !== undefined && rewinds(state.item) && Date.now() - pausedAt >= LONG_PAUSE_MS) {
+    void seekGlobal(back(state.item, position()), false).then(() => audio.play());
+  } else void audio.play();
 }
 
 export function seekBy(ms: number) {
@@ -339,7 +350,7 @@ function mediaSession(it: Item) {
     artwork: it.image ? [{ src: it.image, sizes: "400x400" }] : [],
   });
   const ms = navigator.mediaSession;
-  ms.setActionHandler("play", () => (audio.src ? void audio.play() : toggle()));
+  ms.setActionHandler("play", () => audio.paused && toggle());
   ms.setActionHandler("pause", () => audio.pause());
   ms.setActionHandler("seekbackward", () => seekBy(-15000));
   ms.setActionHandler("seekforward", () => seekBy(30000));
@@ -351,6 +362,7 @@ function mediaSession(it: Item) {
 let saveTimer: number | undefined;
 audio.addEventListener("play", () => {
   state.playing = true;
+  pausedAt = undefined;
   clearInterval(saveTimer);
   saveTimer = window.setInterval(() => void persist(), 10000);
   void persist();
@@ -358,6 +370,7 @@ audio.addEventListener("play", () => {
 });
 audio.addEventListener("pause", () => {
   state.playing = false;
+  pausedAt = Date.now();
   clearInterval(saveTimer);
   if (!audio.ended) void persist();
   notify();
@@ -401,10 +414,11 @@ function takeOver(v: PlayerState["takenOver"]) {
 onRemote((p) => {
   if (!p.key || !state.item || p.key !== state.item.key || state.playing || p.device === myDevice) return;
   takeOver({ device: p.device, at: p.updated_at });
+  const ms = back(state.item, p.position_ms);
   if (!audio.src) {
-    cuedMs = p.position_ms;
+    cuedMs = ms;
     notify();
-  } else void seekGlobal(p.position_ms, false);
+  } else void seekGlobal(ms, false);
 });
 
 export const audioError = () => audio.error;

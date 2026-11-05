@@ -76,6 +76,17 @@ class Player extends ChangeNotifier {
   bool _cued = false;
   int _cuedMs = 0;
 
+  // Podcasts and books continue 10 s earlier after another device or after a pause of 5 minutes.
+  static const _rewindMs = 10000;
+  static const _longPause = Duration(minutes: 5);
+  DateTime? _pausedAt;
+  static bool _rewinds(Item it) => it.kind == 'episode' || it.kind == 'book';
+  static int _back(Item it, int ms) => _rewinds(it) ? (ms - _rewindMs).clamp(0, ms) : ms;
+  static bool _longAgo(String at) {
+    final t = DateTime.tryParse(at);
+    return t != null && DateTime.now().toUtc().difference(t) >= _longPause;
+  }
+
   /// While another device is controlled: its position and state (its title is shown here).
   int get position => remote.active ? remote.position : _localPosition;
   int get _localPosition => _cued ? _cuedMs : (_parts.isEmpty ? 0 : _parts[_part].startMs) + audio.position.inMilliseconds;
@@ -288,7 +299,8 @@ class Player extends ChangeNotifier {
     // A position in the last seconds counts as heard (else the title ends at once and the next follows).
     final length = best.durationMs ?? it.durationMs ?? 0;
     if (length > 0 && best.positionMs >= length - 5000) return (ms: 0, from: null);
-    return (ms: best.positionMs, from: best.device.isNotEmpty && best.device != api.device ? best : null);
+    final other = best.device.isNotEmpty && best.device != api.device;
+    return (ms: other || _longAgo(best.updatedAt) ? _back(it, best.positionMs) : best.positionMs, from: other ? best : null);
   }
 
   Future<void> seekTo(int ms) async {
@@ -322,7 +334,16 @@ class Player extends ChangeNotifier {
       unawaited(_load(it).then((_) => audio.play()));
       return;
     }
-    audio.playing ? audio.pause() : audio.play();
+    if (audio.playing) {
+      audio.pause();
+      return;
+    }
+    final it = item, paused = _pausedAt;
+    if (it != null && paused != null && _rewinds(it) && DateTime.now().difference(paused) >= _longPause) {
+      unawaited(seekTo(_back(it, _localPosition)).then((_) => audio.play()));
+      return;
+    }
+    audio.play();
   }
 
   Future<void> setRate(double r) async {
@@ -394,6 +415,7 @@ class Player extends ChangeNotifier {
   void _onState(PlayerState s) {
     if (s.playing != _wasPlaying) {
       _wasPlaying = s.playing;
+      _pausedAt = s.playing ? null : DateTime.now();
       _saveTimer?.cancel();
       if (s.playing) {
         unawaited(_persist(report: true));
@@ -438,11 +460,12 @@ class Player extends ChangeNotifier {
       return;
     }
     takenOver = (device: p.device, at: p.updatedAt);
+    final ms = _back(item!, p.positionMs);
     if (_cued) {
-      _cuedMs = p.positionMs;
+      _cuedMs = ms;
       return notifyListeners();
     }
-    final (part, local) = _locate(p.positionMs, _parts);
+    final (part, local) = _locate(ms, _parts);
     unawaited(audio.seek(Duration(milliseconds: local), index: _parts.isEmpty ? null : part));
     notifyListeners();
   }
@@ -511,7 +534,8 @@ class Player extends ChangeNotifier {
     await _show(key, ms);
     final it = item;
     if (it == null || it.key != key) return;
-    sync.savePosition(Playback(key: key, positionMs: ms, durationMs: it.durationMs, finished: false, title: it.title,
+    _cuedMs = _back(it, ms);
+    sync.savePosition(Playback(key: key, positionMs: _cuedMs, durationMs: it.durationMs, finished: false, title: it.title,
         subtitle: it.subtitle, device: api.device, updatedAt: DateTime.now().toUtc().toIso8601String()));
     toggle();
   }
@@ -549,7 +573,7 @@ class Player extends ChangeNotifier {
         final idx = items.length == 1 ? 0 : i;
         final e = q?['entry'] as Map?;
         if ((at ?? 0) > 0) {
-          sync.savePosition(Playback(key: key, positionMs: at!, finished: false, title: items[idx].title,
+          sync.savePosition(Playback(key: key, positionMs: _back(items[idx], at!), finished: false, title: items[idx].title,
               subtitle: items[idx].subtitle, device: api.device, updatedAt: DateTime.now().toUtc().toIso8601String()));
         }
         await play(items, idx, e == null ? null : (list: e['list'] as String, key: e['key'] as String));

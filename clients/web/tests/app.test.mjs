@@ -346,7 +346,7 @@ try {
   await waitText("Übernommen von Telefon (Test)", 10000).then(() => check("phone's position arrives live in the car", true),
     () => check("phone's position arrives live in the car", false));
   const t = await page.evaluate(() => document.querySelector(".times span")?.innerText);
-  check("player jumped to 10:00", t === "10:00", t);
+  check("player jumped to 9:50 (10 s before the phone)", t === "9:50", t);
   await shot("05-uebernommen");
   await clickText("Weiterhören");
   await waitText("Zuletzt auf Telefon (Test)");
