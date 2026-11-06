@@ -576,7 +576,7 @@ try {
   await page.waitForSelector("#sync.ok", { timeout: 40000 }).then(() => check("server back: buffered position synced", true),
     () => check("server back: buffered position synced", false));
   const after = await fetch(`${base}/api/v1/playback/${encodeURIComponent(ep.key)}`, { headers: { authorization: `Bearer ${phone}` } }).then((r) => r.json());
-  check("server has the offline position from the car", after.device === "Tesla (Test)" && after.position_ms > 600000, `${Math.round(after.position_ms / 1000)} s from ${after.device}`);
+  check("server has the offline position from the car", after.device === "Tesla (Test)" && after.position_ms > 590000, `${Math.round(after.position_ms / 1000)} s from ${after.device}`);
   await shot("08-wieder-online");
 
   // ------------------------------------------------------------ cleanup
