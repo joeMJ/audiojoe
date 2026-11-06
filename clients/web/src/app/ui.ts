@@ -5,7 +5,6 @@ import { addOffline, clearOffline, dropPlayedOn, offlineEntry, offlineList, remo
 import { ago, bytes, clock, t } from "./i18n";
 import { idbAll } from "./idb";
 import * as player from "./player";
-import { onPrefs, playbackPrefs, refreshPrefs, setPrefs, type PlaybackPrefs } from "./prefs";
 import { pendingCount, savePosition, stale } from "./sync";
 import { isDark, onAppearance, toggleDark } from "./theme";
 
@@ -1072,30 +1071,8 @@ async function renderOffline() {
       h("button", { className: "big sec", onclick: () => void removeFromOffline(e.key) }, t("Remove"))));
   }
   main.append(box);
-  main.append(playbackBlock());
   main.append(h("div", { style: "margin-top:24px" }, h("button", { className: "big sec", onclick: () => onLogout() }, t("Sign out this device"))));
   main.append(about());
-}
-
-/** Continue 10 s earlier, per kind, for the account (user 2026-11-06: on by default, 10 s and 5 minutes fixed). */
-function playbackBlock() {
-  const box = h("div", { className: "playback-prefs", style: "margin-top:24px" });
-  const one = (name: keyof PlaybackPrefs, label: string) => {
-    const box = h("input", { type: "checkbox", checked: playbackPrefs[name], id: `pref-${name}` }) as HTMLInputElement;
-    box.onchange = () => void setPrefs({ [name]: box.checked }).catch((e) => {
-      box.checked = playbackPrefs[name];
-      alert(`${t("Error")}: ${e}`);
-    });
-    return h("label", { className: "switch" }, box, h("span", {}, label));
-  };
-  const fill = () => box.replaceChildren(
-    h("h2", {}, t("Playback")),
-    h("div", { className: "muted" }, t("When you continue on another device or after a pause of 5 minutes or more, playback starts 10 seconds earlier. Applies to all your devices.")),
-    one("rewind_podcasts", t("Podcasts")), one("rewind_books", t("Audiobooks")));
-  fill();
-  onPrefs(() => box.isConnected && fill());
-  void refreshPrefs();
-  return box;
 }
 
 /** Version, licence, and the manual and privacy notes the server delivers. */
