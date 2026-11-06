@@ -192,14 +192,19 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(360, 760));
       await waitFor(tester, find.text('Settings'));
       await tester.tap(find.text('Settings').last);
-      await waitFor(tester, find.textContaining(' · App '));
+      // Since the page "Playback" (0.1.8) the list is longer than 760 px: "Maintenance" with its line
+      // "Server … · App …" is below the screen and not built yet; wait for a line near the top and
+      // scroll to each page before tapping it.
+      await waitFor(tester, find.textContaining('10 s back'));
       await shot(tester, 'phone-settings');
-      for (final (page, name) in [('Sources', 'sources'), ('Storage', 'storage'), ('Appearance', 'appearance'), ('Maintenance', 'maintenance')]) {
+      for (final (page, name) in [('Sources', 'sources'), ('Playback', 'playback'), ('Storage', 'storage'), ('Appearance', 'appearance'), ('Maintenance', 'maintenance')]) {
+        await tester.scrollUntilVisible(find.text(page), 120, scrollable: find.byType(Scrollable).first);
         await tester.tap(find.text(page));
         await tester.pump(const Duration(seconds: 2));
         await shot(tester, 'phone-$name');
         await tester.tap(find.byTooltip('Back'));
-        await waitFor(tester, find.textContaining(' · App '));
+        await waitFor(tester, find.text('Settings'));
+        await tester.pump(const Duration(seconds: 2));
       }
       desktop = true;
       await tester.binding.setSurfaceSize(null);
