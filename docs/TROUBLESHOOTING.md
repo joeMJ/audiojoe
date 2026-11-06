@@ -26,7 +26,7 @@ schreibt (englisch).
 | `Cannot assign requested address (os error 99)` | `listen` (oder `[sonos] listen`) nennt eine Adresse, die dieser Server nicht hat – etwa nachdem sich die IP-Adresse geändert hat; siehe `ip -br address` |
 | `Address already in use (os error 98)` | ein anderes Programm belegt den Port – finden mit `ss -tlnp \| grep 8080` |
 | `cannot open /var/lib/audiojoe/audiojoe.db` mit `Unable to open the database file` | die Datenbank gehört nicht dem Nutzer `audiojoe` – `chown audiojoe:audiojoe /var/lib/audiojoe/audiojoe.db*` |
-| `file is not a database` oder `database disk image is malformed` | die Datenbank ist beschädigt – siehe [Datenbank oder Konfiguration beschädigt](#datenbank-oder-konfiguration-beschädigt) |
+| `Database check failed: … is damaged (…)` | die Datenbankdatei ist beschädigt – spiele die letzte Sicherung ein, wie in [Sicherung und Wiederherstellung](BACKUP.md#zurückspielen-auf-demselben-server) beschrieben; mehr unter [Datenbank oder Konfiguration beschädigt](#datenbank-oder-konfiguration-beschädigt) |
 | `Start request repeated too quickly` oder `start of the service was attempted too often` | systemd hat nach mehreren Fehlstarts aufgehört – nach der Abhilfe: `systemctl reset-failed audiojoe-server && systemctl start audiojoe-server` |
 
 Der Server läuft, wenn das Protokoll mit `audiojoe-server <version> listening on <adresse>` endet
@@ -122,8 +122,10 @@ Titel startest): `access: … GET /api/v1/stream/… <status>`.
   trusted_proxies = ["10.0.0.5"]
   ```
 
-- **Datenbank:** `file is not a database` oder `database disk image is malformed` beim Start oder
-  später im Protokoll. Ein Schaden in selten gelesenen Teilen kann sich auch erst später zeigen.
+- **Datenbank:** Der Server prüft die Datei bei jedem Start (`PRAGMA quick_check`, ab 0.1.8). Ist sie
+  beschädigt, startet er nicht und schreibt `Database check failed: … is damaged (…)`. Später im
+  Protokoll kann `database disk image is malformed` stehen, wenn ein Schaden während des Betriebs
+  entsteht.
   Prüfen (braucht das Paket `sqlite3`):
 
   ```bash

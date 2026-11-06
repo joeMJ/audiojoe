@@ -25,7 +25,7 @@ and errors stand between them. The messages below are quoted exactly as the serv
 | `Cannot assign requested address (os error 99)` | `listen` (or `[sonos] listen`) names an address this server does not have – e.g. after the IP address changed; see `ip -br address` |
 | `Address already in use (os error 98)` | another program uses the port – find it with `ss -tlnp \| grep 8080` |
 | `cannot open /var/lib/audiojoe/audiojoe.db` with `Unable to open the database file` | the database does not belong to the user `audiojoe` – `chown audiojoe:audiojoe /var/lib/audiojoe/audiojoe.db*` |
-| `file is not a database` or `database disk image is malformed` | the database is damaged – see [Damaged database or configuration](#damaged-database-or-configuration) |
+| `Database check failed: … is damaged (…)` | the database file is damaged – restore the latest backup as described in [Backup and restore](BACKUP.en.md#restore-on-the-same-server); more under [Damaged database or configuration](#damaged-database-or-configuration) |
 | `Start request repeated too quickly` or `start of the service was attempted too often` | systemd stopped trying after several failed starts – after the fix: `systemctl reset-failed audiojoe-server && systemctl start audiojoe-server` |
 
 The server is running when the log ends with `audiojoe-server <version> listening on <address>`
@@ -119,8 +119,9 @@ start the title): `access: … GET /api/v1/stream/… <status>`.
   trusted_proxies = ["10.0.0.5"]
   ```
 
-- **Database:** `file is not a database` or `database disk image is malformed` at start or later in
-  the log. A damage in parts that are rarely read can also show up only later. Check (needs the
+- **Database:** the server checks the file at every start (`PRAGMA quick_check`, since 0.1.8). If it
+  is damaged, the server does not start and writes `Database check failed: … is damaged (…)`. Later
+  in the log `database disk image is malformed` can appear when a damage happens during operation. Check (needs the
   package `sqlite3`):
 
   ```bash

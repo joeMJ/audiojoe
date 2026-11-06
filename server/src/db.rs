@@ -36,10 +36,27 @@ pub fn open(path: &Path) -> Result<Db> {
     }
     let mut conn =
         Connection::open(path).with_context(|| format!("cannot open {}", path.display()))?;
+    check(&conn, path)?;
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
     migrate(&mut conn)?;
     Ok(Arc::new(Mutex::new(conn)))
+}
+
+/// `PRAGMA quick_check` before anything else touches the file (user 2026-11-04 „17 ja“, 2026-11-06 for 0.1.8):
+/// a damaged database is neither migrated nor used, the server stops with a clear message.
+fn check(conn: &Connection, path: &Path) -> Result<()> {
+    let finding = match conn.query_row("PRAGMA quick_check(1)", [], |r| r.get::<_, String>(0)) {
+        Ok(r) if r == "ok" => return Ok(()),
+        Ok(r) => r,
+        Err(e) => e.to_string(),
+    };
+    // One line in the journal: SQLite puts "*** in database main ***" on a line of its own.
+    let finding = finding.split_whitespace().collect::<Vec<_>>().join(" ");
+    anyhow::bail!(
+        "Database check failed: {} is damaged ({finding}). audiojoe will not start, so the damage does not spread. Restore the latest backup, see BACKUP.md.",
+        path.display()
+    )
 }
 
 /// An empty database with all migrations, for tests.
@@ -62,4 +79,57 @@ fn migrate(conn: &mut Connection) -> Result<()> {
         tracing::info!("applied migration {}", i + 1);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("audiojoe-db-test-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir.join("audiojoe.db")
+    }
+
+    #[test]
+    fn healthy_and_new_databases_open() {
+        let path = temp("ok");
+        drop(open(&path).unwrap());
+        // Second start on the existing file.
+        drop(open(&path).unwrap());
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn damaged_database_stops_with_message() {
+        let path = temp("damaged");
+        {
+            let c = Connection::open(&path).unwrap();
+            c.execute_batch("CREATE TABLE t (a TEXT); CREATE INDEX t_a ON t (a);").unwrap();
+            for i in 0..2000 {
+                c.execute("INSERT INTO t (a) VALUES (?1)", [format!("row {i} {}", "x".repeat(50))]).unwrap();
+            }
+        }
+        // Overwrite part of the second page and beyond with garbage, as a disk error would.
+        let mut bytes = std::fs::read(&path).unwrap();
+        for b in bytes.iter_mut().skip(4096 + 100).take(8192) {
+            *b = 0x5a;
+        }
+        std::fs::write(&path, bytes).unwrap();
+        let err = open(&path).err().expect("damaged database must not open").to_string();
+        assert!(err.starts_with("Database check failed: "), "{err}");
+        assert!(err.contains("is damaged ("), "{err}");
+        assert!(err.ends_with("audiojoe will not start, so the damage does not spread. Restore the latest backup, see BACKUP.md."), "{err}");
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn not_a_database_stops_with_message() {
+        let path = temp("garbage");
+        std::fs::write(&path, vec![0x5a; 8192]).unwrap();
+        let err = open(&path).err().expect("garbage must not open").to_string();
+        assert!(err.starts_with("Database check failed: "), "{err}");
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
 }
