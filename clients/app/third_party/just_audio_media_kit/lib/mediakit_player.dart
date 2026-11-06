@@ -67,7 +67,10 @@ class MediaKitPlayer extends AudioPlayerPlatform {
     // audiojoe: MP3 without a seek index (podcasts with inserted ads, one-file audiobooks) –
     // jump to the position estimated from the bitrate instead of reading everything up to it.
     // Appended (mpv change-list): media_kit sets demuxer-lavf-o itself (protocol_whitelist and others).
-    appendToList(_player, 'demuxer-lavf-o', 'fflags=+fastseek');
+    // --dart-define=AUDIOJOE_NO_FASTSEEK=true leaves it out, only for the counter-test (fastseek_test.dart).
+    if (!const bool.fromEnvironment('AUDIOJOE_NO_FASTSEEK')) {
+      appendToList(_player, 'demuxer-lavf-o', 'fflags=+fastseek');
+    }
 
     _streamSubscriptions = [
       _player.stream.duration.listen((duration) {

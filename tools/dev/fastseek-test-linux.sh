@@ -5,6 +5,9 @@
 # in clients/app.
 #
 #   tools/dev/fastseek-test-linux.sh [START_SECONDS] [MAX_SILENCE_SECONDS] [URL]
+#   NO_FASTSEEK=1 tools/dev/fastseek-test-linux.sh …   counter-test without the fix
+# Also prints libmpv's "playback restart" time, the measurement used where nothing can be recorded
+# (Windows VM without a sound card); both should agree.
 set -uo pipefail
 START="${1:-3600}"
 MAX="${2:-8}"
@@ -26,7 +29,8 @@ parec -d silent.monitor --format=s16le --rate=8000 --channels=1 > "$work/rec.raw
 rec=$!
 
 xvfb-run -a -s "-screen 0 1280x800x24" flutter test integration_test/fastseek_test.dart -d linux \
-    --dart-define=START="$START" --dart-define=URL="$URL" > "$work/test.log" 2>&1
+    --dart-define=START="$START" --dart-define=URL="$URL" \
+    ${NO_FASTSEEK:+--dart-define=AUDIOJOE_NO_FASTSEEK=true} > "$work/test.log" 2>&1
 kill $rec 2>/dev/null
 
 python3 -I - "$work" "$MAX" <<'EOF'
@@ -35,6 +39,8 @@ work, limit = sys.argv[1], float(sys.argv[2])
 log = open(f"{work}/test.log", encoding="utf-8", errors="replace").read()
 m = re.search(r"FASTSEEK play at (\d+)", log)
 pos = re.search(r"FASTSEEK position (\S+)", log)
+for line in re.findall(r"FASTSEEK (?:mpv restart|restart).*", log):
+    print(line)
 if not m:
     print(log[-2000:]); print("NICHT FERTIG: der Test hat nicht abgespielt"); sys.exit(1)
 start = int(open(f"{work}/rec-start").read())
