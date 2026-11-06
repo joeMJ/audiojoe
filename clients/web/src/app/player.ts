@@ -8,6 +8,7 @@ import { api, online, type Item, type Playback, type Quality } from "./api";
 import { dropPlayed, isOffline, keepCurrent, offlineEntry, partKey } from "./downloads";
 import { idbAll, idbGet, idbPut } from "./idb";
 import { localPosition, onRemote, savePosition } from "./sync";
+import { playbackPrefs } from "./prefs";
 
 /** The continue-list entry being played (an album for music): its successor plays next. */
 export interface Entry { list: "podcasts" | "books" | "music"; key: string }
@@ -105,11 +106,12 @@ export async function itemMeta(key: string): Promise<Item | undefined> {
   return idbGet<Item>("items", key);
 }
 
-// Podcasts and books continue 10 s earlier after another device or after a pause of 5 minutes.
+// Podcasts and books continue 10 s earlier after another device or after a pause of 5 minutes
+// (each switchable for the account: playbackPrefs).
 const REWIND_MS = 10000;
 const LONG_PAUSE_MS = 5 * 60 * 1000;
 let pausedAt: number | undefined;
-const rewinds = (it: Item) => it.kind === "episode" || it.kind === "book";
+const rewinds = (it: Item) => (it.kind === "episode" ? playbackPrefs.rewind_podcasts : it.kind === "book" && playbackPrefs.rewind_books);
 const back = (it: Item, ms: number) => (rewinds(it) ? Math.max(0, ms - REWIND_MS) : ms);
 const longAgo = (at: string) => Date.now() - Date.parse(at) >= LONG_PAUSE_MS;
 

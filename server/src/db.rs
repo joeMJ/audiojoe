@@ -24,6 +24,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0014_drop_probe.sql"),
     include_str!("../migrations/0015_device_state.sql"),
     include_str!("../migrations/0016_sonos_session.sql"),
+    include_str!("../migrations/0017_user_setting.sql"),
 ];
 
 pub type Db = Arc<Mutex<Connection>>;

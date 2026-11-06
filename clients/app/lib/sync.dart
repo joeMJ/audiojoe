@@ -48,6 +48,9 @@ class Sync {
   /// A Sonos session ended (stop, takeover, the speaker plays something else).
   final _sonosEnded = StreamController<Map<String, dynamic>>.broadcast();
   Stream<Map<String, dynamic>> get sonosEnded => _sonosEnded.stream;
+  /// The account's settings changed on some device (event `settings`): the new values.
+  final _settings = StreamController<Map<String, dynamic>>.broadcast();
+  Stream<Map<String, dynamic>> get settings => _settings.stream;
   /// The event stream (re)connected: views reload what they show from other devices.
   final _reconnected = StreamController<void>.broadcast();
   Stream<void> get reconnected => _reconnected.stream;
@@ -155,6 +158,8 @@ class Sync {
         } else if (line.startsWith('data:') && event == 'command') {
           final c = (jsonDecode(line.substring(5)) as Map).cast<String, dynamic>();
           if (c['target'] == api.device) _commands.add(c);
+        } else if (line.startsWith('data:') && event == 'settings') {
+          _settings.add((jsonDecode(line.substring(5)) as Map).cast<String, dynamic>());
         } else if (line.startsWith('data:') && event == 'sonos') {
           final e = (jsonDecode(line.substring(5)) as Map).cast<String, dynamic>();
           if (e['state'] == 'ended') _sonosEnded.add(e);

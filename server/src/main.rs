@@ -19,6 +19,7 @@ mod opml;
 mod playback;
 mod plex;
 mod podcasts;
+mod prefs;
 mod radio;
 mod sonos;
 mod sources;
@@ -155,6 +156,7 @@ async fn main() -> Result<()> {
         .route("/api/v1/sources/{id}/music", get(music::albums))
         .route("/api/v1/sources/{id}/music/refresh", post(music::refresh))
         .route("/api/v1/settings/music", get(music::get_settings).put(music::put_settings))
+        .route("/api/v1/settings/playback", get(prefs::get_playback).put(prefs::put_playback))
         .route("/api/v1/sources/{id}/libraries/{library}", axum::routing::put(sources::set_library))
         .route("/api/v1/image/{key}", get(sources::image))
         .route("/api/v1/podcasts", get(podcasts::list).post(podcasts::subscribe))

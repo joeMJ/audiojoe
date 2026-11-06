@@ -3,6 +3,7 @@
 // signed-in devices, sign out, about. Phones: a list of the pages, a tap opens one; desktop: pages on the
 // left, groups on the right.
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -15,6 +16,7 @@ import '../api.dart';
 import '../appearance.dart';
 import '../downloads.dart';
 import '../l10n.dart';
+import '../prefs.dart';
 import '../storage.dart';
 import '../updates.dart';
 import 'common.dart';
@@ -123,6 +125,7 @@ class _SettingsViewState extends State<SettingsView> {
   Future<Map<String, String>> _summary() async {
     final out = <String, String>{
       'podcasts': t('OPML, sync with podcast apps'),
+      'playback': PlaybackSettings.summary(),
       'music': t('MusicBrainz labels'),
       'storage': t('Keep at least {n} GB free', {'n': storage.keepFreeGb}),
       'appearance': switch (appearance.value) {
@@ -222,6 +225,7 @@ class _SettingsViewState extends State<SettingsView> {
   List<(String, IconData, String)> get _pages => [
         ('sources', Icons.storage, t('Sources')),
         ('podcasts', Icons.podcasts, t('Podcasts')),
+        ('playback', Icons.replay_10, t('Playback')),
         ('music', Icons.library_music, t('Music')),
         ('sonos', Icons.speaker, t('Sonos')),
         ('storage', Icons.download_for_offline_outlined, t('Storage')),
@@ -241,6 +245,7 @@ class _SettingsViewState extends State<SettingsView> {
             ),
             SettingsGroup(title: t('Sync with other podcast apps'), children: [GpodderSettings(key: ValueKey('gpodder$_gen'))]),
           ],
+        'playback' => [const PlaybackSettings()],
         'music' => [SettingsGroup(children: [MusicSettings(key: ValueKey('music$_gen'))])],
         'sonos' => [const SettingsGroup(children: [SonosSettings()])],
         'storage' => [const StorageSettings()],
@@ -524,6 +529,68 @@ class _MusicSettingsState extends State<MusicSettings> {
             ),
           ]);
         },
+      );
+}
+
+/// Continue 10 s earlier, per kind, for the account (user 2026-11-06: two switches, on by default,
+/// 10 s and 5 minutes fixed).
+class PlaybackSettings extends StatefulWidget {
+  const PlaybackSettings({super.key});
+
+  /// "10 s back: Podcasts, Audiobooks" for the overview.
+  static String summary() {
+    final on = [if (playbackPrefs.rewindPodcasts) t('Podcasts'), if (playbackPrefs.rewindBooks) t('Audiobooks')];
+    return on.isEmpty ? t('10 s back: off') : t('10 s back: {list}', {'list': on.join(', ')});
+  }
+
+  @override
+  State<PlaybackSettings> createState() => _PlaybackSettingsState();
+}
+
+class _PlaybackSettingsState extends State<PlaybackSettings> {
+  @override
+  void initState() {
+    super.initState();
+    playbackPrefs.addListener(_changed);
+    unawaited(playbackPrefs.refresh());
+  }
+
+  @override
+  void dispose() {
+    playbackPrefs.removeListener(_changed);
+    super.dispose();
+  }
+
+  void _changed() => mounted ? setState(() {}) : null;
+
+  Future<void> _set({bool? podcasts, bool? books}) async {
+    try {
+      await playbackPrefs.set(podcasts: podcasts, books: books);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${t('Error')}: $e')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => SettingsGroup(
+        title: t('Continue 10 s earlier'),
+        desc: t('When you continue on another device or after a pause of 5 minutes or more, playback starts 10 seconds earlier. Applies to all your devices.'),
+        children: [
+          SwitchListTile(
+            key: const ValueKey('rewind-podcasts'),
+            contentPadding: EdgeInsets.zero,
+            title: Text(t('Podcasts')),
+            value: playbackPrefs.rewindPodcasts,
+            onChanged: (v) => _set(podcasts: v),
+          ),
+          SwitchListTile(
+            key: const ValueKey('rewind-books'),
+            contentPadding: EdgeInsets.zero,
+            title: Text(t('Audiobooks')),
+            value: playbackPrefs.rewindBooks,
+            onChanged: (v) => _set(books: v),
+          ),
+        ],
       );
 }
 

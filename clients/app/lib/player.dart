@@ -11,6 +11,7 @@ import 'package:audio_service/audio_service.dart' show MediaItem;
 import 'api.dart';
 import 'downloads.dart';
 import 'models.dart';
+import 'prefs.dart';
 import 'remote.dart';
 import 'store.dart';
 import 'sync.dart';
@@ -76,11 +77,13 @@ class Player extends ChangeNotifier {
   bool _cued = false;
   int _cuedMs = 0;
 
-  // Podcasts and books continue 10 s earlier after another device or after a pause of 5 minutes.
+  // Podcasts and books continue 10 s earlier after another device or after a pause of 5 minutes
+  // (each switchable for the account: Settings → Playback).
   static const _rewindMs = 10000;
   static const _longPause = Duration(minutes: 5);
   DateTime? _pausedAt;
-  static bool _rewinds(Item it) => it.kind == 'episode' || it.kind == 'book';
+  static bool _rewinds(Item it) =>
+      it.kind == 'episode' ? playbackPrefs.rewindPodcasts : it.kind == 'book' && playbackPrefs.rewindBooks;
   static int _back(Item it, int ms) => _rewinds(it) ? (ms - _rewindMs).clamp(0, ms) : ms;
   static bool _longAgo(String at) {
     final t = DateTime.tryParse(at);

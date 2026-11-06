@@ -14,6 +14,7 @@ import 'downloads.dart';
 import 'media_session.dart';
 import 'remote.dart';
 import 'player.dart';
+import 'prefs.dart';
 import 'storage.dart';
 import 'l10n.dart';
 import 'store.dart';
@@ -83,6 +84,7 @@ class _AudiojoeAppState extends State<AudiojoeApp> {
     if (started) return;
     started = true;
     sync.start();
+    unawaited(playbackPrefs.refresh());
     storage.start();
     downloads.check();
     connectLists();

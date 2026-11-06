@@ -28,6 +28,9 @@ let staleTimer: number | undefined;
 
 export const onRemote = (l: Listener) => remoteListeners.add(l);
 export const onSyncState = (l: () => void) => stateListeners.add(l);
+/** The account's settings changed on some device (event `settings`). */
+const settingsListeners = new Set<(e: Record<string, unknown>) => void>();
+export const onSettings = (l: (e: Record<string, unknown>) => void) => settingsListeners.add(l);
 const notify = () => stateListeners.forEach((l) => l());
 
 export async function localPosition(key: string): Promise<Playback | undefined> {
@@ -139,6 +142,11 @@ function connect() {
   es.addEventListener("resync", () => {
     alive();
     remoteListeners.forEach((l) => l({ key: "" } as Playback));
+  });
+  es.addEventListener("settings", (e) => {
+    alive();
+    const v = JSON.parse((e as MessageEvent).data) as Record<string, unknown>;
+    settingsListeners.forEach((l) => l(v));
   });
   // A continue list changed on some device: views reload like after a resync.
   es.addEventListener("lists", () => {

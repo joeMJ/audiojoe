@@ -206,6 +206,17 @@ check("continue listening: unfinished only", eps[1]["key"] in keys and ep["key"]
 s, b, _ = call("GET", f"/api/v1/podcasts/{pid}/episodes?limit=3", token=A)
 check("episode list shows position", s == 200 and b[0]["position_ms"] == 900000)
 
+# Settings of the account: 10 s back on by default, one switch per kind, live on the other devices.
+s, before, _ = call("GET", "/api/v1/settings/playback", token=A)
+check("playback settings: both switches readable", s == 200 and set(before) == {"rewind_podcasts", "rewind_books"}, json.dumps(before))
+s, b, _ = call("PUT", "/api/v1/settings/playback", {"rewind_podcasts": not before["rewind_podcasts"]}, token=A)
+check("playback settings: one switch changes, the other stays",
+      s == 200 and b["rewind_podcasts"] != before["rewind_podcasts"] and b["rewind_books"] == before["rewind_books"], json.dumps(b))
+time.sleep(1.5)
+check("device B receives the settings live (SSE)",
+      any(e[1].get("type") == "settings" and e[1]["playback"] == b for e in events))
+call("PUT", "/api/v1/settings/playback", before, token=A)
+
 # ------------------------------------------------------------------ internet radio
 s, st, _ = call("GET", "/api/v1/radio/search?q=deutschlandfunk", token=A)
 if not isinstance(st, list):  # directory unreachable: report, do not crash

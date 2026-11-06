@@ -1223,3 +1223,15 @@ msgstr "{used} belegt · {free} frei"
 
 msgid "Waiting for space"
 msgstr "Wartet auf Platz"
+
+msgid "Continue 10 s earlier"
+msgstr "Beim Weiterhören 10 s zurück"
+
+msgid "When you continue on another device or after a pause of 5 minutes or more, playback starts 10 seconds earlier. Applies to all your devices."
+msgstr "Wenn du auf einem anderen Gerät oder nach einer Pause ab 5 Minuten weiterhörst, beginnt die Wiedergabe 10 Sekunden früher. Gilt für alle deine Geräte."
+
+msgid "10 s back: {list}"
+msgstr "10 s zurück: {list}"
+
+msgid "10 s back: off"
+msgstr "10 s zurück: aus"

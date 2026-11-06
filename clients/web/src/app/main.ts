@@ -5,6 +5,7 @@ import { api, ApiError, onConnection } from "./api";
 import { checkOffline, dropPlayed, onOfflineChange } from "./downloads";
 import { t } from "./i18n";
 import { cueLast, onPlayer, setDevice } from "./player";
+import { refreshPrefs } from "./prefs";
 import { onRemote, onSyncState, startSync, stopSync } from "./sync";
 import { isDark, onAppearance } from "./theme";
 import { mountShell, refresh, renderCache, renderTop } from "./ui";
@@ -114,6 +115,7 @@ async function startApp() {
   if (started) return;
   started = true;
   startSync();
+  void refreshPrefs();
   onConnection(renderTop);
   onSyncState(renderTop);
   onPlayer(() => {
