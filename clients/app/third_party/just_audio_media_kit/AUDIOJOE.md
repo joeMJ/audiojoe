@@ -9,7 +9,8 @@ mpv option `demuxer-lavf-o` for every player (mpv command `change-list … appen
 there itself, so the list must not be replaced). Without it libmpv reads an MP3 without a seek
 index (no Xing/Info table, e.g. podcasts with inserted ads or one-file audiobooks) from the start up
 to the position, so playing from a late position stays silent for a long time.
-The compile-time switch `AUDIOJOE_NO_FASTSEEK=true` leaves the option out (counter-test only).
+The compile-time switch `AUDIOJOE_NO_FASTSEEK=true` leaves the option out (counter-test only);
+`AUDIOJOE_AO=null` selects libmpv's null audio output (test on a machine without a sound card).
 
 Updating: copy the new version over this folder (without `example/` and `test/`), put the marked
 change back in, run `tools/third-party.py`.

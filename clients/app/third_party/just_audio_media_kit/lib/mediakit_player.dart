@@ -71,6 +71,11 @@ class MediaKitPlayer extends AudioPlayerPlatform {
     if (!const bool.fromEnvironment('AUDIOJOE_NO_FASTSEEK')) {
       appendToList(_player, 'demuxer-lavf-o', 'fflags=+fastseek');
     }
+    // --dart-define=AUDIOJOE_AO=null: libmpv's null audio output, only for fastseek_test.dart on machines
+    // without a sound card (Windows VM); decoding and timing stay as with a real device.
+    if (const String.fromEnvironment('AUDIOJOE_AO').isNotEmpty) {
+      setProperty(_player, 'ao', const String.fromEnvironment('AUDIOJOE_AO'));
+    }
 
     _streamSubscriptions = [
       _player.stream.duration.listen((duration) {

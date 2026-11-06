@@ -11,7 +11,9 @@
 //
 //   flutter test integration_test/fastseek_test.dart -d linux|windows --dart-define=START=3600
 //       [--dart-define=URL=…] [--dart-define=PLAY=40] [--dart-define=MAX_MS=8000]
-//       [--dart-define=AUDIOJOE_NO_FASTSEEK=true]
+//       [--dart-define=AUDIOJOE_NO_FASTSEEK=true] [--dart-define=AUDIOJOE_AO=null]
+// Without any audio device libmpv stops at once ("no sound", audio=eof; Windows VM 2026-11-06):
+// AUDIOJOE_AO=null uses libmpv's null output, which plays in real time without a device.
 
 import 'dart:async';
 
