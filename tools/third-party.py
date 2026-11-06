@@ -94,13 +94,17 @@ while todo:
         todo += by_name[n].get("dependencies", [])
 dart_rows = []
 for p in sorted((by_name[n] for n in used), key=lambda p: p["name"]):
-    if p.get("source") != "hosted":
+    # Adapted copies of packages live in clients/app/third_party/<name> (source "path").
+    copy = os.path.join(app, "third_party", p["name"])
+    if p.get("source") == "path" and os.path.isdir(copy):
+        folder, name, version = copy, f"{p['name']} {p['version']} (Dart, angepasste Kopie)", f"{p['version']} (angepasst)"
+    elif p.get("source") == "hosted":
+        folder, name, version = os.path.join(cache, "hosted", "pub.dev", f"{p['name']}-{p['version']}"), f"{p['name']} {p['version']} (Dart)", p["version"]
+    else:
         continue  # the app itself and the Flutter SDK packages (licence: see the Flutter SDK row in THIRD_PARTY.md)
-    folder = os.path.join(cache, "hosted", "pub.dev", f"{p['name']}-{p['version']}")
-    name = f"{p['name']} {p['version']} (Dart)"
     files = licence_files(folder, name, "unbekannt") if os.path.isdir(folder) else []
     licence = spdx(open(os.path.join(folder, files[0]), encoding="utf-8", errors="replace").read()) if files else "unbekannt"
-    dart_rows.append(f"| {p['name']} | {p['version']} | {licence} |")
+    dart_rows.append(f"| {p['name']} | {version} | {licence} |")
 
 # Web app: run-time npm packages (bundled into the pages by Vite).
 web = "clients/web"

@@ -52,6 +52,11 @@ dependencies:
   # Own title bar on Linux and Windows (user 2026-11-04: "a)", version fixed at 0.5.2).
   window_manager: 0.5.2
 
+dependency_overrides:
+  # Adapted copy with fastseek for MP3 without a seek index (third_party/just_audio_media_kit/AUDIOJOE.md).
+  just_audio_media_kit:
+    path: third_party/just_audio_media_kit
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

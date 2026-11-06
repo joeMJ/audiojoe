@@ -305,8 +305,9 @@ Die vollständigen Lizenztexte stehen in `THIRD_PARTY_LICENSES.txt`. Beide Datei
 | jni_flutter | 1.0.4+1 | BSD-3-Clause |
 | jni_util | 1.0.0 | BSD-3-Clause |
 | js | 0.7.2 | BSD-3-Clause |
+| json_annotation | 4.12.0 | BSD-3-Clause |
 | just_audio | 0.10.6 | Apache-2.0 |
-| just_audio_media_kit | 2.1.0 | Unlicense |
+| just_audio_media_kit | 2.1.0 (angepasst) | Unlicense |
 | just_audio_platform_interface | 4.6.0 | MIT |
 | just_audio_web | 0.4.16 | MIT |
 | logging | 1.3.0 | BSD-3-Clause |
@@ -334,6 +335,11 @@ Die vollständigen Lizenztexte stehen in `THIRD_PARTY_LICENSES.txt`. Beide Datei
 | record_use | 0.6.0 | BSD-3-Clause |
 | rxdart | 0.28.0 | Apache-2.0 |
 | safe_local_storage | 2.0.7 | MIT |
+| screen_retriever | 0.2.2 | MIT |
+| screen_retriever_linux | 0.2.2 | MIT |
+| screen_retriever_macos | 0.2.2 | MIT |
+| screen_retriever_platform_interface | 0.2.2 | MIT |
+| screen_retriever_windows | 0.2.2 | MIT |
 | source_span | 1.10.2 | BSD-3-Clause |
 | sqflite | 2.4.5 | BSD-2-Clause |
 | sqflite_android | 2.4.5 | BSD-2-Clause |
@@ -359,6 +365,7 @@ Die vollständigen Lizenztexte stehen in `THIRD_PARTY_LICENSES.txt`. Beide Datei
 | volume_controller | 3.7.1 | MIT |
 | web | 1.1.2 | BSD-3-Clause |
 | win32 | 6.4.0 | BSD-3-Clause |
+| window_manager | 0.5.2 | MIT |
 | windows_file_picker | 2.0.1 | MIT |
 | xdg_directories | 1.1.0 | BSD-3-Clause |
 | xml | 7.0.1 | MIT |
