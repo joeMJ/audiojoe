@@ -83,6 +83,41 @@ void main() {
       player.takenOver = null;
     });
 
+    testWidgets('position from another device, not playing here: "Played on …", "Playing on …" while it plays', (tester) async {
+      final at = DateTime.now().toUtc().subtract(const Duration(minutes: 5)).toIso8601String();
+      player.followed = (device: 'Claude Sim', at: at);
+      remote.devices = [];
+      await show(tester, const NowPlayingView());
+      expect(find.textContaining('Played on Claude Sim · '), findsOneWidget);
+      expect(find.textContaining('Taken over'), findsNothing);
+      // The other device plays this title (device list): "Playing on", no time.
+      remote.devices = [
+        Device.fromJson({'device': 'Claude Sim', 'label': 'Sim', 'state': 'playing', 'key': episode.key, 'online': true}),
+      ];
+      await show(tester, const SizedBox());
+      await show(tester, const NowPlayingView());
+      expect(find.text('Playing on Sim'), findsOneWidget);
+      // It plays something else: back to "Played on".
+      remote.devices = [
+        Device.fromJson({'device': 'Claude Sim', 'label': 'Sim', 'state': 'playing', 'key': 'episode:2', 'online': true}),
+      ];
+      await show(tester, const SizedBox());
+      await show(tester, const NowPlayingView());
+      expect(find.textContaining('Played on Sim · '), findsOneWidget);
+      // Played here: "Taken over from …" comes first.
+      player.takenOver = (device: 'Claude Sim', at: at);
+      await show(tester, const SizedBox());
+      await show(tester, const NowPlayingView());
+      expect(find.textContaining('Taken over from Sim'), findsOneWidget);
+      expect(find.textContaining('Played on'), findsNothing);
+      player.takenOver = null;
+      player.followed = null;
+      remote.devices = [];
+      await show(tester, const SizedBox());
+      await show(tester, const NowPlayingView());
+      expect(find.textContaining('Played on'), findsNothing);
+    });
+
     testWidgets('radio: only play/pause with Live', (tester) async {
       player.item = radio;
       player.queue = [radio];

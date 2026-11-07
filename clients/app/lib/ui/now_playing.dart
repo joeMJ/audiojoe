@@ -122,11 +122,10 @@ class _PlaybackTab extends StatelessWidget {
               ]),
             )
           // Below the facts as in the web player, so the fixed block with the buttons never moves.
-          else if (player.takenOver != null)
+          else if (_origin() case final line?)
             Padding(
               padding: const EdgeInsets.only(top: 8),
-              child: Text(t('Taken over from {device} · {ago}', {'device': remote.shown(player.takenOver!.device), 'ago': ago(player.takenOver!.at)}),
-                  textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: k.muted)),
+              child: Text(line, textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: k.muted)),
             ),
         ];
         // Progress (or "Live") and the buttons.
@@ -201,6 +200,19 @@ class _PlaybackTab extends StatelessWidget {
 /// Sonos speaker gets something else, that in brackets as the target.
 /// "(16 of 21)": position i (from 0) of n.
 String _count(int i, int n) => t('({i} of {n})', {'i': i + 1, 'n': n});
+
+/// Where the position comes from, grey below the facts (user 2026-11-07): "Taken over from …" for a few
+/// seconds after playing here continued another device's position; while this device does not play and
+/// the position comes from another device, "Playing on …" (it plays this title) or "Played on … · ago".
+String? _origin() {
+  final over = player.takenOver;
+  if (over != null) return t('Taken over from {device} · {ago}', {'device': remote.shown(over.device), 'ago': ago(over.at)});
+  final from = player.followed;
+  if (from == null) return null;
+  final d = remote.device(from.device);
+  if (d != null && d.playing && d.key == player.item?.key) return t('Playing on {device}', {'device': d.shown});
+  return t('Played on {device} · {ago}', {'device': remote.shown(from.device), 'ago': ago(from.at)});
+}
 
 class _FormatChips extends StatelessWidget {
   final Item it;

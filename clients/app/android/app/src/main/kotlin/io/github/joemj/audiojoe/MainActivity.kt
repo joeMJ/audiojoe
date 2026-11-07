@@ -28,6 +28,19 @@ class MainActivity : AudioServiceActivity() {
                 result.error("install", e.message, null)
             }
         }
+        // "text": hands the error log to the system's share sheet (Settings → Maintenance → Error log).
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "io.github.joemj.audiojoe/share").setMethodCallHandler { call, result ->
+            if (call.method != "text") return@setMethodCallHandler result.notImplemented()
+            try {
+                val send = Intent(Intent.ACTION_SEND).setType("text/plain")
+                    .putExtra(Intent.EXTRA_SUBJECT, "audiojoe error log")
+                    .putExtra(Intent.EXTRA_TEXT, call.arguments as String)
+                startActivity(Intent.createChooser(send, null))
+                result.success(null)
+            } catch (e: Exception) {
+                result.error("share", e.message, null)
+            }
+        }
         // "free" with a path: free bytes on its volume (the app's own storage, no permission).
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "io.github.joemj.audiojoe/storage").setMethodCallHandler { call, result ->
             if (call.method != "free") return@setMethodCallHandler result.notImplemented()

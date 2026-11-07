@@ -10,12 +10,14 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api.dart';
 import '../appearance.dart';
 import '../downloads.dart';
+import '../errors.dart';
 import '../l10n.dart';
 import '../prefs.dart';
 import '../remote.dart';
@@ -23,6 +25,7 @@ import '../storage.dart';
 import '../updates.dart';
 import 'common.dart';
 import 'shell.dart';
+import 'title_bar.dart' show appVersion;
 
 class SettingsView extends StatefulWidget {
   final VoidCallback onSignOut;
@@ -273,7 +276,7 @@ class _SettingsViewState extends State<SettingsView> {
             SettingsGroup(children: [_devices()]),
             SettingsGroup(children: [Align(alignment: Alignment.centerLeft, child: _signOut())]),
           ],
-        'maintenance' => [MaintenanceSettings(key: ValueKey('maint$_gen'))],
+        'maintenance' => [MaintenanceSettings(key: ValueKey('maint$_gen')), const ErrorLogGroup()],
         _ => [
             const SettingsGroup(children: [AboutPanel()]),
             // As in tvjoe (prefs.rs, group "Mitwirkende").
@@ -809,6 +812,64 @@ class _MaintenanceSettingsState extends State<MaintenanceSettings> {
               ),
             ]),
             app,
+          ]);
+        },
+      );
+}
+
+/// "Error log" under Maintenance (user 2026-11-07, way C): the last errors of the app on this device,
+/// to read and to pass on (Android: the system's share sheet; Linux and Windows: the clipboard).
+/// Outside the server's part of the page, so it shows also when the server cannot be reached.
+class ErrorLogGroup extends StatelessWidget {
+  const ErrorLogGroup({super.key});
+
+  static const _share = MethodChannel('io.github.joemj.audiojoe/share');
+
+  static Future<void> pass(BuildContext context) async {
+    final text = errorLog.text(appVersion);
+    if (Platform.isAndroid) {
+      await _share.invokeMethod('text', text);
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: text));
+    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('Error log copied.'))));
+  }
+
+  static void show(BuildContext context) => showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(t('Error log')),
+          content: SizedBox(
+            width: 640,
+            child: SingleChildScrollView(
+              child: SelectableText(errorLog.text(appVersion), key: const ValueKey('error-log-text'),
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => pass(context), child: Text(Platform.isAndroid ? t('Share') : t('Copy'))),
+            FilledButton(onPressed: () => Navigator.pop(context), child: Text(t('Close'))),
+          ],
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: errorLog,
+        builder: (context, _) {
+          final e = errorLog.entries;
+          return SettingsGroup(title: t('Error log'), children: [
+            if (e.isEmpty)
+              Text(t('No errors recorded.'), style: TextStyle(color: context.tok.muted))
+            else ...[
+              KeyValue(t('Entries'), Text('${e.length}')),
+              KeyValue(t('Last error'), Text(when(e.first.at))),
+              const SizedBox(height: 6),
+              Wrap(spacing: 8, runSpacing: 8, children: [
+                FilledButton(key: const ValueKey('error-log-show'), style: _pflegeButton, onPressed: () => show(context), child: Text(t('Show'))),
+                OutlinedButton(onPressed: () => pass(context), child: Text(Platform.isAndroid ? t('Share') : t('Copy'))),
+              ]),
+            ],
           ]);
         },
       );

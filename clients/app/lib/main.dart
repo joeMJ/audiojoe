@@ -11,6 +11,7 @@ import 'package:window_manager/window_manager.dart';
 import 'api.dart';
 import 'appearance.dart';
 import 'downloads.dart';
+import 'errors.dart';
 import 'media_session.dart';
 import 'remote.dart';
 import 'player.dart';
@@ -44,6 +45,7 @@ Future<void> main() async {
     appVersion = (await PackageInfo.fromPlatform()).version;
   } catch (_) {}
   await Stores.open();
+  await errorLog.open(Stores.dir);
   final signedIn = await api.loadSession();
   runApp(AudiojoeApp(signedIn: signedIn));
 }

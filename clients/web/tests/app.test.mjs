@@ -343,14 +343,24 @@ try {
     body: JSON.stringify({ position_ms: 600000, updated_at: new Date().toISOString(), title: ep.title, subtitle: ep.podcast }),
   });
   await clickText("Jetzt läuft");
-  await waitText("Übernommen von Telefon (Test)", 10000).then(() => check("phone's position arrives live in the car", true),
-    () => check("phone's position arrives live in the car", false));
+  // Not played here yet: where the position comes from, not "taken over" (user 2026-11-07).
+  await waitText("Spielte auf Telefon (Test)", 10000).then(() => check("phone's position arrives live in the car: „Spielte auf …“", true),
+    () => check("phone's position arrives live in the car: „Spielte auf …“", false));
+  const early = await page.evaluate(() => document.body.innerText.includes("Übernommen von"));
+  check("no „Übernommen von …“ before playing here", !early);
   const t = await page.evaluate(() => document.querySelector(".times span")?.innerText);
   check("player jumped to 9:50 (10 s before the phone)", t === "9:50", t);
-  await shot("05-uebernommen");
+  await shot("05-spielte-auf");
   await clickText("Weiterhören");
   await waitText("Zuletzt auf Telefon (Test)");
   await shot("06-weiterhoeren");
+  // Playing here continues the phone's position: now "Übernommen von …".
+  await clickText("Jetzt läuft");
+  await page.evaluate(() => document.querySelector(".ctrl .play").click());
+  await waitText("Übernommen von Telefon (Test)", 5000).then(() => check("play here: „Übernommen von …“", true),
+    () => check("play here: „Übernommen von …“", false));
+  await shot("06b-uebernommen");
+  await page.evaluate(() => document.querySelector(".ctrl .play").click());
 
   // The car plays on its own speakers only: no output selection (Sonos is in the apps).
   await clickText("Jetzt läuft");

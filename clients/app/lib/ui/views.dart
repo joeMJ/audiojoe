@@ -446,7 +446,7 @@ class _DownloadsViewState extends State<DownloadsView> {
           key: ValueKey('download-delete-${g.id}'),
           tooltip: open ? t('Cancel') : t('Delete'),
           onPressed: () => open ? downloads.cancelGroup(g) : downloads.removeGroup(g),
-          icon: Icon(open ? Icons.close : Icons.backspace_outlined),
+          icon: Icon(open ? Icons.close : Icons.delete_outline),
         ),
       ],
     );

@@ -47,7 +47,20 @@ class Player extends ChangeNotifier {
   List<Item> queue = [];
   int index = 0;
   bool fromCache = false;
-  /// "Taken over from …": shown for a few seconds after the position came from another device.
+  /// "Played on …" / "Playing on …": the position here comes from another device and this device
+  /// does not play (cued after the start, or following that device's reports). Stays until played here.
+  ({String device, String at})? get followed => audio.playing ? null : _followed;
+  ({String device, String at})? _followed;
+  set followed(({String device, String at})? v) => _followed = v;
+
+  /// Play here after following another device: "Taken over from …" for a few seconds (user 2026-11-07:
+  /// only when playing here actually continues that device's position).
+  void _takeOver(({String device, String at})? from) {
+    _followed = null;
+    takenOver = from;
+  }
+
+  /// "Taken over from …": shown for a few seconds after playing here continued another device's position.
   ({String device, String at})? get takenOver => _takenOver;
   ({String device, String at})? _takenOver;
   Timer? _takenOverTimer;
@@ -223,7 +236,7 @@ class Player extends ChangeNotifier {
     index = i;
     if (other != null) _restoreQueue(queue[i], other);
     _saveQueue();
-    await _load(queue[i]);
+    _takeOver(await _load(queue[i]));
     // just_audio's play() completes only when playback stops: do not wait for it.
     unawaited(audio.play());
   }
@@ -257,12 +270,15 @@ class Player extends ChangeNotifier {
     return AudioSource.uri(api.streamUri(it.key, part: part), headers: api.authHeaders, tag: tag);
   }
 
-  Future<void> _load(Item it, {bool fromStart = false, int? at}) async {
+  /// Loads [it]; returns the other device whose position it starts at (null: own or none).
+  Future<({String device, String at})?> _load(Item it, {bool fromStart = false, int? at}) async {
     item = it;
     _cued = false;
     _stopWaiting();
     final start = at != null ? (ms: at, from: null) : it.kind == 'radio' || fromStart ? (ms: 0, from: null) : _startPosition(it);
-    takenOver = start.from == null ? null : (device: start.from!.device, at: start.from!.updatedAt);
+    final from = start.from == null ? null : (device: start.from!.device, at: start.from!.updatedAt);
+    _followed = from;
+    takenOver = null;
     await _setSources(it, start.ms);
     await audio.setSpeed(rate);
     // Radio has no position; one entry still marks it as the last thing played on any device.
@@ -271,6 +287,7 @@ class Player extends ChangeNotifier {
           device: api.device, updatedAt: DateTime.now().toUtc().toIso8601String()));
     }
     notifyListeners();
+    return from;
   }
 
   /// Loads the item's files (each part from its copy when complete, else streamed) at a position.
@@ -465,7 +482,8 @@ class Player extends ChangeNotifier {
     item = it;
     fromCache = downloads.isOffline(it.key);
     final start = it.kind == 'radio' ? (ms: 0, from: null) : _startPosition(it);
-    takenOver = start.from == null ? null : (device: start.from!.device, at: start.from!.updatedAt);
+    _followed = start.from == null ? null : (device: start.from!.device, at: start.from!.updatedAt);
+    takenOver = null;
     _cued = true;
     _cuedMs = start.ms;
     notifyListeners();
@@ -518,20 +536,25 @@ class Player extends ChangeNotifier {
       return notifyListeners();
     }
     if (_cued && item != null) {
-      final it = item!;
+      final it = item!, from = _followed;
       // The cued position is the start: save it first, so loading begins there.
       if (it.kind != 'radio' && _cuedMs > 0) {
         sync.savePosition(Playback(key: it.key, positionMs: _cuedMs, durationMs: it.durationMs, finished: false, title: it.title,
             subtitle: it.subtitle, device: api.device, updatedAt: DateTime.now().toUtc().toIso8601String()));
       }
       final at = _cuedMs;
-      unawaited(_load(it).then((_) => audio.play()).catchError((Object _) => _interrupted(at: at)));
+      unawaited(_load(it).then((_) {
+        _takeOver(from);
+        return audio.play();
+      }).catchError((Object _) => _interrupted(at: at)));
       return;
     }
     if (audio.playing) {
       audio.pause();
       return;
     }
+    // Paused here while following another device's reports: playing continues its position.
+    if (_followed != null) _takeOver(_followed);
     final it = item, paused = _pausedAt;
     if (it != null && paused != null && _rewinds(it) && DateTime.now().difference(paused) >= _longPause) {
       unawaited(seekTo(_back(it, _localPosition)).then((_) => audio.play()));
@@ -667,7 +690,7 @@ class Player extends ChangeNotifier {
       if (i >= 0 && !p.finished) unawaited(_follow(i));
       return;
     }
-    takenOver = (device: p.device, at: p.updatedAt);
+    _followed = (device: p.device, at: p.updatedAt);
     final ms = _back(item!, p.positionMs);
     if (_cued) {
       _cuedMs = ms;
@@ -693,6 +716,8 @@ class Player extends ChangeNotifier {
     await audio.stop();
     item = null;
     _cued = false;
+    _followed = null;
+    takenOver = null;
     notifyListeners();
   }
 

@@ -5,7 +5,7 @@ import { addOffline, clearOffline, dropPlayedOn, offlineEntry, offlineList, remo
 import { ago, bytes, clock, t } from "./i18n";
 import { idbAll } from "./idb";
 import * as player from "./player";
-import { pendingCount, savePosition, stale } from "./sync";
+import { deviceState, pendingCount, savePosition, shownName, stale } from "./sync";
 import { isDark, onAppearance, toggleDark } from "./theme";
 
 type View = "np" | "cont" | "pod" | "books" | "lib" | "radio" | "off";
@@ -102,6 +102,18 @@ async function start(items: Item[], index = 0, entry?: player.Entry) {
   if (meta) queue[index] = { ...items[index], ...meta };
   await player.play(queue, index, entry);
   show("np");
+}
+
+/** Where the position comes from (user 2026-11-07): "Taken over from …" for a few seconds after playing
+ *  here continued another device's position; while this device does not play and the position comes
+ *  from another device, "Playing on …" (it plays this title) or "Played on … · ago". */
+function origin(s: player.PlayerState): string {
+  if (s.takenOver) return t("Taken over from {device} · {ago}", { device: shownName(s.takenOver.device), ago: ago(s.takenOver.at) });
+  const f = s.followed;
+  if (!f || s.playing) return "";
+  const d = deviceState(f.device);
+  if (d?.state === "playing" && d.key === s.item?.key) return t("Playing on {device}", { device: shownName(f.device) });
+  return t("Played on {device} · {ago}", { device: shownName(f.device), ago: ago(f.at) });
 }
 
 // ---------------------------------------------------------------- continue lists, "Next"
@@ -584,7 +596,7 @@ function updateNowPlaying() {
   if (s.item?.chapters?.length) flow(npRefs.sub, player.chapter(), count(` ${t("({i} of {n})", { i: ci + 1, n: s.item.chapters.length })}`));
   const n = ci < 0 && s.queue.length > 1 ? ` ${t("({i} of {n})", { i: s.index + 1, n: s.queue.length })}` : "";
   flow(npRefs.title, s.item?.title ?? "", count(n));
-  npRefs.from.textContent = s.takenOver ? t("Taken over from {device} · {ago}", { device: s.takenOver.device, ago: ago(s.takenOver.at) }) : "";
+  npRefs.from.textContent = origin(s);
 }
 
 // ---------------------------------------------------------------- continue

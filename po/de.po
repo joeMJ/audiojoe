@@ -179,6 +179,9 @@ msgstr "Abonniert"
 msgid "Taken over from {device} · {ago}"
 msgstr "Übernommen von {device} · {ago}"
 
+msgid "Played on {device} · {ago}"
+msgstr "Spielte auf {device} · {ago}"
+
 msgid "The browser may clear this storage when space runs low; missing titles are downloaded again automatically."
 msgstr "Der Browser kann diesen Speicher bei Platzmangel leeren; fehlende Titel werden automatisch nachgeladen."
 
@@ -1412,3 +1415,30 @@ msgstr "Name bereits vergeben"
 
 msgid "Not allowed: at most 40 characters, no invisible characters"
 msgstr "Nicht erlaubt: höchstens 40 Zeichen, keine unsichtbaren Zeichen"
+
+msgid "Error showing this page:"
+msgstr "Fehler beim Anzeigen dieser Seite:"
+
+msgid "Error log"
+msgstr "Fehlerprotokoll"
+
+msgid "Error log copied."
+msgstr "Fehlerprotokoll kopiert."
+
+msgid "No errors recorded."
+msgstr "Keine Fehler aufgezeichnet."
+
+msgid "Entries"
+msgstr "Einträge"
+
+msgid "Last error"
+msgstr "Letzter Fehler"
+
+msgid "Show"
+msgstr "Anzeigen"
+
+msgid "Share"
+msgstr "Teilen"
+
+msgid "Copy"
+msgstr "Kopieren"
