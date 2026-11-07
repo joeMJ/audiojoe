@@ -19,6 +19,8 @@ import 'package:audiojoe/models.dart';
 import 'package:audiojoe/player.dart';
 import 'package:audiojoe/remote.dart';
 import 'package:audiojoe/sonos.dart';
+import 'package:audiojoe/storage.dart';
+import 'package:audiojoe/ui/shell.dart' show shellPage;
 import 'package:audiojoe/ui/common.dart' show desktop;
 import 'package:audiojoe/updates.dart';
 import 'package:crypto/crypto.dart';
@@ -218,8 +220,28 @@ void main() {
     }
 
     // ---------------------------------------------------------- offline copy
+    // 0.2.0: into the sub-folder podcasts of the storage folder (a folder of this test).
+    final root = Directory('${Directory.systemTemp.path}/audiojoe-it-$pid');
+    storage.dir = root;
     await downloads.add([ep]);
+    expect(downloads.entry(ep.key)!.dir, '${root.path}/podcasts');
     await waitUntil(tester, () => downloads.isOffline(ep.key), seconds: 300, what: 'offline download');
+    expect(downloads.file(ep.key).existsSync(), isTrue);
+    expect(File('${downloads.file(ep.key).path}.part').existsSync(), isFalse);
+    shellPage.value = 7;
+    await waitFor(tester, find.byKey(ValueKey('download-${ep.key}')));
+    await shot(tester, 'downloads');
+    if (shots.isNotEmpty) {
+      desktop = false;
+      await tester.binding.setSurfaceSize(const Size(360, 760));
+      await tester.pump(const Duration(seconds: 2));
+      await shot(tester, 'phone-downloads');
+      desktop = true;
+      await tester.binding.setSurfaceSize(null);
+      await tester.pump(const Duration(seconds: 1));
+    }
+    shellPage.value = 1;
+    await tester.pump(const Duration(seconds: 1));
     await player.play([ep]);
     expect(player.fromCache, isTrue);
     await waitUntil(tester, () => player.playing, what: 'playing from file');
@@ -243,6 +265,7 @@ void main() {
 
     // ---------------------------------------------------------- cleanup
     await downloads.remove(ep.key);
+    if (root.existsSync()) root.deleteSync(recursive: true);
     await api.call('DELETE', '/podcasts/${sub['id']}');
     // Sign out, so the test leaves no session "Linux (Test)" behind.
     await api.call('POST', '/auth/logout');

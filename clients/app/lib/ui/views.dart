@@ -355,9 +355,18 @@ class _DownloadsViewState extends State<DownloadsView> {
                     style: TextStyle(color: k.warn, fontWeight: FontWeight.w600)),
               ),
             const SizedBox(height: 8),
-            Wrap(spacing: 8, runSpacing: 6, children: [
+            Wrap(spacing: 6, runSpacing: 6, children: [
               for (final (id, label) in [('all', t('All')), ('episode', t('Podcasts')), ('book', t('Audiobooks')), ('track', t('Music'))])
-                ChoiceChip(key: ValueKey('downloads-filter-$id'), label: Text(label), selected: filter == id, onSelected: (_) => setState(() => filter = id)),
+                ChoiceChip(
+                  key: ValueKey('downloads-filter-$id'),
+                  label: Text(label),
+                  selected: filter == id,
+                  showCheckmark: false,
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                  onSelected: (_) => setState(() => filter = id),
+                ),
             ]),
             const SizedBox(height: 6),
             if (groups.isEmpty) emptyText(context, t('Nothing saved offline yet.')),
