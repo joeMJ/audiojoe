@@ -483,7 +483,7 @@ async function backgroundScreen() {
 
 // ---------------------------------------------------------------- mail and QR
 
-function mailText(): { subject: string; body: string } {
+function mailText(): { subject: string; body: string; full: string } {
   const v = result.vehicle;
   const d = new Date();
   const date = d.toLocaleDateString(navigator.language.toLowerCase().startsWith("de") ? "de-DE" : "en-GB");
@@ -516,8 +516,10 @@ function mailText(): { subject: string; body: string } {
   const rest = ev.slice();
   let logLine = `log: ${rest.join(" ") || "-"}`;
   while (mailEncode(body + "\n" + logLine).length > 700 && rest.length) { rest.pop(); logLine = `log:${rest.length ? ` ${rest.join(" ")}` : ""}(cut)`; }
+  // "Show mail text" keeps the whole log (user 2026-11-07 "3 ja"); only the QR code is cut.
+  const full = `${body}\nlog: ${ev.join(" ") || "-"}`;
   body += `\n${logLine}`;
-  return { subject, body };
+  return { subject, body, full };
 }
 
 /** Percent-encoding for a mailto header value: only what RFC 6068 requires (/ : , ; = @ stay as they are). */
@@ -574,7 +576,7 @@ function endScreen() {
     h("span", {}, t("Steering wheel")), count(wheel),
     h("span", {}, t("Background")), h("span", { className: result.bg.startsWith("-") ? "" : result.bg.includes("playing") ? "ok" : "bad" },
       result.bg.startsWith("-") ? t("skipped") : result.bg.includes("playing") ? t("sound kept playing") : t("sound stopped")));
-  const pre = h("pre", { hidden: true, id: "mailtext" }, `${m.subject}\n\n${m.body}`);
+  const pre = h("pre", { hidden: true, id: "mailtext" }, `${m.subject}\n\n${m.full}`);
   const show = h("button", { className: "sec", textContent: t("Show mail text"), onclick: () => (pre.hidden = !pre.hidden) });
   const again = h("button", { className: "sec", textContent: t("Repeat test"), onclick: () => location.reload() });
   app.replaceChildren(

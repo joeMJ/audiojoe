@@ -134,6 +134,9 @@ try {
     const stage = await page.$eval("#stage", (s) => s.textContent);
     check("Ergebnis nennt die höchste Stufe", /^\d\d (bit|Bit) \/ [\d.,]+ kHz$/.test(stage), stage);
     check("Mail enthält Ergebnis der Knöpfe", body.includes("wheel-next: "));
+    const shown = await page.$eval("#mailtext", (p) => p.textContent);
+    check("„Mailtext anzeigen“ mit ungekürztem Protokoll", /\nlog: /.test(shown) && !shown.includes("(cut)") && shown.split("\nlog: ")[1].length >= (body.split("\nlog:")[1] ?? "").length,
+      shown.split("\n").pop().slice(0, 80));
     const modules = await page.$eval("#qr svg", (s) => s.viewBox.baseVal.width / 4); // cellSize 4, margin 0
     const px = ((box.w - 24) / modules) * (c.dpr ?? 1);
     check("QR-Code mindestens 4 Bildpunkte je Modul", px >= 4, `${modules} Module, ${px.toFixed(1)} Bildpunkte`);
