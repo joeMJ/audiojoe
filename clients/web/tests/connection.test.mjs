@@ -116,6 +116,8 @@ try {
   const waitPos = await at();
   check("A: offline – shows as playing while waiting", await playing(), `button ${await page.evaluate(() => document.querySelector(".ctrl .play")?.innerText)}`);
   check("A: offline – position kept (about half)", waitPos > 600, `${waitPos} s`);
+  const fillA = await page.evaluate(() => document.querySelector(".dockbar .bar i")?.style.width ?? "");
+  check("A: offline – bar keeps the held position", parseFloat(fillA) > 30, `fill ${fillA}`);
   const before = media.length;
   await page.setOfflineMode(false);
   await sleep(15000);
@@ -146,6 +148,11 @@ try {
   await sleep(10000);
   const b2 = await at();
   check("B: offline – keeps playing from the copy", (await playing()) && b2 >= b1 + 7, `${b1} s → ${b2} s`);
+  const coverB = await page.evaluate(async (k) => {
+    const r = await fetch(`/api/v1/image/${encodeURIComponent(k)}`).catch((e) => ({ status: String(e) }));
+    return `${r.status} ${r.headers?.get("content-type") ?? ""}`;
+  }, epB.key);
+  check("B: offline – cover saved with the copy", coverB.startsWith("200 image/"), coverB);
   await page.setOfflineMode(false);
 
   // ------------------------------------------------------------ C: book partly saved

@@ -23,6 +23,8 @@ sw.addEventListener("fetch", (e) => {
   if (url.origin !== sw.location.origin || e.request.method !== "GET") return;
   if (url.pathname.startsWith("/offline/")) {
     e.respondWith(fromCache(e.request, url.pathname));
+  } else if (url.pathname.startsWith("/api/v1/image/")) {
+    e.respondWith(cover(e.request));
   } else if (e.request.mode === "navigate" && !url.pathname.startsWith("/api/") && !url.pathname.startsWith("/testcar/")) {
     e.respondWith(page(e.request));
   } else if (url.pathname.startsWith("/assets/") || url.pathname === "/manifest.webmanifest") {
@@ -65,6 +67,12 @@ async function asset(req: Request): Promise<Response> {
   const res = await fetch(req);
   if (res.ok) await cache.put(req, res.clone());
   return res;
+}
+
+/** Covers of saved titles come from the offline cache (also without network), others from the server. */
+async function cover(req: Request): Promise<Response> {
+  const hit = await (await caches.open(OFFLINE_CACHE)).match(new URL(req.url).pathname);
+  return hit ?? fetch(req);
 }
 
 async function fromCache(req: Request, path: string): Promise<Response> {

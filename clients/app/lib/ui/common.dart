@@ -88,10 +88,14 @@ class CoverThumb extends StatelessWidget {
         width: size,
         height: size,
         color: k.panel2,
-        child: image == null || !api.online.value
-            ? fallback
-            : Image.network(api.imageUri(image!).toString(), headers: api.authHeaders, fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => fallback),
+        child: switch (downloads.coverFile(image)) {
+          // Saved with the title: also offline.
+          final File f => Image.file(f, fit: BoxFit.cover, errorBuilder: (_, _, _) => fallback),
+          _ => image == null || !api.online.value
+              ? fallback
+              : Image.network(api.imageUri(image!).toString(), headers: api.authHeaders, fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => fallback),
+        },
       ),
     );
   }

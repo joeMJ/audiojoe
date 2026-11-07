@@ -1,7 +1,7 @@
 // Offline titles: download queue, status, re-download when the browser cleared the cache.
 
 import { download } from "../downloader";
-import { OFFLINE_CACHE, offlineUrl, removeOffline, storeOffline } from "../offline";
+import { OFFLINE_CACHE, hasCover, offlineUrl, removeCover, removeOffline, storeCover, storeOffline } from "../offline";
 import { api, online, onConnection, type Item, type Playback, type Quality } from "./api";
 import { idbAll, idbDel, idbGet, idbPut } from "./idb";
 
@@ -105,8 +105,34 @@ export async function removeFromOffline(key: string) {
   await removeOffline(key);
   const it = await idbGet<Item>("items", key);
   for (const p of it?.parts ?? []) await removeOffline(partKey(key, p.index));
+  await removeCover(ownCover(key));
+  // A podcast's cover can belong to several saved episodes: it goes with the last of them.
+  if (it?.image) {
+    let shared = false;
+    for (const e of await offlineList()) {
+      if (e.key !== key && (await idbGet<Item>("items", e.key))?.image === it.image) shared = true;
+    }
+    if (!shared) await removeCover(it.image);
+  }
   await idbDel("offline", key);
   notify();
+}
+
+const ownCover = (key: string) => `/api/v1/image/${encodeURIComponent(key)}`;
+
+/** Saves the cover under the item's image path and under /api/v1/image/<key> (lists use that one);
+ *  no cover (404) or an error is no reason to fail the download. */
+async function saveCover(it: Item) {
+  const paths = new Set([it.image ?? ownCover(it.key), ownCover(it.key)]);
+  try {
+    const res = await fetch(it.image ?? ownCover(it.key), { credentials: "same-origin" });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const type = res.headers.get("content-type") ?? blob.type;
+    for (const p of paths) await storeCover(p, new Response(blob, { headers: { "content-type": type } }));
+  } catch {
+    /* no cover offline */
+  }
 }
 /** "Clear cache": every offline entry with its files, also running and waiting downloads. A running
  * download notices that its entry is gone and keeps nothing. The settings stay. */
@@ -150,6 +176,7 @@ async function fetchOne(e: OfflineEntry) {
 
 async function fetchParts(e: OfflineEntry) {
   const it = await idbGet<Item>("items", e.key);
+  if (it) await saveCover(it);
   const parts = it?.parts && it.parts.length > 1 ? it.parts : null;
   const total = parts ? parts.reduce((s, p) => s + p.duration_ms, 0) : 1;
   let done = 0, bytes = 0, last = 0;
@@ -207,6 +234,16 @@ export async function checkOffline() {
   notify();
   onConnection(() => online && void process());
   void process();
+  void missingCovers();
+}
+
+/** Titles saved before covers were saved (up to 0.1.8) get theirs while the server answers. */
+async function missingCovers() {
+  if (!online) return;
+  for (const e of await offlineList()) {
+    const it = e.status === "done" ? await idbGet<Item>("items", e.key) : undefined;
+    if (it && !(await hasCover(ownCover(e.key)))) await saveCover(it);
+  }
 }
 
 export async function retryFailed() {

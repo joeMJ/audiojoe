@@ -50,7 +50,19 @@ let cuedMs = 0;
 export const position = () => (audio.src ? partStart() + audio.currentTime * 1000 : cuedMs);
 export const isLive = () => state.item?.kind === "radio";
 export const duration = () =>
-  parts().length ? state.item?.duration_ms ?? 0 : Number.isFinite(audio.duration) ? audio.duration * 1000 : state.item?.duration_ms ?? 0;
+  parts().length
+    ? state.item?.duration_ms ?? 0
+    : Number.isFinite(audio.duration) && audio.duration > 0
+      ? audio.duration * 1000
+      : known.key && known.key === state.item?.key ? known.ms : state.item?.duration_ms ?? 0;
+
+/** The length the element last reported for the item: while the player waits for the server (no
+ *  source) the bar stays at the held position instead of falling back to an unknown length. */
+const known = { key: "", ms: 0 };
+audio.addEventListener("durationchange", () => {
+  const key = state.item?.key;
+  if (key && audio.src && Number.isFinite(audio.duration) && audio.duration > 0) Object.assign(known, { key, ms: audio.duration * 1000 });
+});
 
 const chapters = () => state.item?.chapters ?? [];
 export const hasChapters = () => chapters().length > 0;

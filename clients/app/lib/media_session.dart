@@ -7,6 +7,7 @@ import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
 
 import 'api.dart';
+import 'downloads.dart';
 import 'player.dart';
 
 class _Handler extends BaseAudioHandler with SeekHandler {
@@ -35,7 +36,7 @@ class _Handler extends BaseAudioHandler with SeekHandler {
         artist: line.isNotEmpty ? line : it.subtitle,
         album: it.subtitle,
         duration: dur > 0 ? Duration(milliseconds: dur) : null,
-        artUri: it.image == null ? null : api.imageUri(it.image!),
+        artUri: it.image == null ? null : (downloads.coverFile(it.image)?.uri ?? api.imageUri(it.image!)),
         artHeaders: api.authHeaders,
       ));
     }

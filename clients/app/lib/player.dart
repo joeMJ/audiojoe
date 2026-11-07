@@ -26,6 +26,7 @@ class Player extends ChangeNotifier {
   Player._() {
     audio.playerStateStream.listen(_onState);
     audio.positionStream.listen((_) {
+      _keepDuration();
       _checkSleep();
       _track();
       notifyListeners();
@@ -102,7 +103,21 @@ class Player extends ChangeNotifier {
   int get _localPosition => _cued ? _cuedMs : (_parts.isEmpty ? 0 : _parts[_part].startMs) + audio.position.inMilliseconds;
   int get duration => remote.active
       ? (remote.durationMs ?? item?.durationMs ?? 0)
-      : _parts.isNotEmpty ? (item?.durationMs ?? 0) : (audio.duration?.inMilliseconds ?? item?.durationMs ?? 0);
+      : _parts.isNotEmpty ? (item?.durationMs ?? 0) : (audio.duration?.inMilliseconds ?? _knownDuration ?? item?.durationMs ?? 0);
+
+  /// The length the player last reported for the item: while it waits for the server (no source
+  /// loaded) the bar stays at the held position instead of falling back to an unknown length.
+  String? _durationKey;
+  int _durationMs = 0;
+  int? get _knownDuration => item != null && item!.key == _durationKey && _durationMs > 0 ? _durationMs : null;
+  void _keepDuration() {
+    final d = audio.duration?.inMilliseconds, it = item;
+    if (d != null && d > 0 && it != null && !_switching) {
+      _durationKey = it.key;
+      _durationMs = d;
+    }
+  }
+
   bool get playing => remote.active ? remote.playing : audio.playing || waiting;
   bool get live => item?.kind == 'radio';
 
@@ -235,7 +250,7 @@ class Player extends ChangeNotifier {
       title: it.title,
       artist: it.subtitle,
       album: 'audiojoe',
-      artUri: it.image == null ? null : api.imageUri(it.image!),
+      artUri: it.image == null ? null : (downloads.coverFile(it.image)?.uri ?? api.imageUri(it.image!)),
       artHeaders: api.authHeaders,
     );
     if (it.kind != 'radio' && _hasLocal(it, part)) return AudioSource.file(downloads.file(it.key, part).path, tag: tag);

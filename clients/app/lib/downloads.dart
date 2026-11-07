@@ -50,6 +50,30 @@ class Downloads extends ChangeNotifier {
     return File('${_dir.path}/$safe${part == null ? '' : '_$part'}');
   }
 
+  /// Saved cover for an image path of the server (`Item.image`, `coverOf`), so it shows offline.
+  File cover(String image) => File('${_dir.path}/img_${image.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_')}');
+
+  /// The saved cover if there is one (checked synchronously: covers are built often, the files are small).
+  File? coverFile(String? image) {
+    if (image == null) return null;
+    final f = cover(image);
+    return f.existsSync() ? f : null;
+  }
+
+  /// Saves the item's cover under its own image path and under `/api/v1/image/<key>` (lists use
+  /// that one); a missing cover (404) or an error is no reason to fail the download.
+  Future<void> _saveCover(Item it) async {
+    final own = '/api/v1/image/${Uri.encodeComponent(it.key)}';
+    final paths = {it.image ?? own, own};
+    try {
+      final res = await api.client.get(api.imageUri(it.image ?? own), headers: api.authHeaders).timeout(const Duration(seconds: 30));
+      if (res.statusCode != 200 || res.bodyBytes.isEmpty) return;
+      for (final p in paths) {
+        await cover(p).writeAsBytes(res.bodyBytes, flush: true);
+      }
+    } catch (_) {}
+  }
+
   List<OfflineEntry> get entries =>
       Stores.offline.data.values.map(OfflineEntry.fromJson).toList()..sort((a, b) => b.added.compareTo(a.added));
 
@@ -94,7 +118,12 @@ class Downloads extends ChangeNotifier {
   Future<void> remove(String key) async {
     final it = Stores.items.get(key);
     final parts = it == null ? const <Part>[] : Item.fromJson(it).parts;
-    for (final f in [file(key), for (final p in parts) file(key, p.index)]) {
+    final image = it == null ? null : Item.fromJson(it).image;
+    final own = '/api/v1/image/${Uri.encodeComponent(key)}';
+    // A podcast's cover can belong to several saved episodes: it goes with the last of them.
+    final shared = image != null &&
+        entries.any((e) => e.key != key && Stores.items.get(e.key) != null && Item.fromJson(Stores.items.get(e.key)!).image == image);
+    for (final f in [file(key), for (final p in parts) file(key, p.index), cover(own), if (image != null && !shared) cover(image)]) {
       if (await f.exists()) await f.delete();
     }
     Stores.offline.remove(key);
@@ -130,6 +159,7 @@ class Downloads extends ChangeNotifier {
     var done = 0.0, bytes = 0;
     var shown = DateTime.now();
     await _dir.create(recursive: true);
+    if (it != null) await _saveCover(it);
     for (final p in parts ?? const <Part?>[null]) {
       final share = p == null ? 1.0 : p.durationMs / total;
       // Parts finished before (restart, retry) are kept.
@@ -221,6 +251,18 @@ class Downloads extends ChangeNotifier {
     notifyListeners();
     api.online.addListener(() => api.online.value ? unawaited(_process()) : null);
     unawaited(_process());
+    unawaited(_missingCovers());
+  }
+
+  /// Titles saved before covers were saved (up to 0.1.8) get theirs once the server answers.
+  Future<void> _missingCovers() async {
+    if (!api.online.value) return;
+    for (final e in entries.where((e) => e.status == 'done')) {
+      final j = Stores.items.get(e.key);
+      if (j == null || coverFile('/api/v1/image/${Uri.encodeComponent(e.key)}') != null) continue;
+      await _saveCover(Item.fromJson(j));
+    }
+    notifyListeners();
   }
 
   void retry() {

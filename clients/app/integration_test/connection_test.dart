@@ -2,9 +2,9 @@
 // tools/dev/cutproxy.py between app and server (tools/dev/connection-test-linux.sh).
 //
 //  A  stream without a copy: the connection hangs → the player waits at the position and
-//     shows as playing; connection back → it continues by itself at that position.
-//  B  a copy finished while the episode streams: taken over without stopping; then the
-//     connection is refused and the episode keeps playing from the copy.
+//     shows as playing, the length stays known (bar); connection back → it continues by itself at that position.
+//  B  a copy finished while the episode streams: taken over without stopping (its cover saved
+//     with it); then the connection is refused and the episode keeps playing from the copy.
 //  C  a book of several files that is only partly saved: its saved first file plays from the copy.
 
 import 'dart:io';
@@ -100,7 +100,9 @@ void main() {
     final epA = eps.lastWhere((e) => e.durationMs! > 1800000);
 
     // ---------------------------------------------------------- A: stream, the connection hangs
-    await player.play([epA]);
+    // Without a length from the feed (as seen on Windows): the bar must still know it while waiting.
+    final epAnoLen = Item.fromJson({...epA.toJson(), 'duration_ms': null});
+    await player.play([epAnoLen]);
     await waitUntil(tester, () => player.audio.playing && player.position > 3000, what: 'A playing');
     await net('hang');
     await player.seekTo(1200000);
@@ -109,6 +111,8 @@ void main() {
     print('A waiting: ${state()}');
     expect(player.playing, isTrue, reason: 'waiting shows as playing');
     expect(player.position ~/ 1000, inInclusiveRange(1195, 1205), reason: state());
+    // The bar keeps the held position: the length stays known while no source is loaded.
+    expect(player.duration, greaterThan(1800000), reason: 'length while waiting: ${player.duration}');
     await net('restore');
     await waitUntil(tester, () => player.audio.playing && !player.waiting && player.position > 1202000, seconds: 60, what: 'A continues (${state()})');
     // ignore: avoid_print
@@ -124,6 +128,8 @@ void main() {
     await waitUntil(tester, () => player.partFromCopy && player.audio.playing, seconds: 15, what: 'B taken over (${state()})');
     // ignore: avoid_print
     print('B taken over: ${state()}');
+    // The cover was saved with it (it shows offline).
+    expect(downloads.coverFile('/api/v1/image/${Uri.encodeComponent(epB.key)}'), isNotNull, reason: 'cover saved');
     await net('refuse');
     final b1 = player.position;
     await pumpFor(tester, 10);
