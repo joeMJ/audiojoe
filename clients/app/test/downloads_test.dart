@@ -239,6 +239,17 @@ void main() {
     expect(music.listSync().map((f) => f.uri.pathSegments.last), ['jellyfin_1_t1']);
   });
 
+  test('"Free" follows a deletion at once (Windows VM 2026-11-07)', () async {
+    server.gate('episode:1').complete();
+    await downloads.add([episode(1)]);
+    await settle(() => downloads.isOffline('episode:1'));
+    Storage.probe = (_) async => 101 * gb;
+    await downloads.remove('episode:1');
+    await settle(() => storage.free == 101 * gb);
+    expect(storage.free, 101 * gb);
+    Storage.probe = (_) async => 100 * gb;
+  });
+
   test('0.1.x titles of one album become one line (user 2026-11-07 "1 ja")', () async {
     final old = Directory('${Stores.dir.path}/offline')..createSync(recursive: true);
     for (final n in [1, 2]) {

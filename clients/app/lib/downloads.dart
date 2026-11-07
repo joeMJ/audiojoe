@@ -291,6 +291,8 @@ class Downloads extends ChangeNotifier {
         // In use (Windows) or gone meanwhile: what is left is not listed any more.
       }
     }
+    // "Free" follows at once, not only at the next download (Windows VM 2026-11-07).
+    unawaited(storage.refresh());
   }
 
   /// Deletes a line of the view: the whole album or audiobook.
