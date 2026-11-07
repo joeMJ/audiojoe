@@ -64,8 +64,12 @@ try {
 
     await stepIs("shown");
     const r1 = await page.evaluate(() => window.__testcar.result);
-    check("fünf Formate gemessen", r1.formats.length === 5, r1.formats.join(" "));
+    check("zehn Formate gemessen (3 komprimiert, 7 PCM-Stufen)", r1.formats.length === 10, r1.formats.join(" "));
     check("MP3 spielt", r1.formats[0].startsWith("mp3+"), r1.formats[0]);
+    check("Stufen 16/44 bis 24/192 und WAV 24/48 der Reihe nach",
+      ["flac16", "flac16-48", "flac24-44", "flac24-48", "flac24", "flac24-192", "wav24-48"].every((id, i) => r1.formats[3 + i].startsWith(`${id}+`) || r1.formats[3 + i].startsWith(`${id}-`)),
+      r1.formats.slice(3).join(" "));
+    check("Abtastrate der Audioausgabe gemessen", /^\d{4,6}Hz base \d+ms out \d+ms \w+$/.test(r1.env.audio), r1.env.audio);
     check("Cache: laden und abspielen", r1.cache.startsWith("+"), r1.cache);
     const pre = await page.$$eval(".opt.on", (o) => o.map((e) => e.id));
     check("Musikleiste vorausgewählt nur bei Tesla", JSON.stringify(pre) === JSON.stringify(c.ua ? ["opt-bar"] : []), pre.join(","));
@@ -126,6 +130,9 @@ try {
     check("Betreff audiojoe testcar <Datum> <Browser>", /^audiojoe testcar \S+ \S+/.test(subject) && (!c.ua || subject.includes("Tesla")), subject);
     check("Mail enthält Fahrzeug", body.includes(`car: ${c.ua ? "Tesla" : "Testmarke"} / Model Test / 2024`));
     check("Mail enthält Bildschirm", body.includes(`win ${c.w}x${c.h}`));
+    check("Mail enthält Audioausgabe und PCM-Stufen", /\naudio: \d{4,6}Hz,out=\d+ms/.test(body) && /\npcm: \d\/7,max=/.test(body), body.match(/\naudio: [^\n]*/)?.[0]);
+    const stage = await page.$eval("#stage", (s) => s.textContent);
+    check("Ergebnis nennt die höchste Stufe", /^\d\d (bit|Bit) \/ [\d.,]+ kHz$/.test(stage), stage);
     check("Mail enthält Ergebnis der Knöpfe", body.includes("wheel-next: "));
     const modules = await page.$eval("#qr svg", (s) => s.viewBox.baseVal.width / 4); // cellSize 4, margin 0
     const px = ((box.w - 24) / modules) * (c.dpr ?? 1);

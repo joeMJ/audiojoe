@@ -111,18 +111,91 @@ async function environment() {
     `idb${"indexedDB" in self ? "+" : "-"}`, `ms${"mediaSession" in navigator ? "+" : "-"}`,
     `secure${isSecureContext ? "+" : "-"}`, `persist${persisted}`, `quota ${quota}`].join(" ");
   e.earlier = await earlierVisit();
+  e.audio = audioOutput();
   try { result.server = (await (await fetch("/api/v1/health")).json()).version ?? ""; } catch { /* page opened from elsewhere */ }
+}
+
+// ---------------------------------------------------------------- audio output
+//
+// Sample rate of the browser's audio output (user 2026-11-07: "ob das Ding 24 Bit 48 kHz kann").
+// AudioContext.sampleRate is the rate the browser mixes at for the output device (the device's
+// rate as the system set it); the bit depth of the output is not visible to a web page – the
+// stages below show which files the car decodes and plays.
+
+let audioRate = 0;
+function audioOutput(): string {
+  try {
+    const ctx = new AudioContext();
+    audioRate = ctx.sampleRate;
+    const base = Math.round((ctx.baseLatency ?? 0) * 1000);
+    void ctx.close();
+    return `${audioRate}Hz base ${base}ms`;
+  } catch (e) {
+    return `-${(e as Error).name}`;
+  }
+}
+
+/** After a tap: the running context also knows the latency to the speakers. */
+async function audioRunning(): Promise<string> {
+  try {
+    const ctx = new AudioContext();
+    await Promise.race([ctx.resume(), new Promise((r) => setTimeout(r, 1000))]);
+    await new Promise((r) => setTimeout(r, 300));
+    const out = Math.round(((ctx as AudioContext & { outputLatency?: number }).outputLatency ?? 0) * 1000);
+    const state = ctx.state;
+    await ctx.close();
+    return `out ${out}ms ${state}`;
+  } catch (e) {
+    return `-${(e as Error).name}`;
+  }
 }
 
 // ---------------------------------------------------------------- formats and cache
 
+// PCM stages step by step (bit depth / kHz); the ids of 0.1.x (flac16, flac24) stay.
+const STAGES: [string, string, string][] = [
+  ["FLAC 16/44", "flac16", "tone16.flac"],
+  ["FLAC 16/48", "flac16-48", "tone16-48.flac"],
+  ["FLAC 24/44", "flac24-44", "tone24-44.flac"],
+  ["FLAC 24/48", "flac24-48", "tone24-48.flac"],
+  ["FLAC 24/96", "flac24", "tone24.flac"],
+  ["FLAC 24/192", "flac24-192", "tone24-192.flac"],
+  ["WAV 24/48", "wav24-48", "tone24-48.wav"],
+];
 const FORMATS: [string, string, string][] = [
   ["MP3", "mp3", "tone.mp3"],
   ["AAC", "aac", "tone.m4a"],
-  ["FLAC 16/44", "flac16", "tone16.flac"],
-  ["FLAC 24/96", "flac24", "tone24.flac"],
   ["Opus", "opus", "tone.opus"],
+  ...STAGES,
 ];
+
+/** Audio output for the mail, without spaces (each costs three characters in the QR code). */
+function mailAudio(): string {
+  const a = result.env.audio ?? "";
+  const m = a.match(/^(\d+)Hz base (\d+)ms(?: out (\d+)ms (\w+))?/);
+  if (!m) return a.replace(/ /g, ",");
+  return `${m[1]}Hz,out=${m[3] ?? "?"}ms${m[4] && m[4] !== "running" ? `,${m[4]}` : ""}`;
+}
+
+/** PCM stages for the mail: how many played, the highest, and each one that failed with its
+ * reason – e.g. "7/7,max=24/192" or "5/7,max=24/96,24/192-err4,wav24/48-timeout". */
+function mailStages(): string {
+  const failed = STAGES.flatMap(([label, id]) => {
+    const f = result.formats.find((x) => x.startsWith(`${id}+`) || x.startsWith(`${id}-`)) ?? `${id}-`;
+    if (f.startsWith(`${id}+`)) return [];
+    return [`${label.startsWith("WAV") ? "wav" : ""}${label.split(" ")[1]}${f.slice(id.length)}`];
+  });
+  return [`${STAGES.length - failed.length}/${STAGES.length}`, `max=${highestStage() || "-"}`, ...failed].join(",");
+}
+
+/** The highest PCM stage that played, e.g. "24/96"; "" when none. */
+function highestStage(): string {
+  const played = STAGES.filter(([, id]) => result.formats.some((f) => f.startsWith(`${id}+`)))
+    .map(([label]) => label.split(" ")[1].split("/").map(Number) as [number, number]);
+  played.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const top = played.at(-1);
+  return top ? `${top[0]}/${top[1]}` : "";
+}
 
 /** Plays a source until 0.3 s have passed; "+<ms to start>" or "-<reason>". */
 function playShort(src: string): Promise<string> {
@@ -248,6 +321,7 @@ async function startScreen() {
     h("span", {}, t("Screen / window")), h("span", {}, e.screen),
     h("span", {}, t("Operation")), h("span", {}, e.input),
     h("span", {}, t("Features")), h("span", {}, e.features),
+    h("span", {}, t("Audio output")), h("span", {}, audioRate ? `${audioRate} Hz` : "?"),
     h("span", {}, t("Earlier visit")), h("span", {}, e.earlier === "first" ? t("first visit") : e.earlier),
   );
   await new Promise<void>((r) => (start.onclick = () => r()));
@@ -259,7 +333,8 @@ async function formatsScreen() {
   setStatus(t("Step {n} of {m}", { n: 1, m: 4 }));
   const chips = h("div", { className: "chips" });
   app.replaceChildren(h("div", { className: "ask" }, h("div", {}, h("div", { className: "big" }, t("Testing formats…")),
-    h("div", { className: "small" }, t("Five short beeps, then one from the cache.")))), chips);
+    h("div", { className: "small" }, t("{n} short beeps, then one from the cache.", { n: FORMATS.length })))), chips);
+  result.env.audio += ` ${await audioRunning()}`;
   for (const [label, id, file] of FORMATS) {
     step = `fmt-${id}`;
     const r = await playShort(`/testcar/${file}`);
@@ -426,18 +501,21 @@ function mailText(): { subject: string; body: string } {
     `input: ${result.env.input}`,
     `feat: ${result.env.features}`,
     `earlier: ${result.env.earlier}`,
-    `formats: ${result.formats.join(" ")}`,
+    `audio: ${mailAudio()}`,
+    `formats: ${result.formats.filter((f) => !STAGES.some(([, id]) => f.startsWith(`${id}+`) || f.startsWith(`${id}-`))).join(" ")}`,
+    `pcm: ${mailStages()}`,
     `cache: ${result.cache}`,
     `shown: ${result.shown.join(",")}`,
     ...result.steps.map(([id, r]) => `${id}: ${r}`),
     `bg: ${result.bg}`,
     result.unsupported.length ? `unsupported: ${result.unsupported.join(",")}` : "",
   ].filter(Boolean);
-  // The event log is cut so the QR code stays coarse enough to read from a photo.
+  // The event log is cut so the QR code stays coarse enough to read from a photo (700: room for
+  // the audio and PCM lines of 0.2.0 at 800×480).
   let body = lines.join("\n");
   const rest = ev.slice();
   let logLine = `log: ${rest.join(" ") || "-"}`;
-  while (mailEncode(body + "\n" + logLine).length > 800 && rest.length) { rest.pop(); logLine = `log: ${rest.join(" ")} … (cut)`.replace(":  …", ": …"); }
+  while (mailEncode(body + "\n" + logLine).length > 700 && rest.length) { rest.pop(); logLine = `log:${rest.length ? ` ${rest.join(" ")}` : ""}(cut)`; }
   body += `\n${logLine}`;
   return { subject, body };
 }
@@ -475,7 +553,9 @@ function endScreen() {
   const bar = result.steps.filter(([id]) => id.startsWith("bar-"));
   const wheel = result.steps.filter(([id]) => id.startsWith("wheel-"));
   const formatsOk = result.formats.filter((f) => f.includes("+")).length;
-  const failed = FORMATS.filter(([, id]) => !result.formats.find((f) => f.startsWith(id) && f.includes("+"))).map(([l]) => l);
+  const failed = FORMATS.filter(([, id]) => !result.formats.find((f) => f.startsWith(`${id}+`))).map(([l]) => l);
+  const [bits, khz] = highestStage().split("/");
+  const khzText = khz === "44" ? (navigator.language.toLowerCase().startsWith("de") ? "44,1" : "44.1") : khz;
   const count = (l: [string, string][]) => l.length && l.every(([, r]) => r === "none")
     ? h("span", {}, t("no buttons"))
     : h("span", { className: l.filter(([, r]) => ok(r)).length === l.length ? "ok" : "bad" },
@@ -485,6 +565,9 @@ function endScreen() {
     h("span", {}, t("Vehicle")), h("span", {}, `${result.vehicle.make} ${result.vehicle.model}, ${result.vehicle.year}`),
     h("span", {}, t("Formats")), h("span", { className: failed.length ? "bad" : "ok" },
       `${t("{n} of {m}", { n: formatsOk, m: FORMATS.length })}${failed.length ? ` (${failed.join(", ")} ✗)` : ""}`),
+    h("span", {}, t("Audio output")), h("span", {}, audioRate ? `${audioRate} Hz` : "?"),
+    h("span", {}, t("Highest stage")), h("span", { className: bits ? "" : "bad", id: "stage" },
+      bits ? t("{b} bit / {k} kHz", { b: bits, k: khzText }) : "✗"),
     h("span", {}, t("Cache")), h("span", { className: result.cache.startsWith("+") ? "ok" : "bad" }, result.cache.startsWith("+") ? "✓" : "✗"),
     h("span", {}, t("Music shown")), h("span", {}, shownLabel),
     ...(bar.length ? [h("span", {}, t("Music bar")), count(bar)] : []),

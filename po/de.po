@@ -942,8 +942,17 @@ msgstr "Früherer Besuch"
 msgid "Features"
 msgstr "Funktionen"
 
-msgid "Five short beeps, then one from the cache."
-msgstr "Fünf kurze Töne, danach einer aus dem Cache."
+msgid "{n} short beeps, then one from the cache."
+msgstr "{n} kurze Töne, danach einer aus dem Cache."
+
+msgid "Audio output"
+msgstr "Audioausgabe"
+
+msgid "Highest stage"
+msgstr "Höchste Stufe"
+
+msgid "{b} bit / {k} kHz"
+msgstr "{b} Bit / {k} kHz"
 
 msgid "Formats"
 msgstr "Formate"
