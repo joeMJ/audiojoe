@@ -21,3 +21,6 @@ secrets.*
 *.snk
 *.jks
 *.keystore
+
+# Python bytecode
+__pycache__/
