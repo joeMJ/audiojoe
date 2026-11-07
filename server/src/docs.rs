@@ -219,4 +219,23 @@ mod tests {
             }
         }
     }
+
+    /// Every picture a page shows is built into the server (0.1.9 shipped without them).
+    #[test]
+    fn every_picture_is_built_in() {
+        let mut shown = 0;
+        for p in PAGES {
+            for de in [true, false] {
+                let html = page(p.0, de).unwrap();
+                for file in html.split("/docs/screenshots/").skip(1).filter_map(|r| r.split('"').next()) {
+                    shown += 1;
+                    let shot = SCREENSHOTS.iter().find(|s| s.0 == file);
+                    assert!(shot.is_some(), "{} shows {file}, which is not built in", p.0);
+                    let bytes = shot.unwrap().1;
+                    assert!(bytes.len() > 1000 && &bytes[..4] == b"RIFF" && &bytes[8..12] == b"WEBP", "{file} is no WebP picture");
+                }
+            }
+        }
+        assert!(shown > 0, "no page shows a picture");
+    }
 }

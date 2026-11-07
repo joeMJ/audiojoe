@@ -68,6 +68,18 @@ def login(device, code=None):
         "totp": code or totp(CRED["totp_secret"]), "device": device})
 
 
+# ------------------------------------------------------------------ manual with pictures
+# The pictures are built into the server; 0.1.9 was released without them.
+s, html, _ = call("GET", "/docs/de/manual.html", headers={"accept": "text/html"}, raw=True)
+shots = sorted({r.split(b'"')[0].decode() for r in (html or b"").split(b'src="/docs/screenshots/')[1:]}) if s == 200 else []
+check("manual: page with pictures", s == 200 and len(shots) > 0, f"{s}, {len(shots)} pictures")
+bad = []
+for f in shots:
+    s, img, h = call("GET", "/docs/screenshots/" + f, headers={"accept": "image/webp"}, raw=True)
+    if not (s == 200 and h.get("content-type") == "image/webp" and img[:4] == b"RIFF" and img[8:12] == b"WEBP"):
+        bad.append(f"{f} {s}")
+check("manual: every picture delivered", shots and not bad, ", ".join(bad) or f"{len(shots)} × image/webp")
+
 # ------------------------------------------------------------------ authentication
 s, b, _ = call("GET", "/api/v1/me")
 check("without login: 401", s == 401, str(s))
