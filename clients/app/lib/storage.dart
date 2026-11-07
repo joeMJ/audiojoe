@@ -1,11 +1,16 @@
-// Storage of this device: free space and "Keep at least … free". Below the limit no download
-// starts and none is queued (user 2026-11-04, moved forward from 0.2.0); the storage pill turns
-// red. Decimal GB (10^9 bytes), as shown ("GB ist ein Zeichen weniger").
+// Storage of this device: where downloads go, free space and "Keep at least … free". Below the
+// limit no download starts and none is queued (user 2026-11-04, moved forward from 0.2.0); the
+// storage pill turns red. Decimal GB (10^9 bytes), as shown ("GB ist ein Zeichen weniger").
+//
+// 0.2.0 (user 2026-11-07): downloads go into sub-folders podcasts, audiobooks and music of the
+// storage folder. Linux and Windows: "audiojoe" in the home folder unless the user picked another
+// ("7 im persönlichen Benutzerordner"); Android: the app's own storage, no choice of folder.
 //
 // The free space comes from the platform through a method channel: statvfs (Linux),
 // GetDiskFreeSpaceExW (Windows), StatFs (Android).
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -33,14 +38,58 @@ class Storage extends ChangeNotifier {
     }
   };
 
+  /// Free bytes of the volume of `path` (null when unknown).
+  static Future<int?> freeAt(String path) => probe(existing(path));
+
   /// Free bytes where the downloads are; null while unknown (then nothing is blocked).
   int? free;
 
-  int get keepFreeGb => ((Stores.device.get('storage')?['keep_free_gb'] as num?)?.toInt() ?? minKeepFreeGb).clamp(minKeepFreeGb, 100000);
+  Map<String, dynamic> get _settings => Stores.device.get('storage') ?? const {};
 
-  set keepFreeGb(int v) {
-    Stores.device.put('storage', {'keep_free_gb': v < minKeepFreeGb ? minKeepFreeGb : v});
+  void _put(String key, Object? value) {
+    Stores.device.put('storage', {..._settings, key: value});
     notifyListeners();
+  }
+
+  int get keepFreeGb => ((_settings['keep_free_gb'] as num?)?.toInt() ?? minKeepFreeGb).clamp(minKeepFreeGb, 100000);
+
+  set keepFreeGb(int v) => _put('keep_free_gb', v < minKeepFreeGb ? minKeepFreeGb : v);
+
+  /// "Delete after listening" for podcasts (default on) and audiobooks (default off), as in the
+  /// mockup ("15ja"). Music stays until it is deleted.
+  bool deleteAfter(String kind) => switch (kind) {
+        'episode' => _settings['delete_podcasts'] as bool? ?? true,
+        'book' => _settings['delete_books'] as bool? ?? false,
+        _ => false,
+      };
+
+  void setDeleteAfter(String kind, bool on) => _put(kind == 'book' ? 'delete_books' : 'delete_podcasts', on);
+
+  /// Whether the user can choose the storage folder (Linux, Windows).
+  static bool get desktop => Platform.isLinux || Platform.isWindows;
+
+  /// Default storage folder of the desktop: "audiojoe" in the home folder.
+  static String defaultDir() {
+    final home = Platform.environment[Platform.isWindows ? 'USERPROFILE' : 'HOME'] ?? '.';
+    return '$home${Platform.pathSeparator}audiojoe';
+  }
+
+  /// The storage folder: where new downloads go (each entry keeps its own path).
+  Directory get dir {
+    if (!desktop) return Directory('${_storesDir()}/offline');
+    final d = _settings['dir'] as String?;
+    return Directory(d == null || d.isEmpty ? defaultDir() : d);
+  }
+
+  /// "Change …": new downloads go to `path`; what is saved stays where it is ("12 ja").
+  set dir(Directory d) => _put('dir', d.path);
+
+  static String _storesDir() {
+    try {
+      return Stores.dir.path;
+    } catch (_) {
+      return '.'; // stores not opened (tests)
+    }
   }
 
   /// Below the limit: no download starts.
@@ -49,16 +98,19 @@ class Storage extends ChangeNotifier {
   Timer? _timer;
 
   Future<void> refresh() async {
-    String path;
-    try {
-      path = Stores.dir.path;
-    } catch (_) {
-      path = '.'; // stores not opened (tests)
-    }
-    final f = await probe(path);
+    final f = await probe(existing(dir.path));
     if (f == free) return;
     free = f;
     notifyListeners();
+  }
+
+  /// The folder itself or its nearest existing parent (the storage folder is made on first use).
+  static String existing(String path) {
+    var d = Directory(path).absolute;
+    while (!d.existsSync() && d.parent.path != d.path) {
+      d = d.parent;
+    }
+    return d.path;
   }
 
   /// Checked once a minute as well: other programs fill the disk too.

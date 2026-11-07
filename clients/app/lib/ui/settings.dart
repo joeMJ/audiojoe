@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -20,6 +21,7 @@ import '../prefs.dart';
 import '../storage.dart';
 import '../updates.dart';
 import 'common.dart';
+import 'shell.dart';
 
 class SettingsView extends StatefulWidget {
   final VoidCallback onSignOut;
@@ -127,7 +129,11 @@ class _SettingsViewState extends State<SettingsView> {
       'podcasts': t('OPML, sync with podcast apps'),
       'playback': PlaybackSettings.summary(),
       'music': t('MusicBrainz labels'),
-      'storage': t('Keep at least {n} GB free', {'n': storage.keepFreeGb}),
+      'storage': [
+        t('{used} used', {'used': bytes(downloads.entries.fold<int>(0, (s, e) => s + e.bytes))}),
+        if (storage.free != null) t('{free} free', {'free': bytes(storage.free!)}),
+        if (downloads.running > 0) t('{n} loading', {'n': downloads.running}),
+      ].join(' · '),
       'appearance': switch (appearance.value) {
         ThemeMode.light => t('Light'),
         ThemeMode.dark => t('Dark'),
@@ -1211,8 +1217,11 @@ Future<void> showAbout(BuildContext context) async {
   );
 }
 
-/// "Storage": free space and "Keep at least … free" (5 GB the default and the smallest value,
-/// steps of 1 GB). Below it no download starts. Per device, not synced.
+/// "Storage" (0.2.0, mockup android-einstellungen picture 3): where downloads go, free space,
+/// "Keep at least … free" (5 GB the default and the smallest value, steps of 1 GB; below it no
+/// download starts), "Delete after listening" and the way to the downloads. Linux and Windows
+/// also choose the folder: "Change …" and "Move to …" as in tvjoe (`ablage.rs` lines 1503–1545,
+/// `umzug.rs`). Per device, not synced.
 class StorageSettings extends StatelessWidget {
   const StorageSettings({super.key});
 
@@ -1222,38 +1231,199 @@ class StorageSettings extends StatelessWidget {
         builder: (context, _) {
           final k = context.tok;
           final used = downloads.entries.fold<int>(0, (s, e) => s + e.bytes);
+          final free = storage.free;
           final n = storage.keepFreeGb;
           return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            SettingsGroup(children: [
-              Text(
-                  storage.free == null
-                      ? t('{used} used', {'used': bytes(used)})
-                      : t('{used} used · {free} free', {'used': bytes(used), 'free': bytes(storage.free!)}),
-                  key: const ValueKey('storage-usage'),
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-            ]),
-            SettingsGroup(title: t('Keep at least free'), desc: t('Below it no download starts.'), children: [
-              Row(children: [
-                IconButton.outlined(
-                  key: const ValueKey('keep-free-minus'),
-                  tooltip: '−1 GB',
-                  onPressed: n > Storage.minKeepFreeGb ? () => storage.keepFreeGb = n - 1 : null,
-                  icon: const Icon(Icons.remove),
+            SettingsGroup(
+                title: t('Storage'),
+                desc: Storage.desktop
+                    ? t('Downloads go into the folders podcasts, audiobooks and music of the storage folder.')
+                    : t('Downloads are kept in the app storage of this device, separately for podcasts, audiobooks and music.'),
+                children: [
+                  if (Storage.desktop) ...[
+                    Text(t('Storage folder'), style: const TextStyle(fontWeight: FontWeight.w700)),
+                    SelectableText(storage.dir.path, key: const ValueKey('storage-dir')),
+                    const SizedBox(height: 8),
+                    Wrap(spacing: 8, runSpacing: 6, children: [
+                      OutlinedButton(key: const ValueKey('storage-change'), onPressed: () => _change(context), child: Text(t('Change …'))),
+                      OutlinedButton(key: const ValueKey('storage-move'), onPressed: () => _move(context), child: Text(t('Move to …'))),
+                    ]),
+                    const SizedBox(height: 12),
+                  ],
+                  if (free != null)
+                    LinearProgressIndicator(
+                        value: used + free == 0 ? 0 : used / (used + free), minHeight: 6, borderRadius: BorderRadius.circular(3), backgroundColor: k.panel2),
+                  const SizedBox(height: 8),
+                  Row(key: const ValueKey('storage-usage'), children: [
+                    Expanded(child: Text(t('Used'))),
+                    Text(bytes(used), style: const TextStyle(fontWeight: FontWeight.w600)),
+                  ]),
+                  if (free != null)
+                    Row(children: [
+                      Expanded(child: Text(t('Free'))),
+                      Text(bytes(free), style: const TextStyle(fontWeight: FontWeight.w600)),
+                    ]),
+                ]),
+            SettingsGroup(
+                title: t('Keep at least free'),
+                desc: t('Below it no download starts; waiting ones load once there is room again.'),
+                children: [
+                  Row(children: [
+                    IconButton.outlined(
+                      key: const ValueKey('keep-free-minus'),
+                      tooltip: '−1 GB',
+                      onPressed: n > Storage.minKeepFreeGb ? () => storage.keepFreeGb = n - 1 : null,
+                      icon: const Icon(Icons.remove),
+                    ),
+                    SizedBox(
+                      width: 90,
+                      child: Text('$n GB', key: const ValueKey('keep-free'), textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                    ),
+                    IconButton.outlined(key: const ValueKey('keep-free-plus'), tooltip: '+1 GB', onPressed: () => storage.keepFreeGb = n + 1, icon: const Icon(Icons.add)),
+                    const SizedBox(width: 12),
+                    if (storage.low)
+                      Flexible(child: Text(t('Waiting for space'), style: TextStyle(color: k.bad, fontWeight: FontWeight.w700))),
+                  ]),
+                ]),
+            SettingsGroup(title: t('Delete after listening'), children: [
+              for (final (kind, label) in [('episode', t('Podcasts')), ('book', t('Audiobooks'))])
+                CheckboxListTile(
+                  key: ValueKey('delete-after-$kind'),
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: Text(label),
+                  value: storage.deleteAfter(kind),
+                  onChanged: (v) => storage.setDeleteAfter(kind, v ?? false),
                 ),
-                SizedBox(
-                  width: 90,
-                  child: Text('$n GB', key: const ValueKey('keep-free'), textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                ),
-                IconButton.outlined(key: const ValueKey('keep-free-plus'), tooltip: '+1 GB', onPressed: () => storage.keepFreeGb = n + 1, icon: const Icon(Icons.add)),
-                const SizedBox(width: 12),
-                if (storage.low)
-                  Flexible(child: Text(t('Waiting for space'), style: TextStyle(color: k.bad, fontWeight: FontWeight.w700))),
-              ]),
+              Text(t('Music stays until you delete it.'), style: TextStyle(color: k.muted)),
             ]),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: FilledButton.icon(
+                  key: const ValueKey('open-downloads'),
+                  icon: const Icon(Icons.download_for_offline_outlined),
+                  label: Text(t('Open downloads')),
+                  onPressed: () => shellPage.value = 7),
+            ),
           ]);
         },
       );
+
+  static Future<void> _alert(BuildContext context, String heading, String body) => showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(heading),
+          content: Text(body),
+          actions: [FilledButton(onPressed: () => Navigator.pop(context), child: Text(t('OK')))],
+        ),
+      );
+
+  static String _reason(String why) => switch (why) {
+        'same' => t('That is the storage folder already.'),
+        'inside' => t('The target lies inside the current storage folder.'),
+        'cannot create' => t('The target folder cannot be created.'),
+        _ => t('The target cannot be written to.'),
+      };
+
+  /// "Change …": new downloads go to the folder picked; what is saved stays where it is.
+  static Future<void> _change(BuildContext context) async {
+    final path = await FilePicker.getDirectoryPath(dialogTitle: t('Folder for downloads'), initialDirectory: storage.dir.path);
+    if (path == null) return;
+    final why = await Downloads.checkTarget(storage.dir, Directory(path));
+    if (why != null && why != 'same' && why != 'inside') {
+      if (context.mounted) await _alert(context, t('Cannot change'), _reason(why));
+      return;
+    }
+    storage.dir = Directory(path);
+    unawaited(storage.refresh());
+  }
+
+  /// "Move to …": check obstacles, pick the target, confirm, move with progress (as tvjoe `umzug.rs`).
+  static Future<void> _move(BuildContext context) async {
+    if (downloads.busy) {
+      return _alert(context, t('Cannot move'), t('Downloads are running or waiting. Please try again afterwards.'));
+    }
+    final path = await FilePicker.getDirectoryPath(dialogTitle: t('Move storage to'), initialDirectory: storage.dir.path);
+    if (path == null || !context.mounted) return;
+    final old = storage.dir, target = Directory(path);
+    final why = await Downloads.checkTarget(old, target);
+    if (why != null) {
+      if (context.mounted) await _alert(context, t('Cannot move'), _reason(why));
+      return;
+    }
+    final total = downloads.bytesToMove;
+    final free = await Storage.freeAt(target.path);
+    if (!await Downloads.sameVolume(old, target) && free != null && free < total + (1 << 30)) {
+      if (context.mounted) {
+        await _alert(context, t('Too little room at the target'),
+            t('{size} are to be moved, only {free} are free at the target.', {'size': bytes(total), 'free': bytes(free)}));
+      }
+      return;
+    }
+    if (!context.mounted) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(t('Move storage?')),
+        content: Text(t('Move {size} from\n{old}\nto\n{new}\nNew downloads go there afterwards.', {'size': bytes(total), 'old': old.path, 'new': target.path})),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(t('Cancel'))),
+          FilledButton(key: const ValueKey('storage-move-confirm'), onPressed: () => Navigator.pop(context, true), child: Text(t('Move'))),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    final done = ValueNotifier<int>(0);
+    var stop = false;
+    final stopping = ValueNotifier<bool>(false);
+    unawaited(showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          title: Text(t('Moving storage')),
+          content: ValueListenableBuilder2<int, bool>(done, stopping, (context, n, s) => Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Text(s ? t('Stops after the current file …') : t('Please keep audiojoe open.')),
+                const SizedBox(height: 10),
+                LinearProgressIndicator(value: total == 0 ? null : n / total),
+                const SizedBox(height: 6),
+                Text(t('{done} of {size}', {'done': bytes(n), 'size': bytes(total)})),
+              ])),
+          actions: [
+            TextButton(
+                onPressed: () {
+                  stop = true;
+                  stopping.value = true;
+                },
+                child: Text(t('Cancel'))),
+          ],
+        ),
+      ),
+    ));
+    final r = await downloads.moveTo(target, progress: (n) => done.value = n, cancelled: () => stop);
+    if (!context.mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
+    final (heading, body) = r.complete
+        ? (t('Storage moved'), t('{n} entries are now in\n{new}', {'n': r.moved, 'new': target.path}))
+        : r.error != null
+            ? (t('Moving failed'), t('{n} entries were moved, then an error occurred:\n{error}\n\nThe list matches the files; the storage folder stays the old one.', {'n': r.moved, 'error': r.error!}))
+            : (t('Moving stopped'), t('{n} entries were moved, the rest is still at the old place. The list matches the files; the storage folder stays the old one.', {'n': r.moved}));
+    await _alert(context, heading, body);
+  }
+}
+
+/// Builds from two notifiers.
+class ValueListenableBuilder2<A, B> extends StatelessWidget {
+  final ValueListenable<A> a;
+  final ValueListenable<B> b;
+  final Widget Function(BuildContext, A, B) builder;
+  const ValueListenableBuilder2(this.a, this.b, this.builder, {super.key});
+
+  @override
+  Widget build(BuildContext context) =>
+      ListenableBuilder(listenable: Listenable.merge([a, b]), builder: (context, _) => builder(context, a.value, b.value));
 }
 
 /// Android "Appearance": system, light or dark (the desktop has the moon in the title bar).

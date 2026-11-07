@@ -297,8 +297,8 @@ void main() {
       for (final p in ['Sources', 'Podcasts', 'Music', 'Sonos', 'Storage', 'Appearance', 'Devices', 'Maintenance', 'About']) {
         expect(find.text(p), findsOneWidget, reason: p);
       }
-      // Storage moved forward from 0.2.0, Appearance only on Android (user 2026-11-04).
-      expect(find.text('Keep at least 5 GB free'), findsOneWidget);
+      // Storage (0.2.0: used, free, loading as in the mockup), Appearance only on Android.
+      expect(find.textContaining(RegExp(r'^\d.* used')), findsOneWidget);
       expect(find.text('System'), findsOneWidget);
       expect(find.text('Jellyfin · 2 libraries'), findsOneWidget);
       expect(find.text('2 speakers'), findsOneWidget);

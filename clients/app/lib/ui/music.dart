@@ -277,7 +277,7 @@ class AlbumPage extends StatelessWidget {
                     icon: const Icon(Icons.play_arrow),
                     onPressed: () => startPlayback(context, tracks, 0, onPlay, (list: 'music', key: album.key)),
                     label: Text(t('Play album'))),
-                saveOfflineButton(tracks.first, tracks),
+                saveOfflineButton(tracks.first, tracks, album),
                 NextButton(album),
               ],
             ]),

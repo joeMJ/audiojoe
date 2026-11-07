@@ -65,7 +65,7 @@ class _ShellState extends State<Shell> {
       3 => BooksView(key: const ValueKey('abs'), onPlay: opened),
       4 => MusicTab(onPlay: opened),
       5 => RadioView(onPlay: opened),
-      7 => const OfflineView(),
+      7 => const DownloadsView(),
       _ => SettingsView(onSignOut: widget.onSignOut),
     };
   }

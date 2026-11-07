@@ -48,7 +48,8 @@ def used_texts() -> set:
     ]:
         for f in (root / path).rglob("*"):
             if f.suffix in (".ts", ".dart") and not f.name.endswith(".g.dart"):
-                found.update(m.group(1) for m in pat.finditer(f.read_text()))
+                # Escapes as the program sees them at run time (line breaks, quotes).
+                found.update(m.group(1).replace("\\n", "\n").replace("\\'", "'").replace('\\"', '"') for m in pat.finditer(f.read_text()))
     # Labels passed through variables (navigation).
     for f in [root / "clients/web/src/app/ui.ts", root / "clients/app/lib/ui/shell.dart"]:
         found.update(re.findall(r"""['"](Now playing|Continue|Podcasts|Audiobooks|Music|Offline|Settings)['"]""", f.read_text()))

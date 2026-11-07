@@ -191,8 +191,6 @@ msgstr "Zu viele Versuche. Bitte 15 Minuten warten."
 msgid "Unsubscribe"
 msgstr "Abbestellen"
 
-msgid "Used {used}"
-msgstr "Belegt {used}"
 
 msgid "Used {used} of about {quota}"
 msgstr "Belegt {used} von ca. {quota}"
@@ -1215,17 +1213,11 @@ msgstr "Dunkel"
 msgid "Keep at least free"
 msgstr "Mindestens frei lassen"
 
-msgid "Below it no download starts."
-msgstr "Darunter beginnt kein Download."
 
-msgid "Keep at least {n} GB free"
-msgstr "Mindestens {n} GB frei lassen"
 
 msgid "{used} used"
 msgstr "{used} belegt"
 
-msgid "{used} used · {free} free"
-msgstr "{used} belegt · {free} frei"
 
 msgid "Waiting for space"
 msgstr "Wartet auf Platz"
@@ -1241,3 +1233,155 @@ msgstr "10 s zurück: {list}"
 
 msgid "10 s back: off"
 msgstr "10 s zurück: aus"
+
+# 0.2.0 storage (mockup android-einstellungen, tvjoe umzug.rs); texts pending approval (question 16)
+
+msgid "Album"
+msgstr "Album"
+
+msgid "All"
+msgstr "Alle"
+
+msgid "Audiobook"
+msgstr "Hörbuch"
+
+msgid "Podcast"
+msgstr "Podcast"
+
+msgid "Below it no download starts; waiting ones load once there is room again."
+msgstr "Darunter beginnt kein Download; wartende laden weiter, sobald wieder Platz ist."
+
+msgid "Cannot change"
+msgstr "Ändern nicht möglich"
+
+msgid "Cannot move"
+msgstr "Verschieben nicht möglich"
+
+msgid "Change …"
+msgstr "Ändern …"
+
+msgid "Move to …"
+msgstr "Verschieben nach …"
+
+msgid "Delete after listening"
+msgstr "Nach dem Hören löschen"
+
+msgid "Downloads are running or waiting. Please try again afterwards."
+msgstr "Downloads laufen oder warten. Bitte danach erneut versuchen."
+
+msgid "Downloads go into the folders podcasts, audiobooks and music of the storage folder."
+msgstr "Downloads liegen im Ablageordner, getrennt in den Ordnern podcasts, audiobooks und music."
+
+msgid "Downloads are kept in the app storage of this device, separately for podcasts, audiobooks and music."
+msgstr "Downloads liegen im App-Speicher dieses Geräts, getrennt nach Podcasts, Hörbüchern und Musik."
+
+msgid "Folder for downloads"
+msgstr "Ordner für die Ablage"
+
+msgid "Free"
+msgstr "Frei"
+
+msgid "Used"
+msgstr "Belegt"
+
+msgid "Less than {n} GB free: new downloads wait. Delete finished ones or lower the limit under \"Storage\"."
+msgstr "Weniger als {n} GB frei: neue Downloads warten. Lösche Fertiges oder senke die Grenze unter „Ablage“."
+
+msgid "Load rest"
+msgstr "Rest laden"
+
+msgid "Loading ({n} of at most {max})"
+msgstr "Lädt ({n} von höchstens {max})"
+
+msgid "Waiting ({n})"
+msgstr "Wartet ({n})"
+
+msgid "Partly loaded ({n})"
+msgstr "Teilweise geladen ({n})"
+
+msgid "Move storage to"
+msgstr "Ablage verschieben nach"
+
+msgid "Move storage?"
+msgstr "Ablage verschieben?"
+
+msgid "Move {size} from\n{old}\nto\n{new}\nNew downloads go there afterwards."
+msgstr "{size} von\n{old}\nnach\n{new}\nverschieben. Danach legt audiojoe Neues dort ab."
+
+msgid "Moving failed"
+msgstr "Verschieben fehlgeschlagen"
+
+msgid "Moving stopped"
+msgstr "Verschieben angehalten"
+
+msgid "Moving storage"
+msgstr "Ablage wird verschoben"
+
+msgid "Music stays until you delete it."
+msgstr "Musik bleibt, bis du sie löschst."
+
+msgid "Open downloads"
+msgstr "Downloads öffnen"
+
+msgid "Please keep audiojoe open."
+msgstr "Bitte audiojoe offen lassen."
+
+msgid "Stops after the current file …"
+msgstr "Wird nach der laufenden Datei angehalten …"
+
+msgid "Storage folder"
+msgstr "Ablageordner"
+
+msgid "Storage moved"
+msgstr "Ablage verschoben"
+
+msgid "That is the storage folder already."
+msgstr "Das ist schon der Ablageordner."
+
+msgid "The target cannot be written to."
+msgstr "Am Ziel lässt sich nicht schreiben."
+
+msgid "The target folder cannot be created."
+msgstr "Der Zielordner lässt sich nicht anlegen."
+
+msgid "The target lies inside the current storage folder."
+msgstr "Das Ziel liegt innerhalb der bisherigen Ablage."
+
+msgid "Too little room at the target"
+msgstr "Zu wenig Platz am Ziel"
+
+msgid "done"
+msgstr "fertig"
+
+msgid "keep at least {n} GB free"
+msgstr "mind. {n} GB frei lassen"
+
+msgid "played, will be deleted"
+msgstr "gehört, wird gelöscht"
+
+msgid "waiting for space"
+msgstr "wartet auf Platz"
+
+msgid "{done} of {size}"
+msgstr "{done} von {size}"
+
+msgid "{free} free"
+msgstr "{free} frei"
+
+msgid "{n} entries are now in\n{new}"
+msgstr "{n} Einträge liegen jetzt in\n{new}"
+
+msgid "{n} entries were moved, the rest is still at the old place. The list matches the files; the storage folder stays the old one."
+msgstr "{n} Einträge wurden verschoben, der Rest liegt noch am alten Ort. Die Liste passt zu den Dateien; der Ablageordner bleibt der alte."
+
+msgid "{n} entries were moved, then an error occurred:\n{error}\n\nThe list matches the files; the storage folder stays the old one."
+msgstr "{n} Einträge wurden verschoben, dann trat ein Fehler auf:\n{error}\n\nDie Liste passt zu den Dateien; der Ablageordner bleibt der alte."
+
+msgid "{n} loading"
+msgstr "{n} laden"
+
+msgid "{n} of {total} titles"
+msgstr "{n} von {total} Titeln"
+
+msgid "{size} are to be moved, only {free} are free at the target."
+msgstr "Zu verschieben sind {size}, am Ziel sind nur {free} frei."

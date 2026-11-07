@@ -86,11 +86,24 @@ class _AudiojoeAppState extends State<AudiojoeApp> {
     sync.start();
     unawaited(playbackPrefs.refresh());
     storage.start();
-    downloads.check();
+    unawaited(downloads.check().then((_) => _sweepPlayed()));
+    // "Delete after listening" (user 2026-11-07 "14 ja"): once an episode or book counts as
+    // finished and does not play any more – on this device or reported by another one.
+    player.addListener(() {
+      final k = player.audio.playing ? player.item?.key : null;
+      if (k == _playingKey) return;
+      _playingKey = k;
+      _sweepPlayed();
+    });
+    sync.remote.listen((_) => _sweepPlayed());
+    Timer.periodic(const Duration(minutes: 1), (_) => _sweepPlayed());
     connectLists();
     unawaited(player.cueLast().then((_) => remote.findPlaying()));
     unawaited(_offerUpdate());
   }
+
+  String? _playingKey;
+  void _sweepPlayed() => unawaited(downloads.sweepPlayed(playing: player.audio.playing ? player.item?.key : null));
 
   /// A newer app version the server knows: one banner per version, "Later" keeps quiet
   /// until the next version. Nothing is downloaded without a tap.

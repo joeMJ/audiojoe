@@ -1,4 +1,4 @@
-// The main screens: continue, podcasts, audiobooks, music, offline.
+// The main screens: continue, podcasts, audiobooks, music, downloads.
 
 import 'package:flutter/material.dart';
 
@@ -7,6 +7,8 @@ import '../downloads.dart';
 import '../l10n.dart';
 import '../models.dart';
 import '../player.dart';
+import '../storage.dart';
+import '../store.dart';
 import 'common.dart';
 import 'details.dart';
 import 'lists.dart';
@@ -23,9 +25,9 @@ Future<void> startPlayback(BuildContext context, List<Item> items, [int i = 0, V
   }
 }
 
-Widget saveOfflineButton(Item it, [List<Item>? all]) => ListenableBuilder(
+Widget saveOfflineButton(Item it, [List<Item>? all, Item? album]) => ListenableBuilder(
       listenable: downloads,
-      builder: (context, _) => offlineIcon(context, it.key, onSave: () => downloads.add(all ?? [it])),
+      builder: (context, _) => offlineIcon(context, it.key, onSave: () => downloads.add(all ?? [it], album: album)),
     );
 
 // ---------------------------------------------------------------- podcasts
@@ -311,45 +313,122 @@ class _RadioViewState extends State<RadioView> {
       ]);
 }
 
-// ---------------------------------------------------------------- offline
+// ---------------------------------------------------------------- downloads
 
-class OfflineView extends StatelessWidget {
-  const OfflineView({super.key});
+/// "Downloads" (0.2.0, mockup android-einstellungen pictures 4 and 5): replaces the offline list.
+/// Sections loading, waiting, partly loaded and done, a filter by kind; an album and an audiobook
+/// are one line and are deleted whole, a started album loads the rest.
+class DownloadsView extends StatefulWidget {
+  const DownloadsView({super.key});
+  @override
+  State<DownloadsView> createState() => _DownloadsViewState();
+}
+
+class _DownloadsViewState extends State<DownloadsView> {
+  String filter = 'all';
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-        listenable: downloads,
+        listenable: Listenable.merge([downloads, storage]),
         builder: (context, _) {
-          final list = downloads.entries;
-          final used = list.where((e) => e.status == 'done').fold<int>(0, (s, e) => s + e.bytes);
-          return ListView(padding: const EdgeInsets.all(12), children: [
-            Text(t('Used {used}', {'used': bytes(used)}), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 10),
-            if (list.isEmpty) emptyText(context, t('Nothing saved offline yet.')),
-            for (final e in list)
-              ItemRow(
-                leading: CoverThumb(image: coverOf(e.key), label: e.title),
-                title: e.title,
-                subtitle: e.status == 'error' && (e.error ?? '').isNotEmpty
-                    ? e.error!
-                    : [e.subtitle, if (e.bytes > 0) bytes(e.bytes), e.quality?.badge ?? ''].where((s) => s.isNotEmpty).join(' · '),
-                progress: e.status == 'loading' ? e.progress : null,
-                trailing: [
-                  Badge2(
-                    switch (e.status) {
-                      'done' => t('ready'),
-                      'error' => t('failed'),
-                      'missing' => t('missing – will reload'),
-                      'loading' => t('loading {p}', {'p': '${(e.progress * 100).round()} %'}),
-                      _ => t('waiting'),
-                    },
-                    kind: e.status == 'done' ? 'ok' : e.status == 'error' ? 'bad' : 'warn',
-                  ),
-                  if (e.status == 'error') IconButton(onPressed: downloads.retry, icon: const Icon(Icons.refresh)),
-                  IconButton(tooltip: t('Remove'), onPressed: () => downloads.remove(e.key), icon: const Icon(Icons.delete_outline)),
-                ],
+          final k = context.tok;
+          final all = downloads.groups;
+          final groups = filter == 'all' ? all : all.where((g) => g.kind == filter).toList();
+          final used = all.fold<int>(0, (s, g) => s + g.bytes);
+          final n = storage.keepFreeGb;
+          final head = [
+            t('{used} used', {'used': bytes(used)}),
+            if (storage.free != null) t('{free} free', {'free': bytes(storage.free!)}),
+            t('keep at least {n} GB free', {'n': n}),
+          ].join(' · ');
+          List<DownloadGroup> of(String section) => groups.where((g) => g.section == section).toList();
+          final loading = of('loading'), waiting = of('waiting'), partial = of('partial'), done = of('done');
+          return ListView(key: const ValueKey('downloads'), padding: const EdgeInsets.all(12), children: [
+            Text(head, key: const ValueKey('downloads-head'), style: TextStyle(fontSize: 14, color: k.muted)),
+            if (storage.low)
+              Container(
+                key: const ValueKey('downloads-low'),
+                margin: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: k.warnBg, borderRadius: BorderRadius.circular(10)),
+                child: Text(t('Less than {n} GB free: new downloads wait. Delete finished ones or lower the limit under "Storage".', {'n': n}),
+                    style: TextStyle(color: k.warn, fontWeight: FontWeight.w600)),
               ),
+            const SizedBox(height: 8),
+            Wrap(spacing: 8, runSpacing: 6, children: [
+              for (final (id, label) in [('all', t('All')), ('episode', t('Podcasts')), ('book', t('Audiobooks')), ('track', t('Music'))])
+                ChoiceChip(key: ValueKey('downloads-filter-$id'), label: Text(label), selected: filter == id, onSelected: (_) => setState(() => filter = id)),
+            ]),
+            const SizedBox(height: 6),
+            if (groups.isEmpty) emptyText(context, t('Nothing saved offline yet.')),
+            if (loading.isNotEmpty) ...[
+              _section(context, t('Loading ({n} of at most {max})', {'n': downloads.running, 'max': parallelDownloads})),
+              for (final g in loading) _row(context, g),
+            ],
+            if (waiting.isNotEmpty) ...[
+              _section(context, t('Waiting ({n})', {'n': waiting.length})),
+              for (final g in waiting) _row(context, g),
+            ],
+            if (partial.isNotEmpty) ...[
+              _section(context, t('Partly loaded ({n})', {'n': partial.length})),
+              for (final g in partial) _row(context, g),
+            ],
+            if (done.isNotEmpty) ...[
+              _section(context, t('Done')),
+              for (final g in done) _row(context, g),
+            ],
           ]);
         },
       );
+
+  Widget _section(BuildContext context, String s) => Padding(
+        padding: const EdgeInsets.fromLTRB(4, 14, 4, 4),
+        child: Text(s.toUpperCase(), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, letterSpacing: 0.6, color: context.tok.muted)),
+      );
+
+  static String _kindLabel(DownloadGroup g) => switch (g.kind) {
+        'episode' => t('Podcast'),
+        'book' => t('Audiobook'),
+        _ => g.isAlbum ? t('Album') : t('Music'),
+      };
+
+  Widget _row(BuildContext context, DownloadGroup g) {
+    final section = g.section;
+    final first = g.entries.first;
+    final error = g.entries.map((e) => e.error).whereType<String>().where((s) => s.isNotEmpty).firstOrNull;
+    final played = section == 'done' && g.entries.length == 1 && storage.deleteAfter(g.kind) && Stores.positions.get(first.key)?['finished'] == true;
+    final details = <String>[
+      _kindLabel(g),
+      if (g.isAlbum && section != 'done') t('{n} of {total} titles', {'n': g.doneCount, 'total': g.total ?? g.entries.length}),
+      if (section == 'waiting') storage.low ? t('waiting for space') : t('waiting'),
+      if (section == 'partial' && error != null) error,
+      if (g.bytes > 0) bytes(g.bytes),
+      if (played) t('played, will be deleted'),
+    ];
+    final badge = switch (section) {
+      'loading' => Badge2('${(g.progress * 100).round()} %', kind: 'warn'),
+      'waiting' => Badge2(t('waiting'), kind: 'warn'),
+      'partial' => null,
+      _ => Badge2(t('done'), kind: 'ok'),
+    };
+    final open = section == 'loading' || section == 'waiting';
+    return ItemRow(
+      key: ValueKey('download-${g.id}'),
+      leading: CoverThumb(image: coverOf(first.key), label: g.title),
+      title: g.title,
+      subtitle: details.join(' · '),
+      progress: section == 'loading' || section == 'partial' ? g.progress : null,
+      trailing: [
+        ?badge,
+        if (section == 'partial')
+          FilledButton(key: ValueKey('load-rest-${g.id}'), onPressed: () => downloads.loadRest(g), child: Text(t('Load rest'))),
+        IconButton(
+          key: ValueKey('download-delete-${g.id}'),
+          tooltip: open ? t('Cancel') : t('Delete'),
+          onPressed: () => downloads.removeGroup(g),
+          icon: Icon(open ? Icons.close : Icons.backspace_outlined),
+        ),
+      ],
+    );
+  }
 }
