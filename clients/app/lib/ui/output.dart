@@ -230,6 +230,10 @@ class _OutputOverlayState extends State<OutputOverlay> {
             _primary(t('Here'), () => _run(() => remote.takeHere(remote.target!), close: true)),
             _secondary(t('Stop'), () => _run(() => remote.stop(remote.target!))),
             grouping ? _primary(t('Group'), () => setState(() => grouping = false)) : _secondary(t('Group'), () => setState(() => grouping = true)),
+            // Snooze (user 2026-11-07): the speaker's own sleep timer, remaining minutes on the button.
+            out.sleepS == null
+                ? _secondary(t('Snooze'), () => _snoozeSheet(context))
+                : _primary(t('Snooze · {n} min', {'n': (out.sleepS! / 60).ceil()}), () => _snoozeSheet(context)),
           ]),
         ]),
       );
@@ -257,6 +261,27 @@ class _OutputOverlayState extends State<OutputOverlay> {
       child: _head(context, Icons.smartphone, '${t('This device')} · ${api.device}', line(), [_Pill(t('here'), kind: 'accent')]),
     );
   }
+
+  /// The choices of the app's sleep timer; the end of a chapter or item is not offered (the
+  /// speaker only knows a time).
+  void _snoozeSheet(BuildContext context) => showModalBottomSheet(
+        context: context,
+        builder: (context) {
+          void set(int minutes) {
+            Navigator.pop(context);
+            unawaited(_run(() => sonos.sleep(minutes)));
+          }
+
+          return SafeArea(
+            child: ListView(shrinkWrap: true, children: [
+              ListTile(title: Text(t('Snooze'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800))),
+              for (final m in [5, 15, 30, 45, 60])
+                ListTile(leading: const Icon(Icons.timer_outlined), title: Text(t('{n} min', {'n': m})), onTap: () => set(m)),
+              if (sonos.output?.sleepS != null) ListTile(leading: const Icon(Icons.close), title: Text(t('Off')), onTap: () => set(0)),
+            ]),
+          );
+        },
+      );
 
   // ---------------------------------------------------------------- apps and web players
 

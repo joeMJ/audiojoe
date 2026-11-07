@@ -1,6 +1,9 @@
 // Playback: from the offline copy when available, else streamed from the server.
 // Books may consist of several files; positions are always positions in the whole item.
 // Saves positions locally and to the server; follows other devices while paused.
+// Connection loss (user 2026-11-07): a copy finished while playing is taken over at once; when
+// the stream breaks, the player continues from the copy at the same position, or without one
+// waits there and continues by itself as soon as the server answers again.
 
 import 'dart:async';
 
@@ -24,9 +27,13 @@ class Player extends ChangeNotifier {
     audio.playerStateStream.listen(_onState);
     audio.positionStream.listen((_) {
       _checkSleep();
+      _track();
       notifyListeners();
     });
-    audio.currentIndexStream.listen((_) => notifyListeners());
+    audio.currentIndexStream.listen(_onIndex);
+    audio.errorStream.listen((_) => _interrupted());
+    downloads.addListener(_onDownloads);
+    sync.reconnected.listen((_) => _retryNow());
     sync.remote.listen(_onRemote);
     sync.commands.listen((c) => unawaited(_onCommand(c)));
   }
@@ -96,7 +103,7 @@ class Player extends ChangeNotifier {
   int get duration => remote.active
       ? (remote.durationMs ?? item?.durationMs ?? 0)
       : _parts.isNotEmpty ? (item?.durationMs ?? 0) : (audio.duration?.inMilliseconds ?? item?.durationMs ?? 0);
-  bool get playing => remote.active ? remote.playing : audio.playing;
+  bool get playing => remote.active ? remote.playing : audio.playing || waiting;
   bool get live => item?.kind == 'radio';
 
   List<Chapter> get chapters => item?.chapters ?? const [];
@@ -206,6 +213,22 @@ class Player extends ChangeNotifier {
     unawaited(audio.play());
   }
 
+  /// Whether the copy of an item (or of one part of a book) is complete on this device: a
+  /// download is renamed to its final name only when it is complete.
+  bool _hasLocal(Item it, int? part) {
+    if (_badCopy.contains(downloads.file(it.key, part).path)) return false;
+    try {
+      return downloads.file(it.key, part).existsSync();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Per loaded part: played from the copy on this device.
+  List<bool> _local = const [];
+  /// Copies that failed to play: not tried again (else a broken file would loop).
+  final _badCopy = <String>{};
+
   AudioSource _source(Item it, int? part) {
     final tag = MediaItem(
       id: '${it.key}${part == null ? '' : '#$part'}',
@@ -215,23 +238,17 @@ class Player extends ChangeNotifier {
       artUri: it.image == null ? null : api.imageUri(it.image!),
       artHeaders: api.authHeaders,
     );
-    if (fromCache) return AudioSource.file(downloads.file(it.key, part).path, tag: tag);
+    if (it.kind != 'radio' && _hasLocal(it, part)) return AudioSource.file(downloads.file(it.key, part).path, tag: tag);
     return AudioSource.uri(api.streamUri(it.key, part: part), headers: api.authHeaders, tag: tag);
   }
 
-  Future<void> _load(Item it, {bool fromStart = false}) async {
+  Future<void> _load(Item it, {bool fromStart = false, int? at}) async {
     item = it;
     _cued = false;
-    fromCache = downloads.isOffline(it.key);
-    final start = it.kind == 'radio' || fromStart ? (ms: 0, from: null) : _startPosition(it);
+    _stopWaiting();
+    final start = at != null ? (ms: at, from: null) : it.kind == 'radio' || fromStart ? (ms: 0, from: null) : _startPosition(it);
     takenOver = start.from == null ? null : (device: start.from!.device, at: start.from!.updatedAt);
-    final parts = it.multiPart ? it.parts : const <Part>[];
-    final (part, local) = _locate(start.ms, parts);
-    await audio.setAudioSources(
-      parts.isEmpty ? [_source(it, null)] : [for (final p in parts) _source(it, p.index)],
-      initialIndex: part,
-      initialPosition: Duration(milliseconds: local),
-    );
+    await _setSources(it, start.ms);
     await audio.setSpeed(rate);
     // Radio has no position; one entry still marks it as the last thing played on any device.
     if (it.kind == 'radio') {
@@ -239,6 +256,159 @@ class Player extends ChangeNotifier {
           device: api.device, updatedAt: DateTime.now().toUtc().toIso8601String()));
     }
     notifyListeners();
+  }
+
+  /// Loads the item's files (each part from its copy when complete, else streamed) at a position.
+  Future<void> _setSources(Item it, int ms, {Duration? limit}) async {
+    final parts = it.multiPart ? it.parts : const <Part>[];
+    final (part, local) = _locate(ms, parts);
+    _local = parts.isEmpty ? [it.kind != 'radio' && _hasLocal(it, null)] : [for (final p in parts) _hasLocal(it, p.index)];
+    fromCache = _local.every((l) => l);
+    _lastMs = ms;
+    _lastPart = part;
+    _switching = true;
+    try {
+      final load = audio.setAudioSources(
+        parts.isEmpty ? [_source(it, null)] : [for (final p in parts) _source(it, p.index)],
+        initialIndex: part,
+        initialPosition: Duration(milliseconds: local),
+      );
+      await (limit == null ? load : load.timeout(limit));
+    } finally {
+      _switching = false;
+    }
+  }
+
+  // ---------------------------------------------------------------- connection loss
+
+  /// Last position heard here (whole item) and its part: where playback continues after a break.
+  int _lastMs = 0;
+  int _lastPart = 0;
+  /// While sources are set or a part is chosen here, index changes are not playback moving on.
+  bool _switching = false;
+  /// Set while waiting for the server after a break: playback continues by itself.
+  Timer? _retry;
+  bool get waiting => _retry != null;
+  /// Whether the current title (or part of a book) plays from the copy on this device.
+  bool get partFromCopy {
+    final i = _parts.isEmpty ? 0 : _part;
+    return i < _local.length && _local[i];
+  }
+  /// A stream that stays buffering while playing (a connection that hangs) counts as broken.
+  Timer? _stall;
+  static const _stallAfter = Duration(seconds: 15);
+  void _watchStall(PlayerState s) {
+    if (s.playing && s.processingState == ProcessingState.buffering && !_cued) {
+      _stall ??= Timer(_stallAfter, () {
+        _stall = null;
+        if (audio.playing && audio.processingState == ProcessingState.buffering) _interrupted();
+      });
+    } else {
+      _stall?.cancel();
+      _stall = null;
+    }
+  }
+
+  void _track() {
+    if (_cued || item == null || _switching || audio.processingState == ProcessingState.idle) return;
+    if (audio.processingState == ProcessingState.ready || audio.processingState == ProcessingState.buffering) {
+      _lastMs = _localPosition;
+      _lastPart = _part;
+    }
+  }
+
+  /// The player moved to another part by itself: a stream that ended early (mpv treats a broken
+  /// connection as the end of the file) must not skip the rest of the part.
+  void _onIndex(int? i) {
+    final it = item;
+    if (it != null && !_switching && !_cued && i != null && _parts.isNotEmpty && i == _lastPart + 1 && _lastPart < _parts.length) {
+      final p = _parts[_lastPart];
+      if (_lastMs < p.startMs + p.durationMs - 5000) {
+        _interrupted();
+        return;
+      }
+    }
+    if (i != null && !_switching) _lastPart = i;
+    // A part saved while the one before played: play it from the copy.
+    if (i != null && i < _local.length && !_local[i] && item != null && _hasLocal(item!, _parts.isEmpty ? null : _parts[i].index)) {
+      unawaited(_reload(_parts.isEmpty ? _lastMs : _parts[i].startMs, play: audio.playing));
+    }
+    notifyListeners();
+  }
+
+  /// A download finished while its item plays from the stream: continue from the copy.
+  void _onDownloads() {
+    final it = item;
+    if (it == null || _cued || remote.active || it.kind == 'radio' || _switching || _local.isEmpty) return;
+    final i = _parts.isEmpty ? 0 : _part;
+    if (i < _local.length && !_local[i] && _hasLocal(it, _parts.isEmpty ? null : _parts[i].index)) {
+      unawaited(_reload(_localPosition, play: audio.playing));
+    }
+  }
+
+  /// Sets the sources again at a position (from the copy where complete), keeping play or pause.
+  Future<void> _reload(int ms, {required bool play}) async {
+    final it = item;
+    if (it == null) return;
+    try {
+      await _setSources(it, ms);
+      await audio.setSpeed(rate);
+      if (play) unawaited(audio.play());
+    } catch (_) {
+      _interrupted(at: ms);
+    }
+    notifyListeners();
+  }
+
+  /// The stream broke (error, or an end before the end): continue from the copy, else wait here.
+  void _interrupted({int? at}) {
+    final it = item;
+    if (it == null || _cued || remote.active || _switching) return;
+    final ms = it.kind == 'radio' ? 0 : at ?? _lastMs;
+    final parts = it.multiPart ? it.parts : const <Part>[];
+    // The copy itself failed: not again, wait for the server instead.
+    final now = _parts.isEmpty ? 0 : _part;
+    if (at == null && now < _local.length && _local[now]) _badCopy.add(downloads.file(it.key, _parts.isEmpty ? null : _parts[now].index).path);
+    final (part, _) = _locate(ms, parts);
+    final copy = it.kind != 'radio' && _hasLocal(it, parts.isEmpty ? null : parts[part].index);
+    if (copy) {
+      unawaited(_reload(ms, play: true));
+      return;
+    }
+    // Waits paused at the position; the position stays on this device (and goes to the server later).
+    // The broken stream is dropped (a hanging connection would keep the player buffering).
+    _cued = true;
+    _cuedMs = ms;
+    unawaited(audio.stop().catchError((_) {}));
+    if (it.kind != 'radio') {
+      sync.savePosition(Playback(key: it.key, positionMs: ms, durationMs: it.durationMs, finished: false, title: it.title,
+          subtitle: it.subtitle, device: api.device, updatedAt: DateTime.now().toUtc().toIso8601String(), state: 'paused'));
+    }
+    _retry ??= Timer.periodic(const Duration(seconds: 5), (_) => _retryNow());
+    notifyListeners();
+  }
+
+  /// One attempt to continue after a break (also when the event stream is back).
+  Future<void> _retryNow() async {
+    final it = item;
+    if (_retry == null || it == null || !_cued || _switching) return;
+    try {
+      await _setSources(it, _cuedMs, limit: const Duration(seconds: 30));
+      _cued = false;
+      _stopWaiting();
+      await audio.setSpeed(rate);
+      unawaited(audio.play());
+    } catch (_) {
+      // Still no connection: stays waiting at the position.
+      _cued = true;
+      unawaited(audio.stop().catchError((_) {}));
+    }
+    notifyListeners();
+  }
+
+  void _stopWaiting() {
+    _retry?.cancel();
+    _retry = null;
   }
 
   /// After a start: the last unfinished item of any device, paused at its position.
@@ -327,6 +497,11 @@ class Player extends ChangeNotifier {
       unawaited(remote.command(remote.playing ? 'pause' : 'resume'));
       return;
     }
+    if (waiting) {
+      // Waiting after a break shows as playing: pause stops waiting, the position stays.
+      _stopWaiting();
+      return notifyListeners();
+    }
     if (_cued && item != null) {
       final it = item!;
       // The cued position is the start: save it first, so loading begins there.
@@ -334,7 +509,8 @@ class Player extends ChangeNotifier {
         sync.savePosition(Playback(key: it.key, positionMs: _cuedMs, durationMs: it.durationMs, finished: false, title: it.title,
             subtitle: it.subtitle, device: api.device, updatedAt: DateTime.now().toUtc().toIso8601String()));
       }
-      unawaited(_load(it).then((_) => audio.play()));
+      final at = _cuedMs;
+      unawaited(_load(it).then((_) => audio.play()).catchError((Object _) => _interrupted(at: at)));
       return;
     }
     if (audio.playing) {
@@ -416,6 +592,7 @@ class Player extends ChangeNotifier {
 
   bool _wasPlaying = false;
   void _onState(PlayerState s) {
+    _watchStall(s);
     if (s.playing != _wasPlaying) {
       _wasPlaying = s.playing;
       _pausedAt = s.playing ? null : DateTime.now();
@@ -427,12 +604,25 @@ class Player extends ChangeNotifier {
         unawaited(_persist());
       }
     }
+    if (s.processingState == ProcessingState.completed && _endedEarly()) {
+      _interrupted();
+      return notifyListeners();
+    }
     if (s.processingState == ProcessingState.completed) {
       final stopHere = sleepAtEnd != null;
       if (stopHere) setSleep();
       unawaited(_ended(stopHere));
     }
     notifyListeners();
+  }
+
+  /// An end more than 5 s before the item's length is a broken stream, not the end (mpv reports
+  /// a lost connection as the end of the file). Without a known length it counts as the end.
+  bool _endedEarly() {
+    final it = item;
+    if (it == null || it.kind == 'radio' || _switching) return false;
+    final length = it.durationMs ?? 0;
+    return length > 0 && _lastMs < length - 5000;
   }
 
   Future<void> _ended(bool stopHere) async {

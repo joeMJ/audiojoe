@@ -24,6 +24,8 @@ class Room {
   bool busy = false;
   /// The device that started our session on this room's group (null: none of ours).
   String? startedBy;
+  /// Remaining time of the speaker's own sleep timer in seconds (null: off or not ours).
+  int? sleepS;
 
   static Room fromJson(Map j) => Room(j['id'] as int, j['name'] as String, (j['model'] ?? '') as String, (j['s2'] ?? true) as bool,
       (j['reachable'] ?? false) as bool, j['state'] as String?, j['volume'] as int?,
@@ -33,7 +35,8 @@ class Room {
       groupVolume: j['group_volume'] as int?,
       groupRooms: [for (final r in (j['group_rooms'] as List? ?? const [])) r as int])
     ..busy = (j['busy'] ?? false) as bool
-    ..startedBy = (j['session'] as Map?)?['started_by'] as String?;
+    ..startedBy = (j['session'] as Map?)?['started_by'] as String?
+    ..sleepS = j['sleep_s'] as int?;
 
   bool get playing => state == 'PLAYING' || state == 'TRANSITIONING';
   bool get grouped => groupRooms.length > 1;
@@ -164,6 +167,17 @@ class Sonos extends ChangeNotifier {
   }
 
   void volume(int delta) => setVolume(level + delta);
+
+  /// Snooze: the speaker's own sleep timer stops it after [minutes], also without app and
+  /// server; 0 switches it off.
+  Future<void> sleep(int minutes) async {
+    final o = output;
+    if (o == null) return;
+    await api.call('POST', '/sonos/${o.id}/command', body: {'action': 'sleep', 'minutes': minutes});
+    o.sleepS = minutes > 0 ? minutes * 60 : null;
+    notifyListeners();
+    unawaited(_refresh());
+  }
 
   /// Adds a room to the output's group, or takes it out; pairs and home theatres move whole.
   Future<void> setInGroup(Room r, bool inGroup) async {

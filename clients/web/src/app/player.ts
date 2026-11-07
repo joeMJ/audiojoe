@@ -2,10 +2,13 @@
 // stream from the server; saves positions; Media Session for the car's mini player.
 // Books may consist of several audio files ("parts"); positions are always positions in
 // the whole item, the player switches parts as needed.
+// Connection loss (user 2026-11-07): a copy finished while playing is taken over at once; when
+// the stream breaks, the player continues from the copy at the same position, or without one
+// waits there and continues by itself as soon as the server answers again.
 
-import { offlineUrl } from "../offline";
-import { api, online, type Item, type Playback, type Quality } from "./api";
-import { dropPlayed, isOffline, keepCurrent, offlineEntry, partKey } from "./downloads";
+import { OFFLINE_CACHE, offlineUrl } from "../offline";
+import { api, online, onConnection, type Item, type Playback, type Quality } from "./api";
+import { dropPlayed, keepCurrent, offlineEntry, onOfflineChange, partKey } from "./downloads";
 import { idbAll, idbGet, idbPut } from "./idb";
 import { localPosition, onRemote, savePosition } from "./sync";
 import { playbackPrefs } from "./prefs";
@@ -20,6 +23,8 @@ export interface PlayerState {
   /** Current part of a multi-file item. */
   part: number;
   playing: boolean;
+  /** After a break without a copy: waits at the position and continues by itself. */
+  waiting: boolean;
   fromCache: boolean;
   delivered?: Quality | null;
   transcoded: boolean;
@@ -31,7 +36,7 @@ export interface PlayerState {
 
 const audio = new Audio();
 audio.preload = "auto";
-export const state: PlayerState = { queue: [], index: 0, part: 0, playing: false, fromCache: false, transcoded: false, rate: 1 };
+export const state: PlayerState = { queue: [], index: 0, part: 0, playing: false, waiting: false, fromCache: false, transcoded: false, rate: 1 };
 let myDevice = "";
 const listeners = new Set<() => void>();
 export const onPlayer = (l: () => void) => listeners.add(l);
@@ -188,6 +193,8 @@ function partFor(ms: number): number {
 /** Points the audio element at the right file for a position in the whole item. */
 async function seekGlobal(ms: number, autoplay: boolean) {
   const it = state.item!;
+  // A seek that cannot be loaded (no connection) continues there later.
+  if (it.kind !== "radio") lastMs = ms;
   const p = parts();
   const part = p.length ? partFor(ms) : 0;
   const local = (ms - (p[part]?.start_ms ?? 0)) / 1000;
@@ -203,9 +210,29 @@ async function seekGlobal(ms: number, autoplay: boolean) {
   notify();
 }
 
+/** Per part of the loaded item: its copy is complete in the cache (also parts of a book that is
+ *  still being saved). */
+let localParts: boolean[] = [];
+const cacheKey = (it: Item, part: number) => ((it.parts?.length ?? 0) > 1 ? partKey(it.key, part) : it.key);
+/** Copies that failed to play (they are not tried again for this item). */
+const badCopy = new Set<string>();
+async function hasLocal(it: Item, part: number): Promise<boolean> {
+  if (it.kind === "radio" || badCopy.has(cacheKey(it, part))) return false;
+  try {
+    return !!(await (await caches.open(OFFLINE_CACHE)).match(offlineUrl(cacheKey(it, part))));
+  } catch {
+    return false;
+  }
+}
+async function scanLocal(it: Item) {
+  const n = Math.max(1, it.parts?.length ?? 0);
+  localParts = await Promise.all([...Array(n).keys()].map((i) => hasLocal(it, i)));
+  state.fromCache = localParts.every(Boolean);
+}
+
 function srcFor(it: Item, part: number): string {
   const multi = (it.parts?.length ?? 0) > 1;
-  if (state.fromCache) return offlineUrl(multi ? partKey(it.key, part) : it.key);
+  if (localParts[part]) return offlineUrl(cacheKey(it, part));
   return `/api/v1/stream/${encodeURIComponent(it.key)}${multi ? `?part=${part}` : ""}`;
 }
 
@@ -214,8 +241,9 @@ async function load(it: Item, autoplay: boolean, cue = false, fromStart = false)
   keepCurrent(it.key);
   state.part = 0;
   audio.removeAttribute("src");
-  const cached = await isOffline(it.key);
-  state.fromCache = cached;
+  stopWaiting();
+  await scanLocal(it);
+  const cached = state.fromCache;
   const off = cached ? await offlineEntry(it.key) : undefined;
   state.delivered = cached ? off?.delivered ?? it.quality : it.quality;
   state.transcoded = cached ? !!off?.transcoded : false;
@@ -279,6 +307,12 @@ export async function cueLast() {
 
 export function toggle() {
   if (!state.item) return;
+  if (state.waiting) {
+    // Waiting after a break shows as playing: pause stops waiting, the position stays.
+    stopWaiting();
+    state.playing = false;
+    return notify();
+  }
   if (!audio.src) {
     if (state.item.kind === "radio") void load(state.item, true);
     else void seekGlobal(cuedMs, true);
@@ -371,13 +405,16 @@ audio.addEventListener("play", () => {
   notify();
 });
 audio.addEventListener("pause", () => {
-  state.playing = false;
+  // While waiting after a break the item still counts as playing.
+  state.playing = state.waiting;
   pausedAt = Date.now();
   clearInterval(saveTimer);
   if (!audio.ended) void persist();
   notify();
 });
 audio.addEventListener("ended", async () => {
+  // An end more than 5 s before the part's length is a broken stream, not the end.
+  if (endedEarly()) return interrupted();
   // Next part of the same book, else the item is finished.
   if (state.part + 1 < parts().length) {
     await seekGlobal(parts()[state.part + 1].start_ms, true);
@@ -401,7 +438,107 @@ audio.addEventListener("timeupdate", () => {
   }
   notify();
 });
-audio.addEventListener("error", () => notify());
+audio.addEventListener("error", () => {
+  if (audio.src && audio.error?.code !== MediaError.MEDIA_ERR_ABORTED) interrupted();
+  notify();
+});
+
+// ---------------------------------------------------------------- connection loss
+
+/** Last position heard here (whole item): where playback continues after a break. */
+let lastMs = 0;
+let stallTimer: number | undefined;
+let retryTimer: number | undefined;
+audio.addEventListener("timeupdate", () => {
+  if (audio.src && !audio.paused && audio.readyState >= 2) lastMs = position();
+});
+audio.addEventListener("playing", () => clearTimeout(stallTimer));
+// A stream that stalls for 15 s while playing: from the copy, else wait for the server.
+audio.addEventListener("waiting", () => {
+  clearTimeout(stallTimer);
+  stallTimer = window.setTimeout(() => !audio.paused && audio.readyState < 3 && interrupted(), 15000);
+});
+
+function endedEarly(): boolean {
+  const it = state.item;
+  if (!it || it.kind === "radio") return false;
+  const p = parts()[state.part];
+  const end = p ? p.start_ms + p.duration_ms : it.duration_ms ?? 0;
+  return end > 0 && lastMs < end - 5000;
+}
+
+/** The stream broke: continue from the copy at the same position, else wait there. */
+let interrupting = false;
+async function interrupted() {
+  const it = state.item;
+  if (!it || state.waiting || interrupting) return;
+  interrupting = true;
+  try {
+    await handleBreak(it);
+  } finally {
+    interrupting = false;
+  }
+}
+
+async function handleBreak(it: Item) {
+  clearTimeout(stallTimer);
+  const ms = it.kind === "radio" ? 0 : lastMs;
+  // The copy itself failed: not again, wait for the server instead.
+  if (audio.src.includes("/offline/")) badCopy.add(cacheKey(it, state.part));
+  await scanLocal(it);
+  const part = parts().length ? partFor(ms) : 0;
+  if (localParts[part]) {
+    audio.removeAttribute("src");
+    await seekGlobal(ms, true);
+    return;
+  }
+  audio.removeAttribute("src");
+  audio.load();
+  cuedMs = ms;
+  state.waiting = true;
+  state.playing = true;
+  if (it.kind !== "radio") {
+    void savePosition({ key: it.key, position_ms: Math.round(ms), duration_ms: Math.round(duration()) || null, finished: false,
+      updated_at: new Date().toISOString(), title: it.title, subtitle: it.subtitle ?? it.podcast ?? "", state: "paused", kind: "web" });
+  }
+  clearInterval(retryTimer);
+  retryTimer = window.setInterval(() => void retry(), 5000);
+  notify();
+}
+
+/** One attempt to continue after a break (also when the connection is back). */
+async function retry() {
+  const it = state.item;
+  if (!state.waiting || !it) return;
+  try {
+    const r = await fetch("/api/v1/health", { cache: "no-store" });
+    if (!r.ok) return;
+  } catch {
+    return; // still no connection
+  }
+  stopWaiting();
+  await scanLocal(it);
+  await seekGlobal(cuedMs, true);
+}
+
+function stopWaiting() {
+  clearInterval(retryTimer);
+  retryTimer = undefined;
+  state.waiting = false;
+}
+
+onConnection(() => online && void retry());
+
+// A copy finished while its item plays from the stream: continue from the copy.
+onOfflineChange(() => void takeCopy());
+async function takeCopy() {
+  const it = state.item;
+  if (!it || !audio.src || state.waiting || localParts[state.part] || !(await hasLocal(it, state.part))) return;
+  const ms = position(), play = !audio.paused;
+  await scanLocal(it);
+  audio.removeAttribute("src");
+  await seekGlobal(ms, play);
+}
 document.addEventListener("visibilitychange", () => document.hidden && void persist());
 
 /** "Taken over from …" is shown for a few seconds only (as in the app). */

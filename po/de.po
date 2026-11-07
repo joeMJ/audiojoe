@@ -326,6 +326,12 @@ msgstr "Gespeichert: {path}"
 msgid "Sleep timer"
 msgstr "Schlaf-Timer"
 
+msgid "Snooze"
+msgstr "Schlummern"
+
+msgid "Snooze · {n} min"
+msgstr "Schlummern · {n} min"
+
 msgid "Speed"
 msgstr "Tempo"
 

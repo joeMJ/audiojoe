@@ -159,6 +159,13 @@ async function fetchParts(e: OfflineEntry) {
   for (const [i, p] of (parts ?? [null]).entries()) {
     const url = `/api/v1/stream/${encodeURIComponent(e.key)}?profile=tesla-offline${p ? `&part=${i}` : ""}`;
     const share = p ? p.duration_ms / total : 1;
+    // Parts saved before (an interrupted or failed download) are kept, as in the app.
+    const have = p ? await (await caches.open(OFFLINE_CACHE)).match(offlineUrl(partKey(e.key, i))) : undefined;
+    if (have) {
+      bytes += (await have.blob()).size;
+      done += share;
+      continue;
+    }
     const { blob, report } = await download(url, {
       onProgress: (b, t) => {
         e.progress = done + (t ? (b / t) * share : 0);

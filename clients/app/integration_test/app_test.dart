@@ -164,6 +164,12 @@ void main() {
     await tester.tap(find.text('Wohnzimmer + 2'));
     await waitFor(tester, find.text('APPS AND WEB PLAYER'));
     await tester.pump(const Duration(seconds: 2));
+    // 0.1.9: Snooze in the controlled field; with the speaker's sleep timer running its minutes.
+    expect(find.text('Snooze'), findsOneWidget);
+    sonos.output!.sleepS = 1380;
+    remote.controlRoom(sonos.output!); // redraws (no request to a speaker)
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('Snooze · 23 min'), findsOneWidget);
     await shot(tester, 'output-overlay');
     await tester.tap(find.byTooltip('Close'));
     await tester.pump(const Duration(milliseconds: 500));

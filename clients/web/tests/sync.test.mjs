@@ -37,7 +37,8 @@ const server = createServer((req, res) => {
   if (req.url === "/") return res.end(page_html);
   if (req.url === "/sync.js") { res.setHeader("content-type", "text/javascript"); return res.end(readFileSync(out)); }
   if (req.url === "/api/v1/health") return res.end("{}");
-  if (req.url !== "/api/v1/events") { res.statusCode = 404; return res.end(); }
+  // The player opens /api/v1/events?kind=web (since 0.1.6); compare the path only.
+  if (req.url.split("?")[0] !== "/api/v1/events") { res.statusCode = 404; return res.end(); }
   const n = streams.length + 1;
   const s = { n, opened: Date.now(), closed: 0, pings: 0 };
   streams.push(s);

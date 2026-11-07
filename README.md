@@ -107,7 +107,7 @@ your server under `/docs/` always match the installed version.*
 - **Continue lists** for podcasts, audiobooks and albums; **Next** appends at the end.
 - **Player:** chapters, sleep timer (minutes, end of chapter or title), speed, lock screen and
   notification.
-- **Sonos:** rooms and groups, volume per room and group; hi-res is converted to suit S1/S2; the
+- **Sonos:** rooms and groups, volume per room and group, snooze (the speaker's sleep timer); hi-res is converted to suit S1/S2; the
   position is saved.
 - **Offline:** in the app and in the web player (in the car too), with positions sent later.
 - **English and German**, light and dark.

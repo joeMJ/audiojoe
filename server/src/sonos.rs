@@ -274,6 +274,14 @@ async fn status_of(state: &AppState, sp: &Speaker, all: &[Speaker], groups: &[Gr
     o.insert("session".into(), json!(session.filter(|s| s.user == user).map(|s| json!({
         "room": s.room_id, "state": s.state, "key": s.key, "started_by": s.started_by }))));
     o.insert("item_key".into(), json!(ours.map(|c| c.key)));
+    // Remaining time of the speaker's own sleep timer (asked only while something of ours plays there).
+    let sleep_s = if o["session"].is_null() {
+        None
+    } else {
+        soap(&state.http, &coord, AVT, "GetRemainingSleepTimerDuration", "<InstanceID>0</InstanceID>").await.ok()
+            .and_then(|r| tag(&r, "RemainingSleepTimerDuration")).and_then(|t| parse_time(&t)).map(|ms| ms / 1000)
+    };
+    o.insert("sleep_s".into(), json!(sleep_s));
     out
 }
 
@@ -750,6 +758,17 @@ pub struct Command {
     volume: Option<i64>,
     #[serde(default)]
     position_ms: Option<i64>,
+    /// `sleep`: minutes until the speaker stops (its own sleep timer), 0 switches it off.
+    #[serde(default)]
+    minutes: Option<i64>,
+}
+
+/// Longest sleep time accepted (the Sonos app offers up to two hours).
+const SLEEP_MAX_MINUTES: i64 = 180;
+
+/// `NewSleepTimerDuration` for the speaker: "H:MM:SS", empty switches the timer off.
+fn sleep_duration(minutes: i64) -> String {
+    if minutes <= 0 { String::new() } else { format_time(minutes * 60_000) }
 }
 
 /// A visible room of the speaker's group, or an error for parts of pairs and home theatres.
@@ -794,7 +813,8 @@ pub async fn leave(State(state): State<AppState>, _user: CurrentUser, Path(id): 
 
 /// pause | resume | stop | volume (the whole group) | room_volume (this room only) |
 /// next | prev (title of the session's queue) | seek (position_ms) | takeover (pauses, ends
-/// the session and answers with the position, so the calling device continues there)
+/// the session and answers with the position, so the calling device continues there) |
+/// sleep (minutes; the speaker's own sleep timer, so it stops without app and server; 0 = off)
 pub async fn command(
     State(state): State<AppState>,
     user: CurrentUser,
@@ -864,7 +884,14 @@ pub async fn command(
                 soap(&state.http, &sp.ip, RC, "SetVolume", &format!("<InstanceID>0</InstanceID><Channel>Master</Channel><DesiredVolume>{v}</DesiredVolume>")).await?
             }
         }
-        _ => return Err(ApiError::BadRequest("action: pause | resume | stop | volume | room_volume | next | prev | seek | takeover".into())),
+        "sleep" => {
+            need()?;
+            let m = cmd.minutes.filter(|m| (0..=SLEEP_MAX_MINUTES).contains(m))
+                .ok_or_else(|| ApiError::BadRequest(format!("minutes 0–{SLEEP_MAX_MINUTES} required")))?;
+            soap(&state.http, &coord, AVT, "ConfigureSleepTimer",
+                 &format!("<InstanceID>0</InstanceID><NewSleepTimerDuration>{}</NewSleepTimerDuration>", sleep_duration(m))).await?
+        }
+        _ => return Err(ApiError::BadRequest("action: pause | resume | stop | volume | room_volume | next | prev | seek | takeover | sleep".into())),
     };
     state.sonos_poke.notify_one();
     Ok(Json(answer))
@@ -1136,6 +1163,15 @@ mod tests {
         assert_eq!(parse_time("0:14:02"), Some(842_000));
         assert_eq!(parse_time("1:02:03.250"), Some(3_723_000));
         assert_eq!(format_time(3_723_000), "1:02:03");
+    }
+
+    #[test]
+    fn sleep_timer_durations() {
+        assert_eq!(sleep_duration(0), "");
+        assert_eq!(sleep_duration(5), "0:05:00");
+        assert_eq!(sleep_duration(90), "1:30:00");
+        // The speaker answers "H:MM:SS" (empty when off), read back in seconds.
+        assert_eq!(parse_time("0:29:59").map(|ms| ms / 1000), Some(1799));
     }
 
     #[test]

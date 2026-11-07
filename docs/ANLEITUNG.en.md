@@ -12,7 +12,10 @@ The screenshots show the German interface.
 ## State at the top
 
 - **● Server** green: the server is reachable. **Offline · cache** yellow: no connection; the app
-  plays what is saved offline and remembers the positions.
+  plays what is saved offline and remembers the positions. When the connection breaks while
+  playing, the app continues from the saved copy at the same position; without a copy it waits at
+  the position and continues by itself as soon as the server answers again (pause ends the
+  waiting). Since 0.1.9.
 - **✓ Position** green: all positions are with the server. Red with **✕** only when a position
   could not be saved for more than 30 seconds; it is sent as soon as the server is reachable again.
 
@@ -78,6 +81,9 @@ plays live; it cannot be saved offline.
   **Output** (this device or a Sonos room) and **Offline**.
 - **Volume:** the device's, with Sonos the room's or group's; rooms can be added to or taken out of
   the group.
+- **Snooze** (Sonos, in the output overlay next to Here, Stop and Group): sets the speaker's sleep
+  timer to 5 to 60 minutes; the button shows the time left. The speaker stops by itself, also when
+  the app or the server are off. Since 0.1.9.
 
 ## Continue on other devices
 

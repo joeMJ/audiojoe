@@ -111,7 +111,7 @@ eingebauten Hilfeseiten unter `/docs/` passen immer zur installierten Version.*
 - **Weiterhören-Listen** für Podcasts, Hörbücher und Alben; **Next** hängt ans Ende an.
 - **Player:** Kapitel, Schlaf-Timer (Minuten, Kapitel- oder Titelende), Tempo, Sperrbildschirm
   und Benachrichtigung.
-- **Sonos:** Räume und Gruppen, Lautstärke je Raum und Gruppe; Hi-Res wird für S1/S2 passend
+- **Sonos:** Räume und Gruppen, Lautstärke je Raum und Gruppe, Schlummern (Schlaf-Timer des Lautsprechers); Hi-Res wird für S1/S2 passend
   umgerechnet; die Position wird gespeichert.
 - **Offline:** in der App und im Web-Player (auch im Auto), mit Positionen, die nachgereicht
   werden.

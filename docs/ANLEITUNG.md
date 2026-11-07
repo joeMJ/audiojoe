@@ -12,7 +12,10 @@ Einstellungen.
 ## Zustand oben
 
 - **● Server** grün: der Server ist erreichbar. **Offline · Cache** gelb: keine Verbindung; die
-  App spielt, was offline gespeichert ist, und merkt sich die Positionen.
+  App spielt, was offline gespeichert ist, und merkt sich die Positionen. Reißt die Verbindung
+  während der Wiedergabe ab, spielt die App an derselben Stelle aus der gespeicherten Kopie weiter;
+  ohne Kopie wartet sie an der Stelle und spielt von selbst weiter, sobald der Server wieder
+  antwortet (Pause beendet das Warten). Ab 0.1.9.
 - **✓ Position** grün: alle Hörstände sind beim Server. Rot mit **✕** erst, wenn eine Position
   länger als 30 Sekunden nicht gespeichert werden konnte; sie wird nachgereicht, sobald der Server
   wieder erreichbar ist.
@@ -80,6 +83,9 @@ live; es lässt sich nicht offline speichern.
   **Ausgabe** (dieses Gerät oder ein Sonos-Raum) und **Offline**.
 - **Lautstärke:** die des Geräts, bei Sonos die des Raums bzw. der Gruppe; Räume lassen sich zur
   Gruppe hinzufügen oder herausnehmen.
+- **Schlummern** (Sonos, im Ausgabe-Fenster neben Hierher, Stoppen und Gruppe): stellt den
+  Schlaf-Timer des Lautsprechers auf 5 bis 60 Minuten; der Knopf zeigt die Restzeit. Der
+  Lautsprecher hört von selbst auf, auch wenn App oder Server aus sind. Ab 0.1.9.
 
 ## Auf anderen Geräten weiterhören
 
