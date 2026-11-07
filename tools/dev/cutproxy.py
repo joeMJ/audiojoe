@@ -17,15 +17,23 @@ mode = "open"
 conns: set = set()
 
 
-async def pipe(r: asyncio.StreamReader, w: asyncio.StreamWriter, tag: dict):
+class Conn:
+    """One forwarded connection; hashable by identity, so it can sit in `conns`."""
+    __slots__ = ("client", "target", "hung")
+
+    def __init__(self, client, target, hung):
+        self.client, self.target, self.hung = client, target, hung
+
+
+async def pipe(r: asyncio.StreamReader, w: asyncio.StreamWriter, tag: "Conn"):
     try:
         while True:
             data = await r.read(65536)
             if not data:
                 break
             # A hung connection never moves data again.
-            while tag["hung"] or mode == "hang":
-                tag["hung"] = True
+            while tag.hung or mode == "hang":
+                tag.hung = True
                 await asyncio.sleep(3600)
             w.write(data)
             await w.drain()
@@ -42,9 +50,8 @@ async def client(r: asyncio.StreamReader, w: asyncio.StreamWriter, target):
     if mode == "refuse":
         w.close()
         return
-    tag = {"hung": mode == "hang"}
-    if tag["hung"]:
-        conns.add((w, None, tag))
+    if mode == "hang":
+        conns.add(Conn(w, None, True))
         await asyncio.sleep(3600)
         return
     try:
@@ -52,12 +59,12 @@ async def client(r: asyncio.StreamReader, w: asyncio.StreamWriter, target):
     except OSError:
         w.close()
         return
-    entry = (w, tw, tag)
-    conns.add(entry)
+    c = Conn(w, tw, False)
+    conns.add(c)
     try:
-        await asyncio.gather(pipe(r, tw, tag), pipe(tr, w, tag))
+        await asyncio.gather(pipe(r, tw, c), pipe(tr, w, c))
     finally:
-        conns.discard(entry)
+        conns.discard(c)
 
 
 async def control(r: asyncio.StreamReader, w: asyncio.StreamWriter):
@@ -68,8 +75,8 @@ async def control(r: asyncio.StreamReader, w: asyncio.StreamWriter):
         mode = "hang"
     elif path == "/refuse":
         mode = "refuse"
-        for cw, tw, _ in list(conns):
-            for x in (cw, tw):
+        for c in list(conns):
+            for x in (c.client, c.target):
                 if x:
                     x.close()
         conns.clear()
