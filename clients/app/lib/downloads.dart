@@ -300,6 +300,14 @@ class Downloads extends ChangeNotifier {
     }
   }
 
+  /// ✕ on a loading or waiting line (user 2026-11-07 "1 ja"): stops what is not loaded yet;
+  /// finished titles stay, a started album then shows as partly loaded with "Load rest".
+  Future<void> cancelGroup(DownloadGroup g) async {
+    for (final e in g.entries.where((e) => e.status != 'done')) {
+      await remove(e.key);
+    }
+  }
+
   /// "Load the rest": the missing titles of a started album, and what failed.
   Future<void> loadRest(DownloadGroup g) async {
     retry(g.entries.map((e) => e.key));

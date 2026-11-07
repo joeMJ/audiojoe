@@ -222,6 +222,23 @@ void main() {
     expect(File('${old.path}/episode_9').existsSync(), isFalse);
   });
 
+  test('✕ on a loading album keeps the finished titles: partly loaded (user 2026-11-07 "1 ja")', () async {
+    const album = Item(key: 'jellyfin:1:a', kind: 'album', title: 'Kind of Blue', subtitle: 'Miles Davis');
+    await downloads.add([for (final n in [1, 2, 3]) track(n, album: 'jellyfin:1:a')], album: album);
+    server.gate('jellyfin:1:t1').complete();
+    await settle(() => downloads.isOffline('jellyfin:1:t1'));
+    await settle(() => downloads.running == 2);
+    final g = downloads.groups.single;
+    expect(g.section, 'loading');
+    await downloads.cancelGroup(g);
+    await settle(() => downloads.running == 0);
+    expect(downloads.entries.map((e) => e.key), ['jellyfin:1:t1']);
+    final after = downloads.groups.single;
+    expect((after.total, after.section), (3, 'partial'));
+    final music = Directory('${storage.dir.path}${sep}music');
+    expect(music.listSync().map((f) => f.uri.pathSegments.last), ['jellyfin_1_t1']);
+  });
+
   test('0.1.x titles of one album become one line (user 2026-11-07 "1 ja")', () async {
     final old = Directory('${Stores.dir.path}/offline')..createSync(recursive: true);
     for (final n in [1, 2]) {
