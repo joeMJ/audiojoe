@@ -162,11 +162,29 @@ class _ShellState extends State<Shell> {
           body: _view(phoneIndex, false),
           bottomNavigationBar: Column(mainAxisSize: MainAxisSize.min, children: [
             MiniPlayer(onOpen: _openNowPlaying),
-            NavigationBar(
-              selectedIndex: (phoneIndex - 1).clamp(0, 4),
-              onDestinationSelected: (i) => index = i + 1,
-              destinations: [for (final d in _dest.sublist(1, 6)) NavigationDestination(icon: Icon(d.$1), label: t(d.$2))],
-            ),
+            // Downloads and settings are no tab: then none is highlighted (user 2026-11-07 "23 ja";
+            // NavigationBar needs a selected index, so the highlight is drawn like the others).
+            Builder(builder: (context) {
+              final none = phoneIndex > 5;
+              final bar = NavigationBar(
+                key: const ValueKey('phone-nav'),
+                selectedIndex: none ? 0 : phoneIndex - 1,
+                onDestinationSelected: (i) => index = i + 1,
+                destinations: [for (final d in _dest.sublist(1, 6)) NavigationDestination(icon: Icon(d.$1), label: t(d.$2))],
+              );
+              if (!none) return bar;
+              final theme = Theme.of(context), muted = theme.colorScheme.onSurfaceVariant;
+              return Theme(
+                data: theme.copyWith(
+                  navigationBarTheme: theme.navigationBarTheme.copyWith(
+                    indicatorColor: Colors.transparent,
+                    iconTheme: WidgetStatePropertyAll(IconThemeData(color: muted)),
+                    labelTextStyle: WidgetStatePropertyAll(theme.textTheme.labelMedium?.copyWith(color: muted)),
+                  ),
+                ),
+                child: bar,
+              );
+            }),
           ]),
         );
       });
