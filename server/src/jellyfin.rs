@@ -148,7 +148,10 @@ fn normalize(prefix: &str, source: i64, v: &Value) -> Value {
         "track": v["IndexNumber"].as_i64(),
         "disc": v["ParentIndexNumber"].as_i64(),
         "duration_ms": v["RunTimeTicks"].as_i64().map(|t| t / 10_000),
-        "image": v["ImageTags"]["Primary"].as_str().map(|_| format!("/api/v1/image/{prefix}:{source}:{id}")),
+        "image": v["ImageTags"]["Primary"]
+            .as_str()
+            .map(|_| format!("/api/v1/image/{prefix}:{source}:{id}"))
+            .or_else(|| album_with_image(v).filter(|_| kind == "track").map(|a| format!("/api/v1/image/{prefix}:{source}:{a}"))),
         "description": v["Overview"].as_str().map(crate::podcasts::plain_text),
         "notes": v["Overview"].as_str().map(crate::notes::html).filter(|s| !s.is_empty()),
         "quality": if kind == "track" { quality(v) } else { Value::Null },
@@ -231,12 +234,33 @@ pub async fn image(state: &AppState, src: i64, item: &str) -> ApiResult<Response
         return Err(ApiError::NotFound);
     }
     let jf = source(state, src).await?;
+    let own = primary_image(state, &jf, item).await;
+    if !matches!(own, Err(ApiError::NotFound)) {
+        return own;
+    }
+    // A title without a picture of its own shows its album's: Jellyfin keeps cover art on the
+    // album (Windows VM 2026-11-07, "A Broken Frame": titles `ImageTags {}`, album Primary 200).
+    let uid = jf.user_id(state).await?;
+    let v = jf.get(&state.http, &format!("/Users/{uid}/Items/{item}"), &[]).await?;
+    match album_with_image(&v) {
+        Some(album) if album != item => primary_image(state, &jf, &album).await,
+        _ => Err(ApiError::NotFound),
+    }
+}
+
+async fn primary_image(state: &AppState, jf: &Jellyfin, item: &str) -> ApiResult<Response> {
     let req = state
         .http
         .get(format!("{}/Items/{item}/Images/Primary", jf.base))
         .query(&[("maxHeight", "400"), ("quality", "85")])
         .header(jf.auth().0, jf.auth().1);
     crate::sources::relay_image(req).await
+}
+
+/// The album of a title when the album has a picture (`AlbumPrimaryImageTag`).
+fn album_with_image(v: &Value) -> Option<String> {
+    v["AlbumPrimaryImageTag"].as_str()?;
+    v["AlbumId"].as_str().filter(|a| valid_id(a)).map(str::to_string)
 }
 
 // ---------------------------------------------------------------- audiobooks
@@ -465,6 +489,28 @@ mod tests {
         assert!(a["album"].is_null());
         let bad = normalize("jellyfin", 2, &json!({ "Id": "t2", "Type": "Audio", "AlbumId": "../x" }));
         assert!(bad["album"].is_null());
+    }
+
+    #[test]
+    fn title_without_picture_shows_its_album() {
+        // Jellyfin 2026-11-07 ("A Broken Frame"): titles `ImageTags {}`, the album has a Primary image.
+        let t = |extra: Value| {
+            let mut v = json!({ "Id": "t1", "Type": "Audio", "Name": "See You", "AlbumId": "a9", "ImageTags": {} });
+            v.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+            v
+        };
+        let with = t(json!({ "AlbumPrimaryImageTag": "0f78" }));
+        assert_eq!(album_with_image(&with).as_deref(), Some("a9"));
+        assert_eq!(normalize("jellyfin", 1, &with)["image"], "/api/v1/image/jellyfin:1:a9");
+        // Own picture first.
+        let own = t(json!({ "AlbumPrimaryImageTag": "0f78", "ImageTags": { "Primary": "x" } }));
+        assert_eq!(normalize("jellyfin", 1, &own)["image"], "/api/v1/image/jellyfin:1:t1");
+        // Album without picture ("99 Cents"): none, the apps show the initials.
+        let none = t(json!({}));
+        assert_eq!(album_with_image(&none), None);
+        assert!(normalize("jellyfin", 1, &none)["image"].is_null());
+        let bad = t(json!({ "AlbumPrimaryImageTag": "0f78", "AlbumId": "../x" }));
+        assert_eq!(album_with_image(&bad), None);
     }
 
     #[test]
