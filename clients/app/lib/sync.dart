@@ -154,7 +154,10 @@ class Sync {
         } else if (line.startsWith('data:') && event == 'lists') {
           _lists.add((jsonDecode(line.substring(5))['list'] ?? '') as String);
         } else if (line.startsWith('data:') && event == 'device') {
-          _devices.add(Device.fromJson(jsonDecode(line.substring(5))['device'] as Map));
+          // The event goes to all devices and carries no `current`: the own name marks this device
+          // (as `GET /devices` does), else it showed as a second, foreign row until the next refresh.
+          final d = (jsonDecode(line.substring(5))['device'] as Map).cast<String, dynamic>();
+          _devices.add(Device.fromJson({...d, 'current': d['device'] == api.device}));
         } else if (line.startsWith('data:') && event == 'command') {
           final c = (jsonDecode(line.substring(5)) as Map).cast<String, dynamic>();
           if (c['target'] == api.device) _commands.add(c);

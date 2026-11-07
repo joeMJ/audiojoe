@@ -229,13 +229,15 @@ String get deviceKind => Platform.isWindows
 class Device {
   final String name, kind, state, key, title, subtitle, updatedAt;
   final String? lastSeen;
+  /// Name given in the settings ("Rename"); `name` stays the device's key.
+  final String? label;
   final int positionMs;
   final int? durationMs;
   final bool online, current;
 
   const Device({required this.name, required this.kind, required this.state, required this.key, required this.title,
       required this.subtitle, required this.updatedAt, this.lastSeen, required this.positionMs, this.durationMs,
-      required this.online, this.current = false});
+      required this.online, this.current = false, this.label});
 
   static Device fromJson(Map j) => Device(
         name: j['device'] as String,
@@ -250,7 +252,11 @@ class Device {
         durationMs: j['duration_ms'] as int?,
         online: (j['online'] ?? false) as bool,
         current: (j['current'] ?? false) as bool,
+        label: j['label'] as String?,
       );
+
+  /// What the user sees: the given name, else the device name.
+  String get shown => label ?? name;
 
   bool get playing => state == 'playing';
   bool get web => kind == 'web';

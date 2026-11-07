@@ -115,7 +115,7 @@ class _PlaybackTab extends StatelessWidget {
                 Icon(Icons.speaker, size: 18, color: Theme.of(context).colorScheme.primary),
                 const SizedBox(width: 6),
                 Flexible(
-                  child: Text(t('Playing on {device}', {'device': out == null ? remote.target! : 'Sonos ${out.grouped ? out.groupName ?? out.name : out.name}'}),
+                  child: Text(t('Playing on {device}', {'device': out == null ? remote.shown(remote.target!) : 'Sonos ${out.grouped ? out.groupName ?? out.name : out.name}'}),
                       maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w700)),
                 ),
@@ -125,7 +125,7 @@ class _PlaybackTab extends StatelessWidget {
           else if (player.takenOver != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),
-              child: Text(t('Taken over from {device} · {ago}', {'device': player.takenOver!.device, 'ago': ago(player.takenOver!.at)}),
+              child: Text(t('Taken over from {device} · {ago}', {'device': remote.shown(player.takenOver!.device), 'ago': ago(player.takenOver!.at)}),
                   textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: k.muted)),
             ),
         ];
@@ -466,7 +466,7 @@ class _Toolbar extends StatelessWidget {
         tool(Text('${_rate(player.rate)}×', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)), t('Speed'),
             local && !player.live ? () => _rateSheet(context) : null),
         tool(Icon(local ? Icons.smartphone : out != null ? Icons.speaker : Icons.devices, size: 28, color: local ? null : accent),
-            local ? t('This device') : out?.short ?? remote.target!, () => outputOpen.value = true,
+            local ? t('This device') : out?.short ?? remote.shown(remote.target!), () => outputOpen.value = true,
             tip: t('Output')),
         // "Up next" in place of "Offline" (user 2026-11-04; the cache pill at the top saves).
         tool(const Icon(Icons.queue_music, size: 28), t('Up next'), player.live ? null : () => showUpNext(context, it)),

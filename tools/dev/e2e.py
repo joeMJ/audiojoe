@@ -484,6 +484,27 @@ s, _, _ = call("PUT", "/api/v1/queue", {"items": album[:1], "index": 0, "entry":
 s2, _, _ = call("GET", "/api/v1/queue/e2e:q2", token=B)
 check("queue: one title removes it", s == 200 and s2 == 404, f"{s}/{s2}")
 
+# ------------------------------------------------------------------ rename a device (0.2.2)
+# A shown name only: the device name stays the key (session, /me, commands).
+s, b, _ = call("PUT", f"/api/v1/sessions/{sid_b}/label", {"label": "  Office PC "}, token=A)
+s2, me, _ = call("GET", "/api/v1/me", token=B)
+s3, ses, _ = call("GET", "/api/v1/sessions", token=B)
+s4, devs, _ = call("GET", "/api/v1/devices", token=A)
+lb = next((x.get("label") for x in ses if x["device"] == "e2e-tesla"), "?")
+ld = next((x.get("label") for x in devs if x["device"] == "e2e-tesla"), "?")
+check("rename: another device renames B, device name stays", s == 200 and b.get("label") == "Office PC" and s2 == 200
+      and me["device"] == "e2e-tesla" and lb == "Office PC" and ld == "Office PC", f"{s} {b} {me} {lb} {ld}")
+s, _, _ = call("PUT", f"/api/v1/sessions/{sid_b}/label", {"label": "E2E-PHONE"}, token=B)
+check("rename: name of another device (case alike) 409", s == 409, str(s))
+s, _, _ = call("PUT", f"/api/v1/sessions/{sid_b}/label", {"label": "a\u200bb"}, token=B)
+s2, _, _ = call("PUT", f"/api/v1/sessions/{sid_b}/label", {"label": "x" * 41}, token=B)
+check("rename: invisible character and 41 characters 400", s == 400 and s2 == 400, f"{s}/{s2}")
+s, _, _ = call("PUT", "/api/v1/sessions/999999999/label", {"label": "x"}, token=B)
+check("rename: unknown session 404", s == 404, str(s))
+s, _, _ = call("PUT", f"/api/v1/sessions/{sid_b}/label", {"label": " "}, token=B)
+s2, ses, _ = call("GET", "/api/v1/sessions", token=A)
+check("rename: empty gives the device name back", s == 200 and all(x.get("label") is None for x in ses if x["device"] == "e2e-tesla"), str(s))
+
 # ------------------------------------------------------------------ cleanup, logout
 s, _, _ = call("DELETE", f"/api/v1/sessions/{sid_b}", token=A)
 s2, _, _ = call("GET", "/api/v1/me", token=B)

@@ -54,6 +54,9 @@ class Remote extends ChangeNotifier {
 
   Device? device(String name) => devices.where((d) => d.name == name).firstOrNull;
 
+  /// The name a device is shown with: given in the settings, else its device name.
+  String shown(String name) => device(name)?.shown ?? name;
+
   Future<void> refresh() async {
     try {
       devices = [for (final j in await api.call('GET', '/devices') as List) Device.fromJson(j as Map)];
@@ -152,7 +155,7 @@ class Remote extends ChangeNotifier {
       return r is Map ? r : null;
     } on ApiError catch (e) {
       if (e.status == 409 && room == null) {
-        message.value = t('{device} is offline.', {'device': name});
+        message.value = t('{device} is offline.', {'device': shown(name)});
         await _ended();
         return null;
       }

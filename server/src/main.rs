@@ -37,7 +37,7 @@ use axum::{
     extract::DefaultBodyLimit,
     http::{header, HeaderName, HeaderValue},
     middleware,
-    routing::{delete, get, post},
+    routing::{delete, get, post, put},
     Json, Router,
 };
 use tower_http::{
@@ -146,6 +146,7 @@ async fn main() -> Result<()> {
         .route("/api/v1/me", get(auth::me))
         .route("/api/v1/sessions", get(auth::sessions))
         .route("/api/v1/sessions/{id}", delete(auth::revoke))
+        .route("/api/v1/sessions/{id}/label", put(devices::label))
         .route("/api/v1/podcasts/search", get(podcasts::search))
         .route("/api/v1/sources", get(sources::list).post(sources::add))
         .route("/api/v1/sources/{id}", delete(sources::delete))

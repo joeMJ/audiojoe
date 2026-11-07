@@ -18,6 +18,7 @@ import '../appearance.dart';
 import '../downloads.dart';
 import '../l10n.dart';
 import '../prefs.dart';
+import '../remote.dart';
 import '../storage.dart';
 import '../updates.dart';
 import 'common.dart';
@@ -82,9 +83,21 @@ class _SettingsViewState extends State<SettingsView> {
           for (final s in list.cast<Map>())
             ItemRow(
               leading: const Icon(Icons.devices, size: 32),
-              title: '${s['device']}${s['current'] == true ? ' (${t('this device')})' : ''}',
+              title: '${s['label'] ?? s['device']}${s['current'] == true ? ' (${t('this device')})' : ''}',
               subtitle: t('last seen {ago}', {'ago': ago('${s['last_seen']}')}),
               trailing: [
+                // Any device of the account renames any of them (user 2026-11-07).
+                TextButton(
+                  key: ValueKey('rename-${s['id']}'),
+                  onPressed: () async {
+                    final done = await showDialog<bool>(context: context, builder: (_) => RenameDialog(session: s));
+                    if (done == true) {
+                      reload();
+                      unawaited(remote.refresh());
+                    }
+                  },
+                  child: Text(t('Rename')),
+                ),
                 if (s['current'] != true)
                   TextButton(
                     onPressed: () async {
@@ -1467,5 +1480,71 @@ class AppearanceSettings extends StatelessWidget {
             onSelectionChanged: (s) => setAppearance(s.first),
           ),
         ]),
+      );
+}
+
+/// Gives a device the name it is shown with (`PUT /sessions/{id}/label`); empty: its device
+/// name again. The device name stays the key (user 2026-11-07, "A").
+class RenameDialog extends StatefulWidget {
+  final Map session;
+  const RenameDialog({super.key, required this.session});
+
+  @override
+  State<RenameDialog> createState() => _RenameDialogState();
+}
+
+class _RenameDialogState extends State<RenameDialog> {
+  late final _name = TextEditingController(text: '${widget.session['label'] ?? widget.session['device']}');
+  String? _error;
+  bool _busy = false;
+
+  Future<void> _save() async {
+    setState(() => _busy = true);
+    try {
+      await api.call('PUT', '/sessions/${widget.session['id']}/label', body: {'label': _name.text});
+      if (mounted) Navigator.pop(context, true);
+    } on ApiError catch (e) {
+      setState(() {
+        _busy = false;
+        _error = e.status == 409
+            ? t('Name already taken')
+            : e.status == 400
+                ? t('Not allowed: at most 40 characters, no invisible characters')
+                : e.message;
+      });
+    } catch (e) {
+      setState(() {
+        _busy = false;
+        _error = '$e';
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: Text(t('Rename device')),
+        content: TextField(
+          key: const ValueKey('rename-field'),
+          controller: _name,
+          autofocus: true,
+          maxLength: 40,
+          decoration: InputDecoration(
+            labelText: t('Name'),
+            helperText: t('Empty: {name}', {'name': '${widget.session['device']}'}),
+            errorText: _error,
+          ),
+          onChanged: (_) => _error == null ? null : setState(() => _error = null),
+          onSubmitted: (_) => _busy ? null : _save(),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(t('Cancel'))),
+          FilledButton(key: const ValueKey('rename-save'), onPressed: _busy ? null : _save, child: Text(t('Save'))),
+        ],
       );
 }

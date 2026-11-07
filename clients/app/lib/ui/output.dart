@@ -35,6 +35,16 @@ Widget _primary(String label, VoidCallback? onPressed) =>
 Widget _secondary(String label, VoidCallback? onPressed) =>
     FilledButton.tonal(style: _size(FilledButton.styleFrom()), onPressed: onPressed, child: Text(label, maxLines: 1));
 
+/// "Here" and "There" in red, apart from the blue buttons (user 2026-11-07).
+Widget _move(String label, VoidCallback? onPressed) => Builder(builder: (context) {
+      final k = context.tok;
+      final dark = Theme.of(context).brightness == Brightness.dark;
+      return FilledButton(
+          style: _size(FilledButton.styleFrom(backgroundColor: k.bad, foregroundColor: dark ? k.badBg : Colors.white)),
+          onPressed: onPressed,
+          child: Text(label, maxLines: 1));
+    });
+
 /// Pill as high and wide as the buttons.
 class _Pill extends StatelessWidget {
   final String text;
@@ -142,7 +152,7 @@ class _OutputOverlayState extends State<OutputOverlay> {
         builder: (context, _) {
           final k = context.tok;
           final apps = remote.devices.where((d) => !d.speaker).toList()
-            ..sort((a, b) => a.current != b.current ? (a.current ? -1 : 1) : a.name.compareTo(b.name));
+            ..sort((a, b) => a.current != b.current ? (a.current ? -1 : 1) : a.shown.toLowerCase().compareTo(b.shown.toLowerCase()));
           if (!apps.any((d) => d.current)) {
             apps.insert(0, Device(name: api.device, kind: deviceKind, state: 'stopped', key: '', title: '', subtitle: '',
                 updatedAt: '', positionMs: 0, online: true, current: true));
@@ -223,7 +233,7 @@ class _OutputOverlayState extends State<OutputOverlay> {
             player.playing ? t('playing') : t('paused'),
             it.title,
             if (!player.live && player.duration > 0) t('{n} of {m}', {'n': clock(player.position), 'm': clock(player.duration)}),
-            if (by != null) t('started by {device}', {'device': by}),
+            if (by != null) t('started by {device}', {'device': remote.shown(by)}),
           ].join(' · ');
     if (out != null) {
       final members = out.grouped ? sonos.members : const <Room>[];
@@ -241,7 +251,7 @@ class _OutputOverlayState extends State<OutputOverlay> {
             _VolumeLine(t('Volume'), sonos.level, (v) => sonos.setVolume(v)),
           const SizedBox(height: 8),
           Wrap(spacing: 8, runSpacing: 8, children: [
-            _primary(t('Here'), () => _run(() => remote.takeHere(remote.target!), close: true)),
+            _move(t('Here'), () => _run(() => remote.takeHere(remote.target!), close: true)),
             _secondary(t('Stop'), () => _run(() => remote.stop(remote.target!))),
             grouping ? _primary(t('Group'), () => setState(() => grouping = false)) : _secondary(t('Group'), _startGrouping),
             // Snooze (user 2026-11-07): the speaker's own sleep timer, remaining minutes on the button.
@@ -259,11 +269,11 @@ class _OutputOverlayState extends State<OutputOverlay> {
         context,
         selected: true,
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          _head(context, Icons.smartphone, target, [if (d != null) _kindLabel(d.kind), line()].where((s) => s.isNotEmpty).join(' · '),
+          _head(context, Icons.smartphone, remote.shown(target), [if (d != null) _kindLabel(d.kind), line()].where((s) => s.isNotEmpty).join(' · '),
               [_Pill(t('controlled'), kind: 'accent')]),
           const SizedBox(height: 10),
           Wrap(spacing: 8, runSpacing: 8, children: [
-            _primary(t('Here'), () => _run(() => remote.takeHere(target), close: true)),
+            _move(t('Here'), () => _run(() => remote.takeHere(target), close: true)),
             _secondary(t('Stop'), () => _run(() => remote.stop(target))),
           ]),
         ]),
@@ -272,7 +282,7 @@ class _OutputOverlayState extends State<OutputOverlay> {
     return _card(
       context,
       selected: true,
-      child: _head(context, Icons.smartphone, '${t('This device')} · ${api.device}', line(), [_Pill(t('here'), kind: 'accent')]),
+      child: _head(context, Icons.smartphone, '${t('This device')} · ${remote.shown(api.device)}', line(), [_Pill(t('here'), kind: 'accent')]),
     );
   }
 
@@ -302,10 +312,10 @@ class _OutputOverlayState extends State<OutputOverlay> {
   Widget _app(BuildContext context, Device d) {
     final k = context.tok;
     if (d.current) {
-      final what = remote.active ? t('controls {device}', {'device': sonos.output?.label ?? remote.target!}) : '';
+      final what = remote.active ? t('controls {device}', {'device': sonos.output?.label ?? remote.shown(remote.target!)}) : '';
       return _card(
         context,
-        child: _head(context, Icons.smartphone, '${t('This device')} · ${d.name}', [_kindLabel(deviceKind), what].where((s) => s.isNotEmpty).join(' · '),
+        child: _head(context, Icons.smartphone, '${t('This device')} · ${d.shown}', [_kindLabel(deviceKind), what].where((s) => s.isNotEmpty).join(' · '),
             [_Pill(t('here'), kind: 'accent')]),
       );
     }
@@ -320,15 +330,15 @@ class _OutputOverlayState extends State<OutputOverlay> {
               _Pill(t('controlled'), kind: 'accent')
             else
               _secondary(t('Control'), d.online ? () => _run(() => remote.control(d.name), close: true) : null),
-            _primary(t('Here'), d.online && d.key.isNotEmpty ? () => _run(() => remote.takeHere(d.name), close: true) : null),
+            _move(t('Here'), d.online && d.key.isNotEmpty ? () => _run(() => remote.takeHere(d.name), close: true) : null),
             _secondary(t('Stop'), d.online && d.state != 'stopped' ? () => _run(() => remote.stop(d.name)) : null),
-            _secondary(t('There'), d.online && !controlled && player.item != null ? () => _run(() => remote.sendTo(d.name), close: true) : null),
+            _move(t('There'), d.online && !controlled && player.item != null ? () => _run(() => remote.sendTo(d.name), close: true) : null),
           ];
     return _card(
       context,
       dim: !d.online && !d.web,
       child: LayoutBuilder(builder: (context, c) {
-        final head = _head(context, d.web ? Icons.public : Icons.smartphone, d.web ? '${t('Web player')} · ${d.name}' : d.name, line, const []);
+        final head = _head(context, d.web ? Icons.public : Icons.smartphone, d.web ? '${t('Web player')} · ${d.shown}' : d.shown, line, const []);
         final row = Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.end, children: buttons);
         // Narrow: the buttons below the name.
         if (c.maxWidth < 560) {
@@ -371,7 +381,7 @@ class _OutputOverlayState extends State<OutputOverlay> {
         pill,
         if (!inOutput) ...[
           const SizedBox(width: 8),
-          _primary(t('There'), canPlay ? () => _run(() => sonos.playOn(r), close: true) : null),
+          _move(t('There'), canPlay ? () => _run(() => sonos.playOn(r), close: true) : null),
         ],
       ]),
     );

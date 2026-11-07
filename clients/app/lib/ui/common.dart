@@ -231,7 +231,10 @@ class _LoaderState<T> extends State<Loader<T>> {
             );
           }
           if (!s.hasData) return const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()));
-          return widget.builder(context, s.data as T, () => setState(() => _f = widget.load()));
+          // A block, not `=> _f = …`: setState must not get the Future back (assertion in debug builds).
+          return widget.builder(context, s.data as T, () => setState(() {
+                _f = widget.load();
+              }));
         },
       );
 }

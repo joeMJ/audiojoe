@@ -267,11 +267,14 @@ pub async fn sessions(State(state): State<AppState>, user: CurrentUser) -> ApiRe
         let mut stmt = c.prepare(
             "SELECT id, device, created_at, last_seen, expires_at FROM session WHERE user_id = ?1 ORDER BY last_seen DESC",
         )?;
+        let labels = crate::devices::labels(c, user.id)?;
         let rows = stmt
             .query_map([user.id], |r| {
                 let id: i64 = r.get(0)?;
-                Ok(serde_json::json!({ "id": id, "device": r.get::<_, String>(1)?, "created_at": r.get::<_, String>(2)?,
-                    "last_seen": r.get::<_, String>(3)?, "expires_at": r.get::<_, String>(4)?, "current": id == user.session_id }))
+                let device: String = r.get(1)?;
+                Ok(serde_json::json!({ "id": id, "label": labels.get(&device), "device": device,
+                    "created_at": r.get::<_, String>(2)?, "last_seen": r.get::<_, String>(3)?,
+                    "expires_at": r.get::<_, String>(4)?, "current": id == user.session_id }))
             })?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(Json(serde_json::Value::Array(rows)))

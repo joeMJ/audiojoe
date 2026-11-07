@@ -11,6 +11,7 @@ import '../downloads.dart';
 import '../l10n.dart';
 import '../models.dart';
 import '../player.dart';
+import '../remote.dart';
 import '../store.dart';
 import '../sync.dart';
 import 'common.dart';
@@ -245,7 +246,7 @@ class _ContinueViewState extends State<ContinueView> {
               subtitle: e.subtitle, image: coverOf(e.key), positionMs: e.positionMs, durationMs: e.durationMs);
           final info = e.positionMs > 0
               ? '${clock(e.positionMs)}${e.durationMs != null ? ' / ${clock(e.durationMs!)}' : ''}'
-                  '${e.updatedAt == null ? '' : ' · ${e.device.isEmpty ? ago(e.updatedAt!) : t('Last on {device} · {ago}', {'device': e.device, 'ago': ago(e.updatedAt!)})}'}'
+                  '${e.updatedAt == null ? '' : ' · ${e.device.isEmpty ? ago(e.updatedAt!) : t('Last on {device} · {ago}', {'device': remote.shown(e.device), 'ago': ago(e.updatedAt!)})}'}'
               : e.subtitle;
           return KeyedSubtree(
             key: ValueKey(e.key),

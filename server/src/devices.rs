@@ -13,6 +13,7 @@ use axum::{
     extract::{Path, State},
     Json,
 };
+use rusqlite::OptionalExtension;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -122,7 +123,118 @@ pub fn list(c: &rusqlite::Connection, online: &Online, user: i64, me: &str) -> r
             "current": device == me,
         }))
     })?;
+    let mut rows = rows.collect::<rusqlite::Result<Vec<Value>>>()?;
+    let labels = labels(c, user)?;
+    for d in &mut rows {
+        let l = d["device"].as_str().and_then(|n| labels.get(n)).cloned();
+        d["label"] = json!(l);
+    }
+    Ok(rows)
+}
+
+/// The names given to the user's devices (device name -> label).
+pub fn labels(c: &rusqlite::Connection, user: i64) -> rusqlite::Result<HashMap<String, String>> {
+    let mut st = c.prepare("SELECT device, label FROM device_label WHERE user_id = ?1")?;
+    let rows = st.query_map([user], |r| Ok((r.get(0)?, r.get(1)?)))?;
     rows.collect()
+}
+
+/// Longest name a device can be given, in characters.
+const LABEL_MAX: usize = 40;
+
+/// Checks a name to give a device (user 2026-11-07: 1–40 characters, no control or format
+/// characters); returns it without surrounding white space, `None` for an empty one (back to the
+/// device name).
+pub fn clean_label(raw: &str) -> Result<Option<String>, ApiError> {
+    let l = raw.trim();
+    if l.is_empty() {
+        return Ok(None);
+    }
+    if l.chars().count() > LABEL_MAX {
+        return Err(ApiError::BadRequest(format!("name longer than {LABEL_MAX} characters")));
+    }
+    let cs: Vec<char> = l.chars().collect();
+    for (i, &ch) in cs.iter().enumerate() {
+        // The zero width joiner only inside an emoji (e.g. 👨‍👩‍👧), where it is not invisible.
+        let joins = ch == '\u{200D}' && i > 0 && i + 1 < cs.len() && pictograph(cs[i - 1]) && pictograph(cs[i + 1]);
+        if ch.is_control() || (format_char(ch) && !joins) {
+            return Err(ApiError::BadRequest(format!("name contains an invisible character (U+{:04X})", ch as u32)));
+        }
+    }
+    Ok(Some(l.to_string()))
+}
+
+/// Emoji and other pictographs, and the variation selector after them.
+fn pictograph(c: char) -> bool {
+    matches!(c as u32, 0x2300..=0x23FF | 0x2600..=0x27BF | 0x2B00..=0x2BFF | 0xFE0F | 0x1F000..=0x1FAFF)
+}
+
+/// Unicode format characters (general category Cf): invisible, they change how text runs or joins.
+fn format_char(c: char) -> bool {
+    matches!(c as u32,
+        0x00AD | 0x0600..=0x0605 | 0x061C | 0x06DD | 0x070F | 0x0890..=0x0891 | 0x08E2 | 0x180E
+        | 0x200B..=0x200F | 0x202A..=0x202E | 0x2060..=0x2064 | 0x2066..=0x206F | 0xFEFF | 0xFFF9..=0xFFFB
+        | 0x110BD | 0x110CD | 0x13430..=0x1343F | 0x1BCA0..=0x1BCA3 | 0x1D173..=0x1D17A | 0xE0001 | 0xE0020..=0xE007F)
+}
+
+/// Gives the device of session `session` the name `label` (`None`: back to the device name);
+/// returns the device name. A name another device of the account shows already (labels and
+/// device names, upper and lower case alike) is refused.
+pub fn set_label(c: &mut rusqlite::Connection, user: i64, session: i64, label: Option<&str>) -> Result<String, ApiError> {
+    let tx = c.transaction()?;
+    let device: String = tx
+        .query_row("SELECT device FROM session WHERE id = ?1 AND user_id = ?2", (session, user), |r| r.get(0))
+        .optional()?
+        .ok_or(ApiError::NotFound)?;
+    match label {
+        None => {
+            tx.execute("DELETE FROM device_label WHERE user_id = ?1 AND device = ?2", (user, &device))?;
+        }
+        Some(l) => {
+            let want = l.to_lowercase();
+            let labels = labels(&tx, user)?;
+            let mut names = tx.prepare(
+                "SELECT device FROM session WHERE user_id = ?1 UNION SELECT device FROM device_state WHERE user_id = ?1",
+            )?;
+            let others: Vec<String> = names.query_map([user], |r| r.get(0))?.collect::<Result<_, _>>()?;
+            drop(names);
+            let taken = others
+                .iter()
+                .filter(|d| **d != device)
+                .any(|d| labels.get(d).unwrap_or(d).to_lowercase() == want);
+            if taken {
+                return Err(ApiError::Conflict("name already taken".into()));
+            }
+            tx.execute(
+                "INSERT INTO device_label (user_id, device, label) VALUES (?1, ?2, ?3)
+                 ON CONFLICT (user_id, device) DO UPDATE SET label = excluded.label",
+                (user, &device, l),
+            )?;
+        }
+    }
+    tx.commit()?;
+    Ok(device)
+}
+
+#[derive(Deserialize)]
+pub struct Label {
+    #[serde(default)]
+    label: String,
+}
+
+/// `PUT /sessions/{id}/label`: names the device of a session; every device of the account may
+/// do it. The other devices learn it from the `device` event.
+pub async fn label(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(session): Path<i64>,
+    Json(b): Json<Label>,
+) -> ApiResult<Json<Value>> {
+    let label = clean_label(&b.label)?;
+    let l = label.clone();
+    let device = with_db(&state.db, move |c| set_label(c, user.id, session, l.as_deref())).await?;
+    notify(&state, user.id, &device).await;
+    Ok(Json(json!({ "device": device, "label": label })))
 }
 
 /// One device as in `list`, for the `device` event.
@@ -295,6 +407,51 @@ mod tests {
         assert_eq!(l[1]["device"], "Pixel");
         assert_eq!(l[1]["online"], false);
         assert_eq!(l[1]["current"], true);
+    }
+
+    #[test]
+    fn label_rules() {
+        assert_eq!(clean_label("  Office PC ").unwrap().as_deref(), Some("Office PC"));
+        for ok in ["Tablet 13", "Kitchen phone", "Pat's Büro", "Küche 🎵", "👨\u{200D}👩\u{200D}👧 Familie"] {
+            assert!(clean_label(ok).unwrap().is_some(), "{ok}");
+        }
+        assert_eq!(clean_label("   ").unwrap(), None);
+        assert!(clean_label(&"x".repeat(40)).is_ok());
+        assert!(clean_label(&"ä".repeat(41)).is_err());
+        for bad in ["a\nb", "a\tb", "a\u{200B}b", "a\u{200D}b", "\u{202E}abc", "a\u{FEFF}", "a\u{0007}"] {
+            assert!(matches!(clean_label(bad), Err(ApiError::BadRequest(_))), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn a_label_names_the_device_and_nothing_else_changes() {
+        let mut c = db();
+        let online: Online = Default::default();
+        report(&c, 1, "Linux", &rep("playing", "episode:1", 1000, "2026-11-03T10:00:00.000Z")).unwrap();
+        let pixel: i64 = c.query_row("SELECT id FROM session WHERE device = 'Pixel'", [], |r| r.get(0)).unwrap();
+        let linux: i64 = c.query_row("SELECT id FROM session WHERE device = 'Linux'", [], |r| r.get(0)).unwrap();
+        assert_eq!(set_label(&mut c, 1, pixel, Some("Kitchen phone")).unwrap(), "Pixel");
+        let l = list(&c, &online, 1, "Pixel").unwrap();
+        assert_eq!((l[0]["device"].as_str(), l[0]["label"].is_null()), (Some("Linux"), true));
+        assert_eq!((l[1]["device"].as_str(), l[1]["label"].as_str()), (Some("Pixel"), Some("Kitchen phone")));
+        assert_eq!(l[1]["current"], true);
+        // Keys stay: sessions and reports still under the device name.
+        let n: i64 = c.query_row("SELECT COUNT(*) FROM session WHERE device = 'Pixel'", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 1);
+        assert_eq!(one(&c, &online, 1, "Pixel").unwrap().unwrap()["label"], "Kitchen phone");
+        // Taken: another device's label or its device name, upper and lower case alike.
+        assert!(matches!(set_label(&mut c, 1, linux, Some("KITCHEN PHONE")), Err(ApiError::Conflict(_))));
+        assert!(matches!(set_label(&mut c, 1, pixel, Some("linux")), Err(ApiError::Conflict(_))));
+        // The own name in other case, and a new name, are fine.
+        assert!(set_label(&mut c, 1, pixel, Some("Kitchen Phone")).is_ok());
+        assert!(set_label(&mut c, 1, linux, Some("Office PC")).is_ok());
+        // The device name of a renamed device is free again ("Linux" is shown as "Office PC").
+        assert!(set_label(&mut c, 1, pixel, Some("Linux")).is_ok());
+        // Back to the device name, and nobody else's session.
+        set_label(&mut c, 1, pixel, None).unwrap();
+        assert!(labels(&c, 1).unwrap().get("Pixel").is_none());
+        assert!(matches!(set_label(&mut c, 2, pixel, Some("x")), Err(ApiError::NotFound)));
+        assert!(matches!(set_label(&mut c, 1, 999, Some("x")), Err(ApiError::NotFound)));
     }
 
     #[test]
