@@ -452,6 +452,7 @@ class Downloads extends ChangeNotifier {
   /// are marked and fetched again, finished episodes and books are deleted where switched on.
   Future<void> check() async {
     await takeOver();
+    await fillAlbums();
     for (final e in entries) {
       if (e.status == 'loading') e.status = 'queued';
       if (e.status == 'done') {
@@ -492,6 +493,36 @@ class Downloads extends ChangeNotifier {
       moved++;
     }
     return moved;
+  }
+
+  /// Titles saved without their album (0.1.x kept none, user 2026-11-07 "1 ja") get it from the
+  /// saved item, so the view shows the album as one line; title and artist of the album from
+  /// entries saved before or from the server. Offline the title is filled at a later start.
+  Future<int> fillAlbums() async {
+    final byAlbum = <String, List<OfflineEntry>>{};
+    for (final e in entries.where((e) => e.kind == 'track' && (e.album == null || e.albumTitle == null))) {
+      final j = Stores.items.get(e.key);
+      final album = e.album ?? (j == null ? null : Item.fromJson(j).album);
+      if (album != null) byAlbum.putIfAbsent(album, () => []).add(e);
+    }
+    var filled = 0;
+    for (final MapEntry(key: album, value: list) in byAlbum.entries) {
+      final a = await _albumInfo(album, null, list.length);
+      for (final e in list) {
+        final now = entry(e.key);
+        if (now == null) continue;
+        Stores.offline.put(e.key, {
+          ...now.toJson(),
+          'album': album,
+          'album_title': a.title,
+          'album_subtitle': a.subtitle,
+          'album_count': a.count ?? now.albumCount,
+        });
+        filled++;
+      }
+    }
+    if (filled > 0) notifyListeners();
+    return filled;
   }
 
   /// An entry's files (whole file, parts, partial downloads) that exist, as (from, to) pairs.

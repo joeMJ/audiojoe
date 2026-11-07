@@ -222,6 +222,39 @@ void main() {
     expect(File('${old.path}/episode_9').existsSync(), isFalse);
   });
 
+  test('0.1.x titles of one album become one line (user 2026-11-07 "1 ja")', () async {
+    final old = Directory('${Stores.dir.path}/offline')..createSync(recursive: true);
+    for (final n in [1, 2]) {
+      final t = track(n, album: 'jellyfin:1:a');
+      File('${old.path}/jellyfin_1_t$n').writeAsBytesSync(List.filled(10, 1));
+      Stores.items.put(t.key, t.toJson());
+      Stores.offline.put(t.key, {
+        'key': t.key, 'title': t.title, 'subtitle': '', 'added': '2026-01-0$n', 'status': 'done',
+        'progress': 1, 'bytes': 10, 'error': null, 'quality': null,
+      });
+    }
+    // A single title without album stays on its own line.
+    File('${old.path}/jellyfin_1_t3').writeAsBytesSync(List.filled(10, 1));
+    Stores.items.put(track(3).key, track(3).toJson());
+    Stores.offline.put(track(3).key, {
+      'key': track(3).key, 'title': 'T3', 'subtitle': '', 'added': '2026-01-03', 'status': 'done',
+      'progress': 1, 'bytes': 10, 'error': null, 'quality': null,
+    });
+    api.online.value = false;
+    await downloads.check();
+    expect(downloads.groups.length, 2);
+    final g = downloads.groups.firstWhere((g) => g.id == 'jellyfin:1:a');
+    expect((g.entries.length, g.isAlbum, g.section), (2, true, 'done'));
+    expect(downloads.file('jellyfin:1:t1').lengthSync(), 10);
+    // Album title known from an entry saved later: filled at the next start.
+    Stores.offline.put('jellyfin:1:t9', {
+      ...Stores.offline.get('jellyfin:1:t1')!, 'key': 'jellyfin:1:t9', 'album_title': 'Kind of Blue', 'album_subtitle': 'Miles Davis',
+    });
+    expect(await downloads.fillAlbums(), 2);
+    expect(downloads.groups.firstWhere((g) => g.id == 'jellyfin:1:a').title, 'Kind of Blue');
+    expect(await downloads.fillAlbums(), 0);
+  });
+
   test('"Change …" redirects only new downloads; saved ones keep their folder', () async {
     server.gate('episode:1').complete();
     await downloads.add([episode(1)]);
