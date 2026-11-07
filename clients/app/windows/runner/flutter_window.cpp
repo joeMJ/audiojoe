@@ -119,12 +119,16 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   // hidden title bar the client area is the window minus invisible borders; they are taken from
   // the window as it is, since window_manager sets them (8 px left, right, bottom; 1 px top on
   // Windows 10).
+  // 0.2.0: Windows asks for the limit while a maximised window is being restored; the borders
+  // measured then are those of the maximised window (16 px high instead of 9), so the restored
+  // window came back 8 px higher than before (VM 2026-11-04: 736 × 556, client 548). Maximised or
+  // minimised, the borders last measured in the normal state count.
   if (message == WM_GETMINMAXINFO) {
+    static LONG dx = 16, dy = 9;
     UINT dpi = FlutterDesktopGetDpiForMonitor(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST));
     double scale = dpi / 96.0;
     RECT window, client;
-    LONG dx = 16, dy = 9;
-    if (!IsIconic(hwnd) && GetWindowRect(hwnd, &window) && GetClientRect(hwnd, &client) &&
+    if (!IsIconic(hwnd) && !IsZoomed(hwnd) && GetWindowRect(hwnd, &window) && GetClientRect(hwnd, &client) &&
         client.right > 0 && client.bottom > 0) {
       dx = (window.right - window.left) - client.right;
       dy = (window.bottom - window.top) - client.bottom;

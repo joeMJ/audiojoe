@@ -96,11 +96,28 @@ ganze Album mit, samt ⏮ ⏭ und dem nächsten Titel.
 
 ## Offline
 
-Folgen, Hörbücher und Alben lassen sich mit dem Pfeil nach unten speichern. Der Knopf oben (App)
-bzw. **Offline** (Web-Player) zeigt, was gespeichert ist; der Web-Player auch, wie viel Platz es
-belegt. Hi-Res-FLAC speichert der Web-Player als 48 kHz,
-damit es im Auto läuft. Im Web-Player räumt **Gespielte Medien aus dem Cache entfernen** nach
-dem Hören auf.
+Folgen, Hörbücher und Alben lassen sich mit dem Pfeil nach unten speichern. In den Apps zeigt
+**Downloads** (über **Ablage** oben bzw. **Einstellungen → Ablage → Downloads öffnen**), was lädt,
+wartet, teilweise oder ganz geladen ist, mit einem Filter nach Podcasts, Hörbüchern und Musik.
+Höchstens zwei Downloads laufen gleichzeitig. Ein Album und ein Hörbuch sind je ein Eintrag und
+werden ganz gelöscht; bei einem angefangenen Album lädt **Rest laden** die übrigen Titel.
+
+Unter **Einstellungen → Ablage**:
+- **Mindestens frei lassen** (ab 5 GB): darunter beginnt kein Download, wartende laden weiter,
+  sobald wieder Platz ist.
+- **Nach dem Hören löschen** für Podcasts (ab Werk an) und Hörbücher (ab Werk aus): eine
+  beendete Folge bzw. ein beendetes Hörbuch wird gelöscht, sobald es nicht mehr spielt. Musik
+  bleibt, bis man sie löscht.
+- Linux und Windows: der **Ablageordner** (ab Werk `audiojoe` im persönlichen Ordner) mit den
+  Unterordnern `podcasts`, `audiobooks` und `music`. **Ändern …** legt Neues künftig im anderen
+  Ordner ab, Gespeichertes bleibt, wo es ist. **Verschieben nach …** nimmt alles mit: auf
+  demselben Laufwerk wird umbenannt, sonst kopiert, die Größe geprüft und erst dann das
+  Original gelöscht; ein Abbruch hält nach der laufenden Datei an. Solange Downloads laufen oder
+  warten, ist Verschieben gesperrt. Android speichert im App-Speicher.
+
+Der **Offline**-Knopf des Web-Players zeigt, was gespeichert ist und wie viel Platz es belegt.
+Hi-Res-FLAC speichert der Web-Player als 48 kHz, damit es im Auto läuft. Im Web-Player räumt
+**Gespielte Medien aus dem Cache entfernen** nach dem Hören auf.
 
 ## Im Auto (Web-Player)
 

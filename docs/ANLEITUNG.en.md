@@ -94,8 +94,26 @@ whole album comes along, with ⏮ ⏭ and the next title.
 
 ## Offline
 
-Episodes, audiobooks and albums are saved with the down arrow. The button at the top (app) or
-**Offline** (web player) shows what is saved; the web player also how much space it takes. The web
+Episodes, audiobooks and albums are saved with the down arrow. In the apps **Downloads** (from
+**Storage** at the top or **Settings → Storage → Open downloads**) shows what is loading, waiting,
+partly or fully loaded, with a filter for podcasts, audiobooks and music. At most two downloads
+run at a time. An album and an audiobook are one entry each and are deleted whole; for a started
+album **Load rest** fetches the other titles.
+
+Under **Settings → Storage**:
+- **Keep at least free** (from 5 GB): below it no download starts; waiting ones load once there
+  is room again.
+- **Delete after listening** for podcasts (on by default) and audiobooks (off by default): a
+  finished episode or audiobook is deleted once it no longer plays. Music stays until you delete
+  it.
+- Linux and Windows: the **storage folder** (by default `audiojoe` in the home folder) with the
+  sub-folders `podcasts`, `audiobooks` and `music`. **Change …** puts new downloads into another
+  folder, saved ones stay where they are. **Move to …** takes everything along: on the same drive
+  it renames, otherwise it copies, checks the size and only then deletes the original; cancelling
+  stops after the current file. While downloads run or wait, moving is blocked. Android keeps the
+  downloads in the app storage.
+
+The web player's **Offline** button shows what is saved and how much space it takes. The web
 player saves hi-res FLAC as 48 kHz so that it plays in the car. In the web player **Remove played
 media from the cache** tidies up after listening.
 
