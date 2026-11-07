@@ -1222,11 +1222,33 @@ Future<void> showAbout(BuildContext context) async {
 /// download starts), "Delete after listening" and the way to the downloads. Linux and Windows
 /// also choose the folder: "Change …" and "Move to …" as in tvjoe (`ablage.rs` lines 1503–1545,
 /// `umzug.rs`). Per device, not synced.
+/// Asks for the free space once when the page opens (Windows VM 2026-11-07: "Storage" showed
+/// 18,8 GB free while the drive had 18,3 GB).
+class _RefreshOnOpen extends StatefulWidget {
+  const _RefreshOnOpen({required this.child});
+  final Widget child;
+  @override
+  State<_RefreshOnOpen> createState() => _RefreshOnOpenState();
+}
+
+class _RefreshOnOpenState extends State<_RefreshOnOpen> {
+  @override
+  void initState() {
+    super.initState();
+    unawaited(storage.refresh());
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
 class StorageSettings extends StatelessWidget {
   const StorageSettings({super.key});
 
   @override
-  Widget build(BuildContext context) => ListenableBuilder(
+  Widget build(BuildContext context) => _RefreshOnOpen(child: _page(context));
+
+  Widget _page(BuildContext context) => ListenableBuilder(
         listenable: Listenable.merge([storage, downloads]),
         builder: (context, _) {
           final k = context.tok;

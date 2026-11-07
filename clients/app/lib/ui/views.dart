@@ -1,5 +1,7 @@
 // The main screens: continue, podcasts, audiobooks, music, downloads.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../api.dart';
@@ -326,6 +328,13 @@ class DownloadsView extends StatefulWidget {
 
 class _DownloadsViewState extends State<DownloadsView> {
   String filter = 'all';
+
+  // "Free" as it is now when the view opens, not as at the last download (Windows VM 2026-11-07).
+  @override
+  void initState() {
+    super.initState();
+    unawaited(storage.refresh());
+  }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
