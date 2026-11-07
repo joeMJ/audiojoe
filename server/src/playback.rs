@@ -301,15 +301,61 @@ pub async fn put_queue(State(state): State<AppState>, user: CurrentUser, Json(q)
     .await
 }
 
-/// The newest queue of any of the user's devices whose current item is `key`.
+/// The queue of one of the user's devices that contains `key`, with `index` at that title.
 pub async fn get_queue(State(state): State<AppState>, user: CurrentUser, Path(key): Path<String>) -> ApiResult<Json<Value>> {
-    with_db(&state.db, move |c| {
-        let data: String = c.query_row(
-            "SELECT data FROM queue WHERE user_id = ?1 AND current_key = ?2 ORDER BY updated_at DESC LIMIT 1",
-            (user.id, key),
-            |r| r.get(0),
-        )?;
-        Ok(Json(serde_json::from_str(&data).map_err(|e| ApiError::Internal(e.into()))?))
-    })
-    .await
+    with_db(&state.db, move |c| Ok(Json(queue_with(c, user.id, &key)?.ok_or(ApiError::NotFound)?))).await
+}
+
+/// A queue whose current title is `key` comes first (its device stopped there), else the newest one
+/// that contains `key` anywhere: a Sonos room moves on in the queue without the app storing it anew,
+/// so "Here" on its second title found no queue and played that title alone (user 2026-11-07).
+pub(crate) fn queue_with(c: &rusqlite::Connection, user: i64, key: &str) -> rusqlite::Result<Option<Value>> {
+    let mut st = c.prepare("SELECT data FROM queue WHERE user_id = ?1 ORDER BY current_key = ?2 DESC, updated_at DESC")?;
+    let rows: Vec<String> = st.query_map((user, key), |r| r.get(0))?.collect::<Result<_, _>>()?;
+    Ok(rows.iter().find_map(|d| {
+        let mut q: Value = serde_json::from_str(d).ok()?;
+        let i = q["items"].as_array()?.iter().position(|it| it["key"] == key)?;
+        q["index"] = json!(i);
+        Some(q)
+    }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn db() -> rusqlite::Connection {
+        let c = crate::db::open_memory().unwrap();
+        c.execute("INSERT INTO user (id, name, password_hash, totp_secret) VALUES (1, 'u', 'x', 'y')", []).unwrap();
+        c
+    }
+
+    fn put(c: &rusqlite::Connection, device: &str, current: &str, data: &str, at: &str) {
+        c.execute("INSERT INTO queue (user_id, device, current_key, data, updated_at) VALUES (1, ?1, ?2, ?3, ?4)", (device, current, data, at))
+            .unwrap();
+    }
+
+    #[test]
+    fn here_on_a_later_title_finds_the_album() {
+        let c = db();
+        // The app sent the album to Sonos at its first title; the speaker is at the second one now.
+        put(&c, "Linux", "a:1", r#"{"items":[{"key":"a:1"},{"key":"a:2"},{"key":"a:3"}],"index":0,"entry":null}"#, "2026-11-07T10:00:00Z");
+        let q = queue_with(&c, 1, "a:2").unwrap().unwrap();
+        assert_eq!(q["index"], 1);
+        assert_eq!(q["items"].as_array().unwrap().len(), 3);
+        assert!(queue_with(&c, 1, "b:1").unwrap().is_none());
+        assert!(queue_with(&c, 2, "a:2").unwrap().is_none());
+    }
+
+    #[test]
+    fn the_queue_stopped_at_the_title_comes_first() {
+        let c = db();
+        put(&c, "Pixel", "a:2", r#"{"items":[{"key":"a:2"},{"key":"a:3"}],"index":0}"#, "2026-11-07T09:00:00Z");
+        put(&c, "Linux", "a:1", r#"{"items":[{"key":"a:1"},{"key":"a:2"},{"key":"a:3"}],"index":0}"#, "2026-11-07T10:00:00Z");
+        let q = queue_with(&c, 1, "a:2").unwrap().unwrap();
+        assert_eq!((q["index"].as_u64(), q["items"].as_array().unwrap().len()), (Some(0), 2));
+        // Without it, the newest queue containing the title.
+        c.execute("DELETE FROM queue WHERE device = 'Pixel'", []).unwrap();
+        assert_eq!(queue_with(&c, 1, "a:3").unwrap().unwrap()["index"], 2);
+    }
 }

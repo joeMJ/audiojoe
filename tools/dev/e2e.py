@@ -470,6 +470,20 @@ if os.environ.get("ABS_TEST_FILE"):
 else:
     print("  (ABS_TEST_FILE not set – Audiobookshelf not tested)")
 
+# ------------------------------------------------------------------ queue ("Here" on a later title)
+# A Sonos room moves on in the album without the app storing the queue anew; "Here" on the second
+# title must still find the album (user 2026-11-07: only the fetched title played).
+album = [{"key": f"e2e:q{i}", "title": f"Q{i}"} for i in (1, 2, 3)]
+s, _, _ = call("PUT", "/api/v1/queue", {"items": album, "index": 0, "entry": None}, token=A)
+s2, q, _ = call("GET", "/api/v1/queue/e2e:q2", token=B)
+check("queue: found by a later title", s == 200 and s2 == 200 and q.get("index") == 1 and len(q.get("items", [])) == 3,
+      f"{s}/{s2} index {q.get('index') if isinstance(q, dict) else q}")
+s, _, _ = call("GET", "/api/v1/queue/e2e:q9", token=B)
+check("queue: unknown title 404", s == 404, str(s))
+s, _, _ = call("PUT", "/api/v1/queue", {"items": album[:1], "index": 0, "entry": None}, token=A)
+s2, _, _ = call("GET", "/api/v1/queue/e2e:q2", token=B)
+check("queue: one title removes it", s == 200 and s2 == 404, f"{s}/{s2}")
+
 # ------------------------------------------------------------------ cleanup, logout
 s, _, _ = call("DELETE", f"/api/v1/sessions/{sid_b}", token=A)
 s2, _, _ = call("GET", "/api/v1/me", token=B)

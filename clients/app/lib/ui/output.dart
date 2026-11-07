@@ -87,6 +87,8 @@ class _OutputOverlayState extends State<OutputOverlay> {
   List<Room>? rooms;
   bool grouping = false;
   Timer? _timer;
+  // "Group" scrolls down to the Sonos rooms, where the boxes to tick are (user 2026-11-07).
+  final _roomsKey = GlobalKey();
 
   @override
   void initState() {
@@ -113,6 +115,14 @@ class _OutputOverlayState extends State<OutputOverlay> {
   }
 
   void _close() => outputOpen.value = false;
+
+  void _startGrouping() {
+    setState(() => grouping = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final c = _roomsKey.currentContext;
+      if (c != null) unawaited(Scrollable.ensureVisible(c, duration: const Duration(milliseconds: 300), curve: Curves.easeOut));
+    });
+  }
 
   /// Runs an action; an error shows below. [close]: back to the playback view first.
   Future<void> _run(Future<void> Function() f, {bool close = false}) async {
@@ -153,16 +163,20 @@ class _OutputOverlayState extends State<OutputOverlay> {
               ]),
             ),
             Expanded(
-              child: ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 16), children: [
+              // Not a lazy ListView: the rooms at the end must exist for "Group" to scroll to them.
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 _selected(context),
                 section(t('Apps and web player')),
                 for (final d in apps) _app(context, d),
                 if ((rooms ?? const []).isNotEmpty) ...[
-                  section(t('Sonos')),
+                  KeyedSubtree(key: _roomsKey, child: section(t('Sonos'))),
                   for (final r in rooms!) _room(context, r),
                 ],
                 if (rooms == null) const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator())),
               ]),
+              ),
             ),
           ]);
         },
@@ -229,7 +243,7 @@ class _OutputOverlayState extends State<OutputOverlay> {
           Wrap(spacing: 8, runSpacing: 8, children: [
             _primary(t('Here'), () => _run(() => remote.takeHere(remote.target!), close: true)),
             _secondary(t('Stop'), () => _run(() => remote.stop(remote.target!))),
-            grouping ? _primary(t('Group'), () => setState(() => grouping = false)) : _secondary(t('Group'), () => setState(() => grouping = true)),
+            grouping ? _primary(t('Group'), () => setState(() => grouping = false)) : _secondary(t('Group'), _startGrouping),
             // Snooze (user 2026-11-07): the speaker's own sleep timer, remaining minutes on the button.
             out.sleepS == null
                 ? _secondary(t('Snooze'), () => _snoozeSheet(context))
