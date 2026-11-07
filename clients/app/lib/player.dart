@@ -742,6 +742,12 @@ class Player extends ChangeNotifier {
     await _show(key, ms);
     final it = item;
     if (it == null || it.key != key) return;
+    // The title may be shown already without its album (e.g. after a restart while Sonos played on):
+    // the queue of the device that played it continues here (user 2026-11-07).
+    if (queue.length < 2) {
+      final other = await _serverQueue(key);
+      if (other != null && _restoreQueue(it, other)) _saveQueue();
+    }
     _cuedMs = _back(it, ms);
     sync.savePosition(Playback(key: key, positionMs: _cuedMs, durationMs: it.durationMs, finished: false, title: it.title,
         subtitle: it.subtitle, device: api.device, updatedAt: DateTime.now().toUtc().toIso8601String()));
