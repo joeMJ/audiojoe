@@ -257,7 +257,7 @@ void main() {
       File('${old.path}/jellyfin_1_t$n').writeAsBytesSync(List.filled(10, 1));
       Stores.items.put(t.key, t.toJson());
       Stores.offline.put(t.key, {
-        'key': t.key, 'title': t.title, 'subtitle': '', 'added': '2026-01-0$n', 'status': 'done',
+        'key': t.key, 'title': t.title, 'subtitle': 'Miles Davis · Kind of Blue', 'added': '2026-01-0$n', 'status': 'done',
         'progress': 1, 'bytes': 10, 'error': null, 'quality': null,
       });
     }
@@ -273,6 +273,8 @@ void main() {
     expect(downloads.groups.length, 2);
     final g = downloads.groups.firstWhere((g) => g.id == 'jellyfin:1:a');
     expect((g.entries.length, g.isAlbum, g.section), (2, true, 'done'));
+    // Offline, no album artist yet: the artist from the titles' "artist · album" ("6 ja").
+    expect(g.subtitle, 'Miles Davis');
     expect(downloads.file('jellyfin:1:t1').lengthSync(), 10);
     // Album title known from an entry saved later: filled at the next start.
     Stores.offline.put('jellyfin:1:t9', {

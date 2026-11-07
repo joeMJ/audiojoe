@@ -417,6 +417,8 @@ class _DownloadsViewState extends State<DownloadsView> {
     final played = section == 'done' && g.entries.length == 1 && storage.deleteAfter(g.kind) && Stores.positions.get(first.key)?['finished'] == true;
     final details = <String>[
       _kindLabel(g),
+      // The album's artist (user 2026-11-07 "6 ja"; the mockup had none).
+      if (g.kind == 'track' && g.isAlbum && g.subtitle.isNotEmpty) g.subtitle,
       if (g.isAlbum && section != 'done') t('{n} of {total} titles', {'n': g.doneCount, 'total': g.total ?? g.entries.length}),
       if (section == 'waiting') storage.low ? t('waiting for space') : t('waiting'),
       if (section == 'partial' && error != null) error,

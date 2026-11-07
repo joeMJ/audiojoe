@@ -201,7 +201,8 @@ class Downloads extends ChangeNotifier {
       list.sort((a, b) => a.added.compareTo(b.added));
       final info = list.firstWhere((e) => e.albumTitle != null, orElse: () => list.first);
       final count = list.map((e) => e.albumCount).whereType<int>().fold<int?>(null, (m, n) => m == null || n > m ? n : m);
-      out.add(DownloadGroup(album, 'track', info.albumTitle ?? info.title, info.albumSubtitle ?? info.subtitle, list, count));
+      // Without the album's artist: the artist from a title's "artist · album".
+      out.add(DownloadGroup(album, 'track', info.albumTitle ?? info.title, info.albumSubtitle ?? info.subtitle.split(' · ').first, list, count));
     });
     out.sort((a, b) => b.added.compareTo(a.added));
     return out;
