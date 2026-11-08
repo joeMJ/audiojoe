@@ -53,9 +53,15 @@ installed="$(dpkg-query -W -f='${Version}' "$PKG" 2>/dev/null || echo "")"
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 log() { echo "$*"; }
 
-# Previous result, so that a plain check does not forget the last update.
-last_update='null'
-[ -r "$STATUS" ] && last_update="$(jq -c '.last_update // null' "$STATUS" 2>/dev/null || echo null)"
+# Previous result, so that a plain check does not forget the last update, a failed attempt, or
+# the newest version known (an unreachable release list keeps showing it).
+last_update='null' last_attempt='null' prev_latest='' prev_release='null'
+if [ -r "$STATUS" ]; then
+  last_update="$(jq -c '.last_update // null' "$STATUS" 2>/dev/null || echo null)"
+  last_attempt="$(jq -c '.last_attempt // null' "$STATUS" 2>/dev/null || echo null)"
+  prev_latest="$(jq -r '.latest // empty' "$STATUS" 2>/dev/null || true)"
+  prev_release="$(jq -c '.release // null' "$STATUS" 2>/dev/null || echo null)"
+fi
 
 # Exactly one JSON value from $1, otherwise $2 (default null) – a broken part must never stop the
 # status from being written.
@@ -111,7 +117,7 @@ backups_status() {
     | jq -cs 'sort_by(-.t) | map({file, bytes, at: (.t | todate)})'
 }
 
-# result: ok | available | updated | rolled_back | failed ; message: English text for the log
+# result: ok | available | updating | updated | rolled_back | failed ; message: English text for the log
 # The newest release as the apps need it (tag, page, files); null until the list was read.
 release_info='null'
 write_status() {
@@ -122,40 +128,58 @@ write_status() {
   debian="$(one_json "$(trap - ERR; set +e; debian_status 2>/dev/null)")"
   backups="$(one_json "$(trap - ERR; set +e; backups_status 2>/dev/null)" '[]')"
   last_update="$(one_json "$last_update")"
+  last_attempt="$(one_json "$last_attempt")"
   release_info="$(one_json "$release_info")"
   jq -n --arg checked "$(now)" --arg installed "$installed" --arg latest "$latest" --arg mode "$mode" \
         --arg result "$result" --arg message "$message" --arg source "$SOURCE" \
-        --argjson last_update "$last_update" --argjson debian "$debian" --argjson backups "$backups" \
+        --argjson last_update "$last_update" --argjson last_attempt "$last_attempt" \
+        --argjson debian "$debian" --argjson backups "$backups" \
         --argjson release "$release_info" \
      '{checked_at: $checked, installed: $installed, latest: (if $latest == "" then null else $latest end),
        mode: $mode, result: $result, message: $message, source: $source,
-       last_update: $last_update, debian: $debian, backups: $backups, release: $release}' > "$tmp"
+       last_update: $last_update, last_attempt: $last_attempt, debian: $debian, backups: $backups,
+       release: $release}' > "$tmp"
   chmod 644 "$tmp"
   mv -f "$tmp" "$STATUS"
 }
 
-fail() { write_status failed "$1" "${latest:-}"; log "✖ $1"; exit 1; }
+# While an update runs (after "updating"), a failure is also kept as the last attempt, so that a
+# later check does not hide it; a successful update clears it.
+updating=''
+attempt() { # message
+  [ -n "$updating" ] || return 0
+  last_attempt="$(jq -cn --arg from "$installed" --arg to "${latest:-}" --arg at "$(now)" --arg m "$1" \
+                  '{from: $from, to: $to, at: $at, result: "failed", message: $m}')"
+}
+fail() { attempt "$1"; write_status failed "$1" "${latest:-}"; log "✖ $1"; exit 1; }
 # Unexpected error: the server must not stay stopped, and the apps learn about it.
-trap 'rc=$?; trap - ERR; systemctl start audiojoe-server 2>/dev/null || true; write_status failed "unexpected error in line $LINENO" "${latest:-}" || true; log "✖ unexpected error in line $LINENO"; exit $rc' ERR
+trap 'rc=$?; trap - ERR; systemctl start audiojoe-server 2>/dev/null || true; attempt "unexpected error in line $LINENO" || true; write_status failed "unexpected error in line $LINENO" "${latest:-}" || true; log "✖ unexpected error in line $LINENO"; exit $rc' ERR
 
-api() {
-  local url="$1"
+# Up to 3 attempts 15 s apart (curl repeats timeouts and HTTP 408/429/500/502/503/504); its messages
+# go to $CURL_ERR, from which `why` names the reason for the status.
+CURL_ERR="$(mktemp)"
+trap 'rm -f "$CURL_ERR"' EXIT
+fetch() { # max-seconds accept curl-args…
+  local max="$1" accept="$2"; shift 2
   if [ -n "$TOKEN_FILE" ] && [ -r "$TOKEN_FILE" ]; then
     # The token goes to curl on standard input, not on the command line.
     printf 'Authorization: token %s\n' "$(tr -d '[:space:]' < "$TOKEN_FILE")" \
-      | curl -fsSL --max-time 60 -H @- -H 'Accept: application/json' "$url"
+      | curl -fSL --no-progress-meter --retry 2 --retry-delay 15 --max-time "$max" -H @- -H "Accept: $accept" "$@" 2>"$CURL_ERR"
   else
-    curl -fsSL --max-time 60 -H 'Accept: application/json' "$url"
+    curl -fSL --no-progress-meter --retry 2 --retry-delay 15 --max-time "$max" -H "Accept: $accept" "$@" 2>"$CURL_ERR"
   fi
 }
-
-download() { # url file
-  if [ -n "$TOKEN_FILE" ] && [ -r "$TOKEN_FILE" ]; then
-    printf 'Authorization: token %s\n' "$(tr -d '[:space:]' < "$TOKEN_FILE")" \
-      | curl -fsSL --max-time 600 -H @- -H 'Accept: application/octet-stream' -o "$2" "$1"
-  else
-    curl -fsSL --max-time 600 -H 'Accept: application/octet-stream' -o "$2" "$1"
-  fi
+api() { fetch 60 application/json "$1"; }
+download() { fetch 300 application/octet-stream -o "$2" "$1"; } # url file
+# " (HTTP 503, 3 attempts)" from the last curl run; empty without a curl message.
+why() {
+  local n code text
+  [ -s "$CURL_ERR" ] || return 0
+  n=$(( $(grep -c 'Will retry' "$CURL_ERR" || true) + 1 ))
+  code="$(grep -o 'returned error: [0-9]*' "$CURL_ERR" | tail -n1 | grep -o '[0-9]*$' || true)"
+  if [ -n "$code" ]; then text="HTTP $code"
+  else text="$(grep -o 'curl: ([0-9]*) .*' "$CURL_ERR" | tail -n1 | sed 's/^curl: ([0-9]*) //' || true)"; fi
+  printf ' (%s, %d attempt%s)' "${text:-error}" "$n" "$([ "$n" = 1 ] || echo s)"
 }
 
 # Fetches the package of a release (JSON on stdin) into $CACHE and checks it against SHA256SUMS.
@@ -169,6 +193,7 @@ fetch_deb() { # version release-json
   download "$sums" "$CACHE/SHA256SUMS.part" || return 1
   if ! (cd "$CACHE" && grep -E "  \*?$name\$" SHA256SUMS.part | sed "s/$name\$/$name.part/" | sha256sum -c --status); then
     rm -f "$CACHE/$name.part" "$CACHE/SHA256SUMS.part"
+    : >"$CURL_ERR" # downloaded, but the checksum is wrong: no curl reason
     return 1
   fi
   rm -f "$CACHE/SHA256SUMS.part"
@@ -192,9 +217,13 @@ healthy() { # version – the server answers with this version within 60 s
 # ---------------------------------------------------------------- check
 
 latest=""
-release="$(api "$SOURCE/releases/latest")" || fail "release list not reachable: $SOURCE"
+if ! release="$(api "$SOURCE/releases/latest")"; then
+  # The newest version known stays shown ("Available"), with the reason.
+  latest="$prev_latest" release_info="$prev_release"
+  fail "release list not reachable: $SOURCE$(why)"
+fi
 tag="$(jq -r '.tag_name // empty' <<<"$release")"
-[ -n "$tag" ] || fail "no release found at $SOURCE"
+[ -n "$tag" ] || { latest="$prev_latest" release_info="$prev_release"; fail "no release found at $SOURCE"; }
 latest="${tag#v}"
 release_info="$(jq -c '{tag: .tag_name, page: (.html_url // null), assets: [(.assets // [])[] | {name: .name, url: .browser_download_url}]}' <<<"$release")"
 
@@ -219,7 +248,11 @@ fi
 # ---------------------------------------------------------------- update
 
 log "→ updating $PKG ${installed:-none} → $latest"
-fetch_deb "$latest" "$release" || fail "package $latest could not be downloaded or its checksum is wrong"
+updating=1
+# The apps show "Updating to …" until the result is written.
+write_status updating "updating to $latest" "$latest"
+: >"$CURL_ERR"
+fetch_deb "$latest" "$release" || fail "package $latest could not be downloaded or its checksum is wrong$(why)"
 new="$CACHE/${PKG}_${latest}_${ARCH}.deb"
 
 old=""
@@ -229,7 +262,7 @@ if [ -n "$installed" ]; then
     rel_old="$(api "$SOURCE/releases/tags/v$installed" 2>/dev/null || true)"
     [ -n "$rel_old" ] && fetch_deb "$installed" "$rel_old" || true
   fi
-  [ -f "$old" ] || fail "package of the installed version $installed not available, so no way back – update not started"
+  [ -f "$old" ] || fail "package of the installed version $installed not available, so no way back – update not started$(why)"
 fi
 
 db="$(toml database)"
@@ -253,6 +286,7 @@ started="$(now)"
 if dpkg -i "$new" >/dev/null && systemctl restart audiojoe-server && healthy "$latest"; then
   last_update="$(jq -cn --arg from "$installed" --arg to "$latest" --arg at "$started" --arg backup "${backup##*/}" \
                  '{from: $from, to: $to, at: $at, result: "updated", backup: $backup}')"
+  last_attempt=null
   # Keep the packages of this and the previous version (the way back for the next update).
   { ls -1t "$CACHE"/${PKG}_*_${ARCH}.deb 2>/dev/null || true; } | { grep -v -e "_${latest}_" -e "_${installed}_" || true; } | xargs -r rm -f
   write_status updated "updated from $installed to $latest" "$latest"
@@ -273,5 +307,6 @@ result=rolled_back
 healthy "$installed" || result=failed
 last_update="$(jq -cn --arg from "$installed" --arg to "$latest" --arg at "$started" --arg backup "${backup##*/}" --arg r "$result" \
                '{from: $from, to: $to, at: $at, result: $r, backup: $backup}')"
+last_attempt=null
 write_status "$result" "version $latest did not start; $( [ $result = rolled_back ] && echo "back on $installed" || echo "the previous version does not answer either" )" "$latest"
 exit 1

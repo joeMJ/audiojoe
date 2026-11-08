@@ -12,6 +12,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:audio_service/audio_service.dart' show MediaItem;
 
 import 'api.dart';
+import 'cache.dart' show albumTracksOf;
 import 'downloads.dart';
 import 'models.dart';
 import 'prefs.dart';
@@ -208,6 +209,30 @@ class Player extends ChangeNotifier {
     }
   }
 
+  /// The tracks of an album (tests replace it).
+  static Future<List<Item>> Function(String album) albumTracks = albumTracksOf;
+
+  /// A title without any queue (none here, none on the server): its album, at this title, so a
+  /// restart or a single title continues the album with ⏮ ⏭ (user 2026-11-08, "88 ja").
+  Future<({List<Item> items, int i, Entry entry})?> _albumOf(Item it) async {
+    final album = it.album;
+    if (it.kind != 'track' || album == null || !api.online.value) return null;
+    try {
+      final all = await albumTracks(album);
+      final i = all.indexWhere((x) => x.key == it.key);
+      if (all.length < 2 || i < 0) return null;
+      return (items: [...all]..[i] = it, i: i, entry: (list: 'music', key: album));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _setAlbum(({List<Item> items, int i, Entry entry}) a) {
+    queue = a.items;
+    index = a.i;
+    entry = a.entry;
+  }
+
   bool _restoreQueue(Item it, [Map? from]) {
     final q = from ?? Stores.device.get('queue');
     try {
@@ -234,7 +259,14 @@ class Player extends ChangeNotifier {
     queue = [...items];
     if (full != null) queue[i] = full;
     index = i;
-    if (other != null) _restoreQueue(queue[i], other);
+    final album = other == null && items.length == 1 ? await _albumOf(queue[i]) : null;
+    if (other != null) {
+      _restoreQueue(queue[i], other);
+    } else if (album != null) {
+      final e = entry;
+      _setAlbum(album);
+      if (from != null) entry = e;
+    }
     _saveQueue();
     _takeOver(await _load(queue[i]));
     // just_audio's play() completes only when playback stops: do not wait for it.
@@ -475,9 +507,16 @@ class Player extends ChangeNotifier {
     final other = await _serverQueue(it.key);
     if (item != null) return;
     if (!_restoreQueue(it) && (other == null || !_restoreQueue(it, other))) {
-      queue = [it];
-      index = 0;
-      entry = entryOf(it);
+      final album = await _albumOf(it);
+      if (item != null) return;
+      if (album != null) {
+        _setAlbum(album);
+        _saveQueue();
+      } else {
+        queue = [it];
+        index = 0;
+        entry = entryOf(it);
+      }
     }
     item = it;
     fromCache = downloads.isOffline(it.key);
@@ -742,9 +781,14 @@ class Player extends ChangeNotifier {
       } else {
         final other = await _serverQueue(key);
         if (other == null || !_restoreQueue(it, other)) {
-          queue = [it];
-          index = 0;
-          entry = Player.entryOf(it);
+          final album = await _albumOf(it);
+          if (album != null) {
+            _setAlbum(album);
+          } else {
+            queue = [it];
+            index = 0;
+            entry = Player.entryOf(it);
+          }
         }
       }
       if (audio.playing) await audio.pause();
@@ -771,7 +815,12 @@ class Player extends ChangeNotifier {
     // the queue of the device that played it continues here (user 2026-11-07).
     if (queue.length < 2) {
       final other = await _serverQueue(key);
-      if (other != null && _restoreQueue(it, other)) _saveQueue();
+      if (other != null && _restoreQueue(it, other)) {
+        _saveQueue();
+      } else if (await _albumOf(it) case final album?) {
+        _setAlbum(album);
+        _saveQueue();
+      }
     }
     _cuedMs = _back(it, ms);
     sync.savePosition(Playback(key: key, positionMs: _cuedMs, durationMs: it.durationMs, finished: false, title: it.title,

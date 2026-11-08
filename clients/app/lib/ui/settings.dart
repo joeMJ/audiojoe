@@ -623,6 +623,29 @@ class MaintenanceSettings extends StatefulWidget {
 
   /// How long "Check for updates" waits for the script's answer, and how often it asks.
   static Duration checkWait = const Duration(seconds: 90), checkEvery = const Duration(seconds: 2);
+
+  /// How long "Update server now" waits for the result (3 download attempts, restart), and how
+  /// often the page reloads while the server reports "updating".
+  static Duration updateWait = const Duration(minutes: 5), updatingReload = const Duration(seconds: 5);
+
+  /// "Updating to …" counts only while the script wrote it recently (a killed run leaves it behind).
+  static const updatingFresh = Duration(minutes: 30);
+
+  /// The server reports a running update (result "updating", written within [updatingFresh]).
+  static bool updatingNow(Map? st) {
+    if (st?['result'] != 'updating') return false;
+    final at = DateTime.tryParse('${st!['checked_at']}');
+    return at != null && DateTime.now().toUtc().difference(at) < updatingFresh;
+  }
+
+  /// "Last attempt": a failed update newer than the last completed one, else null.
+  static Map? lastAttempt(Map? st) {
+    final a = st?['last_attempt'] as Map?;
+    if (a == null) return null;
+    final done = DateTime.tryParse('${(st!['last_update'] as Map?)?['at']}');
+    final at = DateTime.tryParse('${a['at']}');
+    return done == null || (at != null && at.isAfter(done)) ? a : null;
+  }
   @override
   State<MaintenanceSettings> createState() => _MaintenanceSettingsState();
 }
@@ -634,6 +657,61 @@ final _pflegeButton = FilledButton.styleFrom(minimumSize: const Size(64, 40));
 class _MaintenanceSettingsState extends State<MaintenanceSettings> {
   int _gen = 0;
   bool _checking = false;
+  /// "Update server now" pressed: the page waits for the result (target version).
+  String? _updating;
+  Timer? _reload;
+
+  @override
+  void dispose() {
+    _reload?.cancel();
+    super.dispose();
+  }
+
+  /// While the server reports "updating", the page reloads itself every few seconds.
+  void _reloadSoon() {
+    if (_reload != null || _updating != null) return;
+    _reload = Timer(MaintenanceSettings.updatingReload, () {
+      _reload = null;
+      if (mounted) setState(() => _gen++);
+    });
+  }
+
+  /// "Update server now": waits like "Check for updates" until the script wrote its result (the
+  /// server restarts in between: failed requests do not end the wait), then says how it ended.
+  Future<void> _update(Map m, String? target) async {
+    final before = (m['status'] as Map?)?['checked_at'];
+    setState(() => _updating = target ?? '');
+    String? say;
+    try {
+      await api.call('POST', '/maintenance/update');
+      final end = DateTime.now().add(MaintenanceSettings.updateWait);
+      while (say == null && DateTime.now().isBefore(end) && mounted) {
+        await Future.delayed(MaintenanceSettings.checkEvery);
+        Map n;
+        try {
+          n = await api.call('GET', '/maintenance') as Map;
+        } catch (_) {
+          continue; // restarting
+        }
+        final st = n['status'] as Map?;
+        if (n['request'] != null || n['requested'] == true || st?['checked_at'] == before || st?['result'] == 'updating') continue;
+        say = switch (st?['result']) {
+          'failed' || 'rolled_back' => t('Update failed: {msg}', {'msg': '${st!['message']}'}),
+          _ => t('The server now runs {v}.', {'v': '${n['version']}'}),
+        };
+      }
+      say ??= t('The update takes longer; the result appears here later.');
+    } catch (e) {
+      say = '${t('Error')}: $e';
+    }
+    if (mounted) {
+      _say(say);
+      setState(() {
+        _updating = null;
+        _gen++;
+      });
+    }
+  }
 
   void _say(String s) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s)));
 
@@ -738,7 +816,11 @@ class _MaintenanceSettingsState extends State<MaintenanceSettings> {
           final deb = (st?['debian'] as Map?) ?? const {};
           final backups = ((st?['backups'] as List?) ?? const []).cast<Map>();
           final installRequested = m['request'] == 'now' || (m['request'] == null && m['requested'] == true);
+          final updatingNow = MaintenanceSettings.updatingNow(st);
+          if (updatingNow) _reloadSoon();
+          final updatingTo = _updating ?? (updatingNow ? '${st?['latest'] ?? ''}' : null);
           final checking = _checking || m['request'] == 'check';
+          final attempt = MaintenanceSettings.lastAttempt(st);
           // Before 0.1.3 the status only had the package list of the last Debian update.
           final upgraded = _debian(deb['last_upgrade'] as Map?) ??
               (((deb['upgraded'] as List?) ?? const []).isNotEmpty ? (deb['upgraded'] as List).join(', ') : null);
@@ -753,13 +835,19 @@ class _MaintenanceSettingsState extends State<MaintenanceSettings> {
               : newer
                   ? OutlinedButton.icon(icon: const Icon(Icons.refresh), label: Text(t('Check for updates')), onPressed: installRequested ? null : () => _check(m))
                   : FilledButton.icon(style: _pflegeButton, icon: const Icon(Icons.refresh), label: Text(t('Check for updates')), onPressed: installRequested ? null : () => _check(m));
-          final install = installRequested
+          final install = updatingTo != null
+              ? FilledButton.icon(
+                  style: _pflegeButton,
+                  icon: const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2.5)),
+                  label: Text(t('Updating to {v} …', {'v': updatingTo.isEmpty ? (latest ?? '') : updatingTo})),
+                  onPressed: null)
+              : installRequested
               ? FilledButton.icon(style: _pflegeButton, icon: const Icon(Icons.system_update_alt), label: Text(t('Update requested')), onPressed: null)
               : newer && !checking
                   ? FilledButton.icon(style: _pflegeButton, 
                       icon: const Icon(Icons.system_update_alt),
                       label: Text(t('Update server now to {v}', {'v': latest})),
-                      onPressed: () => _call('POST', '/maintenance/update', null, t('Update started; the server restarts briefly.')),
+                      onPressed: () => _update(m, latest),
                     )
                   : OutlinedButton.icon(icon: const Icon(Icons.system_update_alt), label: Text(t('Update server now')), onPressed: null);
 
@@ -774,6 +862,12 @@ class _MaintenanceSettingsState extends State<MaintenanceSettings> {
               ),
               KeyValue(t('Last checked'), Text(st?['checked_at'] == null ? t('never') : '${when('${st!['checked_at']}')} (${ago('${st['checked_at']}')})')),
               KeyValue(t('Last server update'), Text(_lastUpdate(st?['last_update'] as Map?))),
+              if (attempt != null)
+                KeyValue(
+                  t('Last attempt'),
+                  Text(t('{from} → {to} on {when} · failed: {msg}',
+                      {'from': '${attempt['from'] ?? '–'}', 'to': '${attempt['to']}', 'when': when('${attempt['at']}'), 'msg': '${attempt['message']}'})),
+                ),
               KeyValue(
                 t('Database backups'),
                 Text(backups.isEmpty ? t('none') : t('{n}, latest on {when}', {'n': backups.length, 'when': when('${backups.first['at']}')})),

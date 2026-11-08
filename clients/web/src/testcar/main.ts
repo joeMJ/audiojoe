@@ -510,12 +510,15 @@ function mailText(): { subject: string; body: string; full: string } {
     `bg: ${result.bg}`,
     result.unsupported.length ? `unsupported: ${result.unsupported.join(",")}` : "",
   ].filter(Boolean);
-  // The event log is cut so the QR code stays coarse enough to read from a photo (700: room for
-  // the audio and PCM lines of 0.2.0 at 800×480).
+  // The event log is cut so the QR code stays coarse enough to read from a photo: at most
+  // QR_MODULES modules, so 800×480 still has 4 pixels per module (user 2026-11-08, "81 ja").
   let body = lines.join("\n");
   const rest = ev.slice();
   let logLine = `log: ${rest.join(" ") || "-"}`;
-  while (mailEncode(body + "\n" + logLine).length > 700 && rest.length) { rest.pop(); logLine = `log:${rest.length ? ` ${rest.join(" ")}` : ""}(cut)`; }
+  while (qrModules(mailUrl({ subject, body: body + "\n" + logLine })) > QR_MODULES && rest.length) {
+    rest.pop();
+    logLine = `log:${rest.length ? ` ${rest.join(" ")}` : ""}(cut)`;
+  }
   // "Show mail text" keeps the whole log (user 2026-11-07 "3 ja"); only the QR code is cut.
   const full = `${body}\nlog: ${ev.join(" ") || "-"}`;
   body += `\n${logLine}`;
@@ -529,6 +532,21 @@ function mailEncode(s: string) {
 
 function mailUrl(m: { subject: string; body: string }) {
   return `mailto:?subject=${mailEncode(m.subject)}&body=${mailEncode(m.body)}`;
+}
+
+/** QR version 19 (93 modules): the largest that keeps 4 pixels per module at 800×480. */
+const QR_MODULES = 93;
+
+/** Modules per side of the code for `data` (level L); Infinity when it does not fit at all. */
+function qrModules(data: string): number {
+  try {
+    const q = qrcode(0, "L");
+    q.addData(data);
+    q.make();
+    return q.getModuleCount();
+  } catch {
+    return Infinity;
+  }
 }
 
 function qrSvg(data: string): string {

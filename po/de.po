@@ -1442,3 +1442,21 @@ msgstr "Teilen"
 
 msgid "Copy"
 msgstr "Kopieren"
+
+msgid "Updating to {v} …"
+msgstr "Wird aktualisiert auf {v} …"
+
+msgid "The server now runs {v}."
+msgstr "Server läuft jetzt mit {v}."
+
+msgid "Update failed: {msg}"
+msgstr "Aktualisierung fehlgeschlagen: {msg}"
+
+msgid "The update takes longer; the result appears here later."
+msgstr "Die Aktualisierung dauert länger; das Ergebnis erscheint später hier."
+
+msgid "Last attempt"
+msgstr "Letzter Versuch"
+
+msgid "{from} → {to} on {when} · failed: {msg}"
+msgstr "{from} → {to} am {when} · fehlgeschlagen: {msg}"

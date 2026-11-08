@@ -32,6 +32,8 @@ void main() {
     PackageInfo.setMockInitialValues(appName: 'audiojoe', packageName: 'audiojoe', version: '0.1.0', buildNumber: '1', buildSignature: '');
     MaintenanceSettings.checkEvery = const Duration(seconds: 2);
     MaintenanceSettings.checkWait = const Duration(seconds: 90);
+    MaintenanceSettings.updateWait = const Duration(minutes: 5);
+    MaintenanceSettings.updatingReload = const Duration(seconds: 5);
     calls = [];
     api.client = MockClient((req) async {
       calls.add('${req.method} ${req.url.path}');
@@ -74,6 +76,82 @@ void main() {
     await tester.tap(find.text('Update server now to 0.2.0'));
     await tester.pump();
     expect(calls, contains('POST /api/v1/maintenance/update'));
+    // The app waits for the result (user 2026-11-08): "Updating to …", then a message.
+    expect(find.text('Updating to 0.2.0 …'), findsOneWidget);
+    state = () => maintenance(latest: '0.2.0', checked: '2026-11-01T18:05:00Z', result: 'updated')..['version'] = '0.2.0';
+    await tester.pump(const Duration(seconds: 3));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(find.text('The server now runs 0.2.0.'), findsOneWidget);
+    expect(find.text('Updating to 0.2.0 …'), findsNothing);
+  });
+
+  testWidgets('update: the server reports "updating", then fails – message and "Last attempt"', (tester) async {
+    final now = DateTime.now().toUtc();
+    state = () => maintenance(latest: '0.2.0', checked: now.subtract(const Duration(minutes: 1)).toIso8601String(), result: 'available');
+    await show(tester);
+    await tester.tap(find.text('Update server now to 0.2.0'));
+    await tester.pump();
+    state = () => maintenance(latest: '0.2.0', checked: now.toIso8601String(), result: 'updating');
+    await tester.pump(const Duration(seconds: 3));
+    expect(find.text('Updating to 0.2.0 …'), findsOneWidget);
+
+    const why = 'package 0.2.0 could not be downloaded or its checksum is wrong (HTTP 503, 3 attempts)';
+    state = () => maintenance(latest: '0.2.0', checked: now.add(const Duration(minutes: 1)).toIso8601String(), result: 'failed')
+      ..['status']['message'] = why
+      ..['status']['last_update'] = {'from': '0.0.9', 'to': '0.1.0', 'at': '2026-11-01T02:00:00Z', 'result': 'updated'}
+      ..['status']['last_attempt'] = {'from': '0.1.0', 'to': '0.2.0', 'at': now.toIso8601String(), 'result': 'failed', 'message': why};
+    await tester.pump(const Duration(seconds: 3));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(find.text('Update failed: $why'), findsOneWidget);
+    expect(find.text('Last attempt'), findsOneWidget);
+    expect(find.textContaining('0.1.0 → 0.2.0 on '), findsOneWidget);
+    expect(find.textContaining('· failed: $why'), findsOneWidget);
+    expect(find.text('Update server now to 0.2.0'), findsOneWidget); // can be tried again
+  });
+
+  testWidgets('update: no result in time – message, button back', (tester) async {
+    MaintenanceSettings.updateWait = Duration.zero;
+    state = () => maintenance(latest: '0.2.0', checked: '2026-11-01T18:00:00Z', result: 'available');
+    await show(tester);
+    await tester.tap(find.text('Update server now to 0.2.0'));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(find.text('The update takes longer; the result appears here later.'), findsOneWidget);
+    expect(find.text('Update server now to 0.2.0'), findsOneWidget);
+  });
+
+  testWidgets('opened while the server updates: "Updating to …", page reloads until done', (tester) async {
+    MaintenanceSettings.updatingReload = const Duration(seconds: 1);
+    state = () => maintenance(latest: '0.2.0', checked: DateTime.now().toUtc().toIso8601String(), result: 'updating');
+    await show(tester);
+    expect(find.text('Updating to 0.2.0 …'), findsOneWidget);
+    state = () => maintenance(latest: '0.2.0', checked: DateTime.now().toUtc().toIso8601String(), result: 'updated')..['version'] = '0.2.0';
+    await tester.pump(const Duration(seconds: 2));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(find.text('Updating to 0.2.0 …'), findsNothing);
+    // An old "updating" (a killed run) does not count.
+    state = () => maintenance(latest: '0.2.0', checked: '2026-11-01T03:00:00Z', result: 'updating');
+    await tester.pumpWidget(const SizedBox());
+    await show(tester);
+    expect(find.textContaining('Updating to'), findsNothing);
+  });
+
+  test('"Last attempt" only when newer than the last update', () {
+    Map st(String attempt, String? done) => {
+          'last_attempt': {'from': '0.1.0', 'to': '0.2.0', 'at': attempt, 'result': 'failed', 'message': 'x'},
+          'last_update': done == null ? null : {'from': '0.0.9', 'to': '0.1.0', 'at': done, 'result': 'updated'},
+        };
+    expect(MaintenanceSettings.lastAttempt(st('2026-11-08T12:00:00Z', '2026-11-07T21:00:00Z')), isNotNull);
+    expect(MaintenanceSettings.lastAttempt(st('2026-11-07T20:00:00Z', '2026-11-07T21:00:00Z')), isNull);
+    expect(MaintenanceSettings.lastAttempt(st('2026-11-08T12:00:00Z', null)), isNotNull);
+    expect(MaintenanceSettings.lastAttempt({'last_attempt': null}), isNull);
   });
 
   testWidgets('nothing newer: back to "Check for updates", no install', (tester) async {
