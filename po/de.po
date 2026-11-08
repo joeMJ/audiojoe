@@ -622,7 +622,7 @@ msgid "Next album"
 msgstr "Nächstes Album"
 
 msgid "Maintenance"
-msgstr "Pflege"
+msgstr "Wartung"
 
 msgid "Update at 04:00"
 msgstr "Update um 04:00"

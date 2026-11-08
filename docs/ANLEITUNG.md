@@ -151,9 +151,9 @@ anderes; **Abschalten** meldet alle so verbundenen Apps ab.
 
 ## Einstellungen
 
-Quellen und Bibliotheken, Musik (Albenverzeichnis, MusicBrainz), Sonos (Lautsprecher), Pflege
+Quellen und Bibliotheken, Musik (Albenverzeichnis, MusicBrainz), Sonos (Lautsprecher), Wartung
 (Server- und Debian-Updates, Sicherungen, Stand dieser App; siehe
-[Installation](install-server.md#updates-und-pflege)), Podcasts
+[Installation](install-server.md#updates-und-wartung)), Podcasts
 (OPML), Geräte (angemeldete Geräte, einzeln abmelden), **Dieses Gerät abmelden** und
 **Über audiojoe** mit Version, Anleitung, Datenschutz und den Lizenzen Dritter. Im Web-Player
 stehen das Abmelden und **Über audiojoe** unten auf der Seite **Offline**. Siehe [Erste Schritte](ERSTE-SCHRITTE.md).

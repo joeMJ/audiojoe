@@ -10,7 +10,7 @@ import { OFFLINE_CACHE, offlineUrl } from "../offline";
 import { api, online, onConnection, type Item, type Playback, type Quality } from "./api";
 import { dropPlayed, keepCurrent, offlineEntry, onOfflineChange, partKey } from "./downloads";
 import { idbAll, idbGet, idbPut } from "./idb";
-import { localPosition, onDevices, onRemote, savePosition } from "./sync";
+import { localPosition, onRemote, savePosition } from "./sync";
 import { playbackPrefs } from "./prefs";
 
 /** The continue-list entry being played (an album for music): its successor plays next. */
@@ -28,11 +28,6 @@ export interface PlayerState {
   fromCache: boolean;
   delivered?: Quality | null;
   transcoded: boolean;
-  /** Set when the start position came from another device. */
-  takenOver?: { device: string; at: string };
-  /** The position comes from another device and this one does not play (cued at the start, or
-   *  following that device's reports): "Playing on …" / "Played on …" until played here. */
-  followed?: { device: string; at: string };
   rate: number;
   entry?: Entry;
 }
@@ -263,10 +258,6 @@ async function load(it: Item, autoplay: boolean, cue = false, fromStart = false)
   state.delivered = cached ? off?.delivered ?? it.quality : it.quality;
   state.transcoded = cached ? !!off?.transcoded : false;
   const start = it.kind === "radio" || fromStart ? { ms: 0 } : await startPosition(it);
-  // "Taken over from …" only when playing here continues the other device's position (user 2026-11-07).
-  const from = start.from ? { device: start.from.device, at: start.from.updated_at } : undefined;
-  state.followed = autoplay ? undefined : from;
-  takeOver(autoplay ? from : undefined);
   mediaSession(it);
   void dropPlayed();
   if (cue) {
@@ -331,14 +322,11 @@ export function toggle() {
     state.playing = false;
     return notify();
   }
-  if (audio.src && !audio.paused) return audio.pause();
-  // Playing here after following another device continues its position: "Taken over from …".
-  if (state.followed && state.item.kind !== "radio") takeOver(state.followed);
-  state.followed = undefined;
   if (!audio.src) {
     if (state.item.kind === "radio") void load(state.item, true);
     else void seekGlobal(cuedMs, true);
-  } else if (pausedAt !== undefined && rewinds(state.item) && Date.now() - pausedAt >= LONG_PAUSE_MS) {
+  } else if (!audio.paused) audio.pause();
+  else if (pausedAt !== undefined && rewinds(state.item) && Date.now() - pausedAt >= LONG_PAUSE_MS) {
     void seekGlobal(back(state.item, position()), false).then(() => audio.play());
   } else void audio.play();
 }
@@ -562,19 +550,9 @@ async function takeCopy() {
 }
 document.addEventListener("visibilitychange", () => document.hidden && void persist());
 
-/** "Taken over from …" is shown for a few seconds only (as in the app). */
-onDevices(() => state.followed && notify());
-let takenOverTimer: ReturnType<typeof setTimeout> | undefined;
-function takeOver(v: PlayerState["takenOver"]) {
-  state.takenOver = v;
-  clearTimeout(takenOverTimer);
-  if (v) takenOverTimer = setTimeout(() => ((state.takenOver = undefined), notify()), 8000);
-}
-
 // Another device moved on: follow it while this device is not playing the item.
 onRemote((p) => {
   if (!p.key || !state.item || p.key !== state.item.key || state.playing || p.device === myDevice) return;
-  state.followed = { device: p.device, at: p.updated_at };
   const ms = back(state.item, p.position_ms);
   if (!audio.src) {
     cuedMs = ms;

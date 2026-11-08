@@ -36,7 +36,7 @@ Versionen nur mit derselben Signatur als Update an.
 > (oben), dann entscheiden.
 
 **Aktualisieren:** Ist der Server aus dem Paket installiert, zeigt die App eine neue Version unter
-**Einstellungen → Pflege** in der Zeile **App** an. **Version … installieren** lädt die APK über den
+**Einstellungen → Wartung** in der Zeile **App** an. **Version … installieren** lädt die APK über den
 eigenen Server und öffnet die Paketinstallation; Android fragt beim ersten Mal, ob audiojoe Apps
 installieren darf, und vor jeder Installation. Die App fragt dafür nie GitHub, siehe
 [Datenschutz](DATENSCHUTZ.md#updates-nur-mit-dem-server-paket). Von Hand: die neue APK wie oben

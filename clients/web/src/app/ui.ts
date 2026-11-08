@@ -5,7 +5,7 @@ import { addOffline, clearOffline, dropPlayedOn, offlineEntry, offlineList, remo
 import { ago, bytes, clock, t } from "./i18n";
 import { idbAll } from "./idb";
 import * as player from "./player";
-import { deviceState, pendingCount, savePosition, shownName, stale } from "./sync";
+import { pendingCount, savePosition, stale } from "./sync";
 import { isDark, onAppearance, toggleDark } from "./theme";
 
 type View = "np" | "cont" | "pod" | "books" | "lib" | "radio" | "off";
@@ -102,18 +102,6 @@ async function start(items: Item[], index = 0, entry?: player.Entry) {
   if (meta) queue[index] = { ...items[index], ...meta };
   await player.play(queue, index, entry);
   show("np");
-}
-
-/** Where the position comes from (user 2026-11-07): "Taken over from …" for a few seconds after playing
- *  here continued another device's position; while this device does not play and the position comes
- *  from another device, "Playing on …" (it plays this title) or "Played on … · ago". */
-function origin(s: player.PlayerState): string {
-  if (s.takenOver) return t("Taken over from {device} · {ago}", { device: shownName(s.takenOver.device), ago: ago(s.takenOver.at) });
-  const f = s.followed;
-  if (!f || s.playing) return "";
-  const d = deviceState(f.device);
-  if (d?.state === "playing" && d.key === s.item?.key) return t("Playing on {device}", { device: shownName(f.device) });
-  return t("Played on {device} · {ago}", { device: shownName(f.device), ago: ago(f.at) });
 }
 
 // ---------------------------------------------------------------- continue lists, "Next"
@@ -357,7 +345,7 @@ export function refresh(kind: "player" | "data" | "offline") {
 let npTab: "play" | "details" | "chapters" = "play";
 let npKey = "";
 let npRefs: { bar: HTMLElement; fill: HTMLElement; knob: HTMLElement; pos: HTMLElement; rest: HTMLElement; play: HTMLElement;
-              from: HTMLElement; rate: HTMLElement; here: HTMLElement; sub: HTMLElement; next: HTMLButtonElement; off: HTMLElement; title: HTMLElement } | null = null;
+              rate: HTMLElement; here: HTMLElement; sub: HTMLElement; next: HTMLButtonElement; off: HTMLElement; title: HTMLElement } | null = null;
 
 /** Offline field of the player toolbar: save button, then live progress, then "in cache". */
 async function fillOffTool(box: HTMLElement) {
@@ -428,7 +416,6 @@ function renderNowPlaying() {
   const entry = s.entry;
   if (entry) void nextInList(entry).then((ok) => (next.disabled = !ok));
   const here = h("div");
-  const from = h("div", { className: "from" });
   const kind = it.kind === "episode" ? `Podcast · ${it.subtitle ?? ""}` : it.subtitle ?? "";
   const sub = h("div", { className: "sub" }, it.kind === "episode" ? it.published?.slice(0, 10) ?? "" : it.kind === "book" ? "" : it.subtitle ?? "");
   const off = h("div", { className: "offtool" });
@@ -438,7 +425,7 @@ function renderNowPlaying() {
   // A long title (and chapter) flows, so the count stays visible.
   const title = h("div", { className: "title" });
   flow(title, it.title);
-  // The cover stands left at full size; facts (with "Taken over from …") scroll on the right
+  // The cover stands left at full size; facts scroll on the right
   // when space is short; progress, controls and toolbar are docked at the bottom right (see app.css).
   main.classList.add("dock");
   main.append(
@@ -447,8 +434,7 @@ function renderNowPlaying() {
       h("div", { className: "kind" }, kind),
       title,
       sub,
-      h("div", { className: "fmt" }, here),
-      from),
+      h("div", { className: "fmt" }, here)),
     h("div", { className: "dockbar" },
       bar, h("div", { className: "times" }, pos, rest),
       h("div", { className: "ctrl" },
@@ -460,7 +446,7 @@ function renderNowPlaying() {
     // The toolbar is its own grid cell: below the controls, or under the cover when space is short.
     ...(player.isLive() ? [] : [tools]),
   );
-  npRefs = { bar, fill, knob, pos, rest, play, from, rate, here, sub, next, off, title };
+  npRefs = { bar, fill, knob, pos, rest, play, rate, here, sub, next, off, title };
   updateNowPlaying();
 }
 
@@ -596,7 +582,6 @@ function updateNowPlaying() {
   if (s.item?.chapters?.length) flow(npRefs.sub, player.chapter(), count(` ${t("({i} of {n})", { i: ci + 1, n: s.item.chapters.length })}`));
   const n = ci < 0 && s.queue.length > 1 ? ` ${t("({i} of {n})", { i: s.index + 1, n: s.queue.length })}` : "";
   flow(npRefs.title, s.item?.title ?? "", count(n));
-  npRefs.from.textContent = origin(s);
 }
 
 // ---------------------------------------------------------------- continue

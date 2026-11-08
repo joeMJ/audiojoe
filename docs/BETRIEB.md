@@ -78,7 +78,7 @@ Containers filtern.
 - **Dateien:** Datenbank und WAL nur für `audiojoe` (`600`), `config.toml` nur für root und die
   Gruppe `audiojoe` (`640`).
 - **Updates des Systems:** `unattended-upgrades` installiert täglich die Debian-Updates
-  ([Updates und Pflege](install-server.md#updates-und-pflege)).
+  ([Updates und Wartung](install-server.md#updates-und-wartung)).
 - **Proxmox-Host:** gehört nicht zu audiojoe. Aktuell halten und Weboberfläche (Port 8006) sowie
   SSH nur aus dem Netz erreichbar machen, aus dem du verwaltest; siehe die
   [Proxmox-VE-Dokumentation](https://pve.proxmox.com/pve-docs/pve-admin-guide.html) (englisch).
@@ -99,7 +99,7 @@ Containers filtern.
 ## Updates und der Weg zurück
 
 - **Automatisch:** jede Nacht um 04:00 mit Sicherung vorher und automatischem Weg zurück, wenn die
-  neue Version nicht startet ([Updates und Pflege](install-server.md#updates-und-pflege)). Wer
+  neue Version nicht startet ([Updates und Wartung](install-server.md#updates-und-wartung)). Wer
   vorher entscheiden will, stellt in der App auf **Nur melden**.
 - **Von Hand auf eine ältere Version** – etwa wenn eine neue Version läuft, aber nicht wie erwartet
   arbeitet:

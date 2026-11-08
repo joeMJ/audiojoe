@@ -343,24 +343,17 @@ try {
     body: JSON.stringify({ position_ms: 600000, updated_at: new Date().toISOString(), title: ep.title, subtitle: ep.podcast }),
   });
   await clickText("Jetzt läuft");
-  // Not played here yet: where the position comes from, not "taken over" (user 2026-11-07).
-  await waitText("Spielte auf Telefon (Test)", 10000).then(() => check("phone's position arrives live in the car: „Spielte auf …“", true),
-    () => check("phone's position arrives live in the car: „Spielte auf …“", false));
-  const early = await page.evaluate(() => document.body.innerText.includes("Übernommen von"));
-  check("no „Übernommen von …“ before playing here", !early);
+  // The position follows the phone; the web player shows no origin line (user 2026-11-08).
+  await page.waitForFunction(() => document.querySelector(".times span")?.innerText === "9:50", { timeout: 10000 })
+    .then(() => check("phone's position arrives live in the car", true), () => check("phone's position arrives live in the car", false));
   const t = await page.evaluate(() => document.querySelector(".times span")?.innerText);
   check("player jumped to 9:50 (10 s before the phone)", t === "9:50", t);
-  await shot("05-spielte-auf");
+  const line = await page.evaluate(() => /Übernommen von|Spielt auf|Spielte auf/.test(document.querySelector("main").innerText));
+  check("no origin line („Übernommen von“, „Spielt/Spielte auf“)", !line);
+  await shot("05-mitgelaufen");
   await clickText("Weiterhören");
   await waitText("Zuletzt auf Telefon (Test)");
   await shot("06-weiterhoeren");
-  // Playing here continues the phone's position: now "Übernommen von …".
-  await clickText("Jetzt läuft");
-  await page.evaluate(() => document.querySelector(".ctrl .play").click());
-  await waitText("Übernommen von Telefon (Test)", 5000).then(() => check("play here: „Übernommen von …“", true),
-    () => check("play here: „Übernommen von …“", false));
-  await shot("06b-uebernommen");
-  await page.evaluate(() => document.querySelector(".ctrl .play").click());
 
   // The car plays on its own speakers only: no output selection (Sonos is in the apps).
   await clickText("Jetzt läuft");

@@ -57,7 +57,7 @@ Anlegen. Dann:
   erlaubt auf Wunsch die Anmeldung als root per SSH,
 - installiert das Server-Paket aus dem neuesten Release (Prüfsumme aus `SHA256SUMS`),
 - schreibt `/etc/audiojoe/config.toml` mit der Adresse des Containers (Port 8080, Sonos 8081),
-- richtet die **Selbstpflege** ein (siehe [Updates und Pflege](#updates-und-pflege)),
+- richtet die **Selbstpflege** ein (siehe [Updates und Wartung](#updates-und-wartung)),
 - legt den **ersten Benutzer** an und zeigt Passwort und TOTP-Schlüssel einmal an.
 
 Ohne Rückfragen, z. B. für Wiederholungen (`PRESET=minimal` für die kleinen Ressourcen):
@@ -93,7 +93,7 @@ zuerst. Eine Zusammenfassung zeigt alles vor dem Einrichten. Dann:
   `SHA256SUMS`),
 - schreibt `/etc/audiojoe/config.toml` (Port 8080, Sonos 8081),
 - richtet die **Selbstpflege** ein, für Ubuntu mit den Ubuntu-Paketquellen (siehe
-  [Updates und Pflege](#updates-und-pflege)),
+  [Updates und Wartung](#updates-und-wartung)),
 - legt den **ersten Benutzer** an und zeigt Passwort und TOTP-Schlüssel einmal an,
 - zeigt am Ende die Felder für den Nginx Proxy Manager.
 
@@ -144,9 +144,9 @@ Weiter wie beim [Debian-Paket](#debian-paket). Die systemd-Einheit läuft als ei
 gehärteten Rechten; die Datenbank liegt in `/var/lib/audiojoe/`, das Protokoll im Journal
 (14 Tage, siehe [Datenschutz](DATENSCHUTZ.md#was-der-server-speichert)).
 
-### Updates und Pflege
+### Updates und Wartung
 
-Mit dem Paket hält sich der Server selbst aktuell; **Einstellungen → Pflege** in der App zeigt den
+Mit dem Paket hält sich der Server selbst aktuell; **Einstellungen → Wartung** in der App zeigt den
 Stand.
 
 - **Server:** Jede Nacht um 04:00 fragt `audiojoe-update` (Timer `audiojoe-update.timer`) nach

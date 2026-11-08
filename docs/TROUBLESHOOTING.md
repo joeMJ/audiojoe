@@ -98,7 +98,7 @@ Titel startest): `access: … GET /api/v1/stream/… <status>`.
 
 ## Updates schlagen fehl
 
-**Einstellungen → Pflege** zeigt den Stand; Einzelheiten stehen in
+**Einstellungen → Wartung** zeigt den Stand; Einzelheiten stehen in
 `/var/lib/audiojoe/update-status.json` und `journalctl -u audiojoe-update`. Von Hand prüfen mit
 `sudo audiojoe-update --check`.
 

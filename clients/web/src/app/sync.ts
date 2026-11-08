@@ -27,25 +27,6 @@ export let stale = false;
 let staleTimer: number | undefined;
 
 export const onRemote = (l: Listener) => remoteListeners.add(l);
-
-/** The account's devices as far as "Playing on …" needs them (GET /devices, then event `device`). */
-export interface DeviceState { device: string; state: string; key: string; label?: string | null }
-const devices = new Map<string, DeviceState>();
-const deviceListeners = new Set<() => void>();
-export const onDevices = (l: () => void) => deviceListeners.add(l);
-export const deviceState = (name: string) => devices.get(name);
-/** The name a device is shown with (Settings → Devices → Rename), else its device name. */
-export const shownName = (name: string) => devices.get(name)?.label || name;
-async function loadDevices() {
-  try {
-    const list = await api<DeviceState[]>("GET", "/devices");
-    devices.clear();
-    for (const d of list) devices.set(d.device, d);
-    deviceListeners.forEach((l) => l());
-  } catch {
-    // Unknown until the next event: "Played on …".
-  }
-}
 export const onSyncState = (l: () => void) => stateListeners.add(l);
 /** The account's settings changed on some device (event `settings`). */
 const settingsListeners = new Set<(e: Record<string, unknown>) => void>();
@@ -147,7 +128,6 @@ function connect() {
   es.onopen = () => {
     alive();
     setOnline(true);
-    void loadDevices();
   };
   es.onerror = () => {
     if (es?.readyState === EventSource.CLOSED) setOnline(false);
@@ -158,12 +138,6 @@ function connect() {
     const p = JSON.parse((e as MessageEvent).data).state as Playback;
     void idbPut("positions", p.key, p);
     remoteListeners.forEach((l) => l(p));
-  });
-  es.addEventListener("device", (e) => {
-    alive();
-    const d = JSON.parse((e as MessageEvent).data).device as DeviceState;
-    devices.set(d.device, d);
-    deviceListeners.forEach((l) => l());
   });
   es.addEventListener("resync", () => {
     alive();

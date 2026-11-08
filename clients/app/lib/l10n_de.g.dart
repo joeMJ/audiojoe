@@ -152,7 +152,7 @@ const deStrings = <String, String>{
   "Load rest": "Rest laden",
   "Loading ({n} of at most {max})": "Lädt ({n} von höchstens {max})",
   "Louder": "Lauter",
-  "Maintenance": "Pflege",
+  "Maintenance": "Wartung",
   "Make": "Marke",
   "Manual": "Anleitung",
   "Mark as heard": "Als gehört markieren",

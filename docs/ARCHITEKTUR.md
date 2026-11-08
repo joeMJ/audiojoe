@@ -83,7 +83,7 @@ sequenceDiagram
 | **Server**-Datenbank `/var/lib/audiojoe/audiojoe.db` | Nutzer (Kennwort als Argon2id-Hash, TOTP-Geheimnis), Anmeldungen je Gerät (vom Zugangsschlüssel nur eine Prüfsumme), Hörstände und Weiterhören-Listen, Warteschlangen, Quellen mit ihren Zugangsschlüsseln, Podcasts und Folgen, Radio-Favoriten, Albumverzeichnis |
 | Server-Konfiguration `/etc/audiojoe/` | Listen-Adresse, Proxy, Sonos-Abschnitt, Update-Einstellungen |
 | Server `/var/backups/audiojoe/` | Sicherungen der Datenbank vor jedem Update (die letzten 5) |
-| Server `/var/lib/audiojoe/update-status.json` | Versionen, letzte Updates (Anzeige unter Pflege) |
+| Server `/var/lib/audiojoe/update-status.json` | Versionen, letzte Updates (Anzeige unter Wartung) |
 | Server-Protokoll (journald) | je Anfrage IP-Adresse, Methode, Pfad, Status, Dauer; im Container 14 Tage |
 | **App** sicherer Speicher des Systems | Server-Adresse, Zugangsschlüssel, Gerätename |
 | Datenordner der App | Hörstände (auch noch nicht gesendete), Titeldaten, Darstellung, Warteschlange; Offline-Titel unter `offline/` |

@@ -18,7 +18,7 @@ Die MSI und das Programm sind mit demselben selbst ausgestellten Zertifikat sign
 remotejoe. Wer es schon für eines davon eingetragen hat, muss nichts weiter tun.
 
 **Aktualisieren:** Ist der Server aus dem Paket installiert, zeigt die App eine neue Version unter
-**Einstellungen → Pflege** in der Zeile **App** an. **Version … herunterladen** lädt die MSI über den
+**Einstellungen → Wartung** in der Zeile **App** an. **Version … herunterladen** lädt die MSI über den
 eigenen Server und prüft sie gegen `SHA256SUMS` desselben Releases; stimmt die Prüfsumme nicht,
 wird nichts installiert. Nach **Installieren** beendet sich audiojoe und startet den Installer;
 die neue MSI ersetzt die alte, danach startet audiojoe von selbst wieder. Die App
