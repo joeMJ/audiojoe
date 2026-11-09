@@ -529,7 +529,7 @@ function mailText(): { subject: string; body: string; full: string } {
 /** Browser and car of a user agent for the QR code, e.g. "Chrome/136 Tesla/2025.32.3"; the whole one
  *  when none of them is in it. */
 export function shortUa(ua: string): string {
-  const browser = ua.match(/\b(Edg|OPR|Firefox|Chrome|Chromium|QtWebEngine)\/(\d+)/) ?? ua.match(/\bVersion\/(\d+)[^ ]* (Safari)\//);
+  const browser = ua.match(/(Edg|OPR|Firefox|Chrome|Chromium|QtWebEngine)\/(\d+)/) ?? ua.match(/\bVersion\/(\d+)[^ ]* (Safari)\//);
   const name = browser ? (browser[2] === "Safari" ? `Safari/${browser[1]}` : `${browser[1]}/${browser[2]}`) : "";
   const car = ua.match(/\bTesla\/[\w.-]+/)?.[0] ?? "";
   const short = [name, car].filter(Boolean).join(" ");
