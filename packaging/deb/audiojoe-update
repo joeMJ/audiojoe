@@ -270,10 +270,30 @@ db="${db:-/var/lib/audiojoe/audiojoe.db}"
 stamp="$(date -u +%Y%m%d-%H%M%S)"
 backup="$BACKUPS/audiojoe-${installed:-new}-$stamp.db"
 install -d -m 750 "$BACKUPS"
+# Room for the copy first (database, write-ahead log and index plus 10 %); without it no update. A
+# full disk left a cut-off backup behind, which pushed a good one out of the last 5 (2026-11-09, "148 ja").
+if [ -f "$db" ]; then
+  need_kb=0
+  for ext in "" -wal -shm; do
+    if [ -f "$db$ext" ]; then need_kb=$(( need_kb + $(stat -c %s "$db$ext") / 1024 + 1 )); fi
+  done
+  need_kb=$(( need_kb + need_kb / 10 + 1 ))
+  free_kb="$(df -Pk "$BACKUPS" | awk 'NR == 2 {print $4}')"
+  if [ "${free_kb:-0}" -lt "$need_kb" ]; then
+    fail "not enough disk space for the backup (needs $(( need_kb / 1024 + 1 )) MB, free $(( ${free_kb:-0} / 1024 )) MB) – update not started"
+  fi
+fi
 systemctl stop audiojoe-server
 if [ -f "$db" ]; then
   # Stopped server: database, write-ahead log and index together are a consistent copy.
-  for ext in "" -wal -shm; do if [ -f "$db$ext" ]; then cp -a "$db$ext" "$backup$ext"; fi; done
+  for ext in "" -wal -shm; do
+    if [ -f "$db$ext" ] && ! cp -a "$db$ext" "$backup$ext"; then
+      # A cut-off copy is no backup: away with it, the server runs on as before.
+      rm -f "$backup" "$backup-wal" "$backup-shm"
+      systemctl start audiojoe-server || true
+      fail "the backup of the database failed (disk full?) – update not started"
+    fi
+  done
 fi
 # Keep the newest 5 by the time in the name (cp -a keeps the database's time on the file).
 prune_backups() {
