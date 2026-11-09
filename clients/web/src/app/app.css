@@ -60,6 +60,9 @@ h2 { margin: 0 0 10px; font-size: 21px; }
 .fchips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .fchip { padding: 2px 8px; border: 2px solid var(--line); border-radius: 7px; font-weight: 750; font-size: 14px; }
 .fnote { color: var(--muted); font-size: 13px; }
+/* "Up next: …" below the format line (user 2026-11-09) */
+.upnext { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.upnext:empty { display: none; }
 .fchip.cache { border-color: var(--accent); color: var(--accent); }
 .fchip.hi { border-color: var(--bad); color: var(--bad); background: var(--badBg); }
 .fchip.cd { border-color: var(--warn); color: var(--warn); background: var(--warnBg); }

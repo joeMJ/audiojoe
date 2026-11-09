@@ -402,6 +402,9 @@ msgstr "Band {n}"
 msgid "Up next"
 msgstr "Als Nächstes"
 
+msgid "Up next: {title}"
+msgstr "Als Nächstes: {title}"
+
 msgid "Heard"
 msgstr "Gehört"
 

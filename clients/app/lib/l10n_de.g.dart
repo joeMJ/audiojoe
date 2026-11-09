@@ -345,6 +345,7 @@ const deStrings = <String, String>{
   "Undo": "Rückgängig",
   "Unsubscribe": "Abbestellen",
   "Up next": "Als Nächstes",
+  "Up next: {title}": "Als Nächstes: {title}",
   "Update at 04:00": "Update um 04:00",
   "Update failed": "Aktualisierung fehlgeschlagen",
   "Update failed: {msg}": "Aktualisierung fehlgeschlagen: {msg}",

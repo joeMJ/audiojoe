@@ -3,6 +3,8 @@
 // left third, progress, buttons and footer (sleep timer, speed, output, up next) sit at the
 // bottom right, no volume (the output overlay has it). Phone: volume and footer at the bottom.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../downloads.dart';
@@ -11,6 +13,7 @@ import '../models.dart';
 import '../player.dart';
 import '../remote.dart';
 import '../sonos.dart';
+import '../sync.dart';
 import '../volume.dart';
 import 'common.dart';
 import 'notes.dart';
@@ -108,6 +111,7 @@ class _PlaybackTab extends StatelessWidget {
             ),
           const SizedBox(height: 12),
           _FormatChips(it),
+          _UpNextLine(it),
           if (remote.active)
             Padding(
               padding: const EdgeInsets.only(top: 8),
@@ -212,6 +216,60 @@ String? _origin() {
   final d = remote.device(from.device);
   if (d != null && d.playing && d.key == player.item?.key) return t('Playing on {device}', {'device': d.shown});
   return t('Played on {device} · {ago}', {'device': remote.shown(from.device), 'ago': ago(from.at)});
+}
+
+/// "Up next: …" small and grey below the format chips (user 2026-11-09); nothing when nothing follows.
+/// Looked up again only when the title, its place in the queue, the chapter, the controlled device or
+/// the podcast continue list changes – not with every position tick.
+class _UpNextLine extends StatefulWidget {
+  final Item it;
+  const _UpNextLine(this.it);
+  @override
+  State<_UpNextLine> createState() => _UpNextLineState();
+}
+
+class _UpNextLineState extends State<_UpNextLine> {
+  String _sig = '';
+  Future<String?>? _next;
+  StreamSubscription<String>? _lists;
+
+  @override
+  void initState() {
+    super.initState();
+    _lists = sync.lists.listen((l) {
+      if (l == 'podcasts' && widget.it.kind == 'episode' && mounted) setState(() => _sig = '');
+    });
+  }
+
+  @override
+  void dispose() {
+    _lists?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final it = widget.it;
+    final sig = [it.key, player.index, player.queue.length, player.chapterIndex, remote.target ?? ''].join('|');
+    if (sig != _sig || _next == null) {
+      _sig = sig;
+      _next = upNextNow(it).catchError((_) => null);
+    }
+    return FutureBuilder<String?>(
+      future: _next,
+      builder: (context, snap) {
+        final next = snap.data;
+        if (next == null || next.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(t('Up next: {title}', {'title': next}),
+              key: const ValueKey('up-next-line'),
+              textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: context.tok.muted, fontSize: 13)),
+        );
+      },
+    );
+  }
 }
 
 class _FormatChips extends StatelessWidget {

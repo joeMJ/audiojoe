@@ -814,6 +814,18 @@ class Player extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Before the app ends (desktop window closed while playing): the position is saved as paused
+  /// and sent, then libmpv is shut down. Without this mpv played on while Flutter tore down the Dart
+  /// VM, then called its freed wake-up callback: SIGSEGV (user 2026-11-09, release-plan).
+  Future<void> shutdown() async {
+    _saveTimer?.cancel();
+    _retry?.cancel();
+    if (audio.playing) await audio.pause();
+    await _persist(report: true);
+    await sync.flush();
+    await audio.dispose();
+  }
+
   Future<void> stop() async {
     await _persist(stopped: true);
     await audio.stop();

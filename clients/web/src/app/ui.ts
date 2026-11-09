@@ -345,7 +345,35 @@ export function refresh(kind: "player" | "data" | "offline") {
 let npTab: "play" | "details" | "chapters" = "play";
 let npKey = "";
 let npRefs: { bar: HTMLElement; fill: HTMLElement; knob: HTMLElement; pos: HTMLElement; rest: HTMLElement; play: HTMLElement;
-              rate: HTMLElement; here: HTMLElement; sub: HTMLElement; next: HTMLButtonElement; off: HTMLElement; title: HTMLElement } | null = null;
+              rate: HTMLElement; here: HTMLElement; sub: HTMLElement; next: HTMLButtonElement; off: HTMLElement; title: HTMLElement;
+              upnext: HTMLElement } | null = null;
+/** For an episode: the title of the next episode of the continue list (loaded with the view). */
+let npNextEpisode = "";
+
+/** "Up next: …" small below the format line (user 2026-11-09, "107–109 ja"): in an album the next
+ *  title, in a book the next chapter, for a podcast the next episode of the continue list. Radio and
+ *  the last entry: none. */
+function upNextText(): string {
+  const s = player.state, it = s.item;
+  if (!it || it.kind === "radio" || player.isLive()) return "";
+  let next = "";
+  if (it.chapters?.length) next = it.chapters[player.chapterIndex() + 1]?.title ?? "";
+  else if (it.kind === "episode") next = npNextEpisode;
+  else next = s.queue[s.index + 1]?.title ?? "";
+  return next ? t("Up next: {title}", { title: next }) : "";
+}
+
+async function loadNextEpisode(key: string) {
+  npNextEpisode = "";
+  try {
+    const list = await api<ListEntry[]>("GET", "/lists/podcasts");
+    const i = list.findIndex((x) => x.key === key);
+    npNextEpisode = (i < 0 ? list[0] : list[i + 1])?.title ?? "";
+  } catch {
+    npNextEpisode = "";
+  }
+  if (player.state.item?.key === key) updateNowPlaying();
+}
 
 /** Offline field of the player toolbar: save button, then live progress, then "in cache". */
 async function fillOffTool(box: HTMLElement) {
@@ -416,6 +444,8 @@ function renderNowPlaying() {
   const entry = s.entry;
   if (entry) void nextInList(entry).then((ok) => (next.disabled = !ok));
   const here = h("div");
+  const upnext = h("div", { className: "upnext" });
+  if (it.kind === "episode") void loadNextEpisode(it.key);
   const kind = it.kind === "episode" ? `Podcast · ${it.subtitle ?? ""}` : it.subtitle ?? "";
   const sub = h("div", { className: "sub" }, it.kind === "episode" ? it.published?.slice(0, 10) ?? "" : it.kind === "book" ? "" : it.subtitle ?? "");
   const off = h("div", { className: "offtool" });
@@ -434,7 +464,7 @@ function renderNowPlaying() {
       h("div", { className: "kind" }, kind),
       title,
       sub,
-      h("div", { className: "fmt" }, here)),
+      h("div", { className: "fmt" }, here, upnext)),
     h("div", { className: "dockbar" },
       bar, h("div", { className: "times" }, pos, rest),
       h("div", { className: "ctrl" },
@@ -446,7 +476,7 @@ function renderNowPlaying() {
     // The toolbar is its own grid cell: below the controls, or under the cover when space is short.
     ...(player.isLive() ? [] : [tools]),
   );
-  npRefs = { bar, fill, knob, pos, rest, play, rate, here, sub, next, off, title };
+  npRefs = { bar, fill, knob, pos, rest, play, rate, here, sub, next, off, title, upnext };
   updateNowPlaying();
 }
 
@@ -577,6 +607,8 @@ function updateNowPlaying() {
     npRefs.here.dataset.v = here;
     npRefs.here.replaceChildren(qualityRow(s.delivered ?? s.item?.quality, s.fromCache, s.transcoded ? s.item?.quality : null));
   }
+  const un = upNextText();
+  if (npRefs.upnext.textContent !== un) npRefs.upnext.textContent = un;
   const ci = player.chapterIndex();
   const count = (text: string) => h("span", { className: "count" }, text);
   if (s.item?.chapters?.length) flow(npRefs.sub, player.chapter(), count(` ${t("({i} of {n})", { i: ci + 1, n: s.item.chapters.length })}`));

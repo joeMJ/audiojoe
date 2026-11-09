@@ -21,8 +21,12 @@ class Remote extends ChangeNotifier {
     sync.sonosEnded.listen((e) {
       if (sonos.output != null && e['room'] == sonos.output!.id) unawaited(_ended());
     });
-    sync.reconnected.listen((_) => unawaited(refresh()));
+    // The first connection belongs to the start (main.dart: cueLast, then findPlaying). After an
+    // interruption (standby, network) events of that time do not come again: look as at the start
+    // (user 2026-11-09, "110 ja").
+    sync.reconnected.listen((_) => unawaited(_connects++ == 0 ? refresh() : findPlaying()));
   }
+  int _connects = 0;
   static final instance = Remote._();
 
   /// The account's devices from the last refresh and events since (this one included).
@@ -68,6 +72,11 @@ class Remote extends ChangeNotifier {
 
   void _onDevice(Device d) {
     final i = devices.indexWhere((x) => x.name == d.name);
+    // Another app or one of our speakers begins to play while nothing plays here and nothing is
+    // controlled: show it and control it, as after a start (user 2026-11-09, "106 ja": Office PC showed
+    // the radio while the notebook had sent an album to the bedroom).
+    final began = d.playing && !d.current && d.online && !d.web && (i < 0 || !devices[i].playing);
+    if (began && !active && !player.playing) unawaited(_followStart());
     if (i < 0) {
       devices = [...devices, d];
     } else {
@@ -238,24 +247,58 @@ class Remote extends ChangeNotifier {
     await api.call('POST', '/devices/${Uri.encodeComponent(name)}/command', body: {'action': 'stop'});
   }
 
-  /// After a start: when nothing plays here but another app or one of our speakers does, show that.
-  Future<void> findPlaying() async {
-    await refresh();
-    if (active || player.playing) return;
-    final d = devices.where((d) => !d.current && d.online && d.playing && !d.web).firstOrNull;
-    if (d == null) return;
-    if (d.speaker) {
-      final rooms = await sonos.rooms();
-      final r = rooms.where((r) => 'Sonos ${r.name}' == d.name && r.playing).firstOrNull;
-      if (r == null) return;
-      await player.mirror(d.key);
-      sonos.output = r;
-      controlRoom(r);
-      sonos.follow();
-    } else {
-      await player.mirror(d.key);
-      await control(d.name);
+  /// After a start (and a reconnect): when nothing plays here but another app or one of our speakers
+  /// does, show that. True when it now controls one.
+  Future<bool> findPlaying() async {
+    if (_finding) return false;
+    _finding = true;
+    try {
+      await refresh();
+      if (active || player.playing) return false;
+      final d = devices.where((d) => !d.current && d.online && d.playing && !d.web).firstOrNull;
+      if (d == null) return false;
+      if (d.speaker) {
+        final rooms = await sonos.rooms();
+        final r = rooms.where((r) => 'Sonos ${r.name}' == d.name && r.playing).firstOrNull;
+        if (r == null || active || player.playing) return false;
+        await controlSpeaker(r);
+      } else {
+        await player.mirror(d.key);
+        await control(d.name);
+      }
+      return true;
+    } finally {
+      _finding = false;
     }
+  }
+  bool _finding = false;
+
+  /// A device began to play: a speaker reports PLAYING only a moment after its session started,
+  /// so up to three looks, two seconds apart.
+  Future<void> _followStart() async {
+    for (var n = 0; n < 3; n++) {
+      if (n > 0) await Future<void>.delayed(const Duration(seconds: 2));
+      if (active || player.playing) return;
+      if (await findPlaying()) return;
+    }
+  }
+
+  /// Controls the Sonos room where one of our sessions plays (started by another device): its
+  /// title shows here, this device pauses.
+  Future<void> controlSpeaker(Room r) async {
+    final name = 'Sonos ${r.name}';
+    final key = device(name)?.key ?? r.sessionKey ?? '';
+    await player.pauseHere();
+    if (key.isNotEmpty) await player.mirror(key);
+    sonos.output = r;
+    controlRoom(r);
+    sonos.follow();
+  }
+
+  /// "Here" for such a room: control it, then continue its title here.
+  Future<void> takeHereFrom(Room r) async {
+    await controlSpeaker(r);
+    await takeHere('Sonos ${r.name}');
   }
 }
 

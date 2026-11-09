@@ -24,6 +24,9 @@ class Room {
   bool busy = false;
   /// The device that started our session on this room's group (null: none of ours).
   String? startedBy;
+  /// The room our session was started on (its device is "Sonos <that room>"), and its title.
+  int? sessionRoom;
+  String? sessionKey;
   /// Remaining time of the speaker's own sleep timer in seconds (null: off or not ours).
   int? sleepS;
 
@@ -36,6 +39,8 @@ class Room {
       groupRooms: [for (final r in (j['group_rooms'] as List? ?? const [])) r as int])
     ..busy = (j['busy'] ?? false) as bool
     ..startedBy = (j['session'] as Map?)?['started_by'] as String?
+    ..sessionRoom = (j['session'] as Map?)?['room'] as int?
+    ..sessionKey = (j['session'] as Map?)?['key'] as String?
     ..sleepS = j['sleep_s'] as int?;
 
   bool get playing => state == 'PLAYING' || state == 'TRANSITIONING';

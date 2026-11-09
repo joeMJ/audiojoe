@@ -40,6 +40,9 @@ Future<void> main() async {
     // system's bar never shows.
     await windowManager.ensureInitialized();
     await windowManager.setTitleBarStyle(TitleBarStyle.hidden, windowButtonVisibility: false);
+    // Closing (title bar, dock "Quit", Alt+F4) first ends playback cleanly, then the window.
+    await windowManager.setPreventClose(true);
+    windowManager.addListener(_Quit());
   }
   try {
     appVersion = (await PackageInfo.fromPlatform()).version;
@@ -48,6 +51,22 @@ Future<void> main() async {
   await errorLog.open(Stores.dir);
   final signedIn = await api.loadSession();
   runApp(AudiojoeApp(signedIn: signedIn));
+}
+
+/// The window is to close: save the position, shut libmpv down, then close (at most 4 s, so a
+/// server that does not answer never keeps the window open).
+class _Quit with WindowListener {
+  bool _closing = false;
+
+  @override
+  Future<void> onWindowClose() async {
+    if (_closing) return;
+    _closing = true;
+    try {
+      await player.shutdown().timeout(const Duration(seconds: 4));
+    } catch (_) {}
+    await windowManager.destroy();
+  }
 }
 
 class AudiojoeApp extends StatefulWidget {

@@ -54,6 +54,26 @@ Future<List<UpNextRow>> upNextRows(Item it, List<Item> queue, int index,
   }
 }
 
+/// The entry after the current one, for the small line "Up next: …" below the format chips (user
+/// 2026-11-09, "107–109 ja"): in an album the next title, in a book the next chapter, for a podcast the
+/// next episode of the continue list. Radio and the last entry: none.
+Future<String?> upNextTitle(Item it, List<Item> queue, int index,
+    {Future<List<ListEntry>> Function(String list) load = loadList}) async {
+  if (it.kind == 'radio') return null;
+  final rows = await upNextRows(it, queue, index, local: false, load: load);
+  final i = rows.indexWhere((r) => r.current);
+  return i >= 0 && i + 1 < rows.length ? rows[i + 1].title : null;
+}
+
+/// The same for what plays now: this device's queue, or the controlled device's.
+Future<String?> upNextNow(Item it) async {
+  if (remote.active) {
+    final q = await _otherQueue(it.key);
+    return upNextTitle(it, q.items, q.index);
+  }
+  return upNextTitle(it, player.queue, player.index);
+}
+
 /// The queue another device left with `key` as its current title (server: /queue/{key}).
 Future<({List<Item> items, int index})> _otherQueue(String key) async {
   try {

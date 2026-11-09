@@ -362,28 +362,47 @@ class _OutputOverlayState extends State<OutputOverlay> {
                 ? _Pill(t('busy'), kind: 'bad')
                 : _Pill(t('available'), kind: 'ok');
     final canPlay = r.reachable && !r.busy && player.item != null;
+    // One of our sessions that another device started (user 2026-11-09, "105 ja"): what plays, who
+    // started it, and "Control" / "Here" – before, only a restart of the app showed it.
+    final ours = !inOutput && r.reachable && r.startedBy != null && r.sessionRoom == r.id;
+    final d = ours ? remote.device('Sonos ${r.name}') : null;
+    final state = d != null && _stateLine(d).isNotEmpty ? _stateLine(d) : (r.playing ? t('playing') : t('paused'));
+    final line = ours ? '$state · ${t('started by {device}', {'device': remote.shown(r.startedBy!)})}' : '';
+    final buttons = [
+      pill,
+      if (ours) ...[
+        _secondary(t('Control'), () => _run(() => remote.controlSpeaker(r), close: true)),
+        _move(t('Here'), () => _run(() => remote.takeHereFrom(r), close: true)),
+      ],
+      if (!inOutput) _move(t('There'), canPlay ? () => _run(() => sonos.playOn(r), close: true) : null),
+    ];
+    final head = Row(children: [
+      if (grouping && out != null && r.id != out.id && r.reachable && !r.busy)
+        _GroupBox(r, _load)
+      else
+        const Icon(Icons.speaker, size: 28),
+      const SizedBox(width: 10),
+      Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Sonos ${r.name}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          Text('${r.model} · ${r.s2 ? t('up to 24 bit / 48 kHz') : t('up to 16 bit / 48 kHz')}',
+              maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: context.tok.muted)),
+          if (line.isNotEmpty)
+            Text(line, key: ValueKey('room-line-${r.id}'), maxLines: 2, overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 13, color: context.tok.muted)),
+        ]),
+      ),
+    ]);
     return _card(
       context,
-      child: Row(children: [
-        if (grouping && out != null && r.id != out.id && r.reachable && !r.busy)
-          _GroupBox(r, _load)
-        else
-          const Icon(Icons.speaker, size: 28),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Sonos ${r.name}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-            Text('${r.model} · ${r.s2 ? t('up to 24 bit / 48 kHz') : t('up to 16 bit / 48 kHz')}',
-                maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: context.tok.muted)),
-          ]),
-        ),
-        const SizedBox(width: 8),
-        pill,
-        if (!inOutput) ...[
-          const SizedBox(width: 8),
-          _move(t('There'), canPlay ? () => _run(() => sonos.playOn(r), close: true) : null),
-        ],
-      ]),
+      child: LayoutBuilder(builder: (context, c) {
+        final row = Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.end, crossAxisAlignment: WrapCrossAlignment.center, children: buttons);
+        // Narrow (or with "Control" and "Here"): the buttons below the name.
+        if (c.maxWidth < (ours ? 640 : 420)) {
+          return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [head, const SizedBox(height: 8), Align(alignment: Alignment.centerRight, child: row)]);
+        }
+        return Row(children: [Expanded(child: head), const SizedBox(width: 8), row]);
+      }),
     );
   }
 }
