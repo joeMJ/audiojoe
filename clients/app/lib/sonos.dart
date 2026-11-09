@@ -24,7 +24,7 @@ class Room {
   bool busy = false;
   /// The device that started our session on this room's group (null: none of ours).
   String? startedBy;
-  /// The room our session was started on (its device is "Sonos <that room>"), and its title.
+  /// The room our session was started on (its device is "Sonos {that room}"), and its title.
   int? sessionRoom;
   String? sessionKey;
   /// Remaining time of the speaker's own sleep timer in seconds (null: off or not ours).

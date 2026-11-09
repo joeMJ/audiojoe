@@ -16,6 +16,7 @@ Item episode(int n) => Item(key: 'episode:$n', kind: 'episode', title: 'Episode 
 ListEntry entry(Item it) => ListEntry({'key': it.key, 'title': it.title, 'subtitle': it.subtitle});
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() async {
     Stores.dir = Directory.systemTemp.createTempSync('audiojoe-test');
     for (final s in [Stores.device, Stores.offline, Stores.items]) {

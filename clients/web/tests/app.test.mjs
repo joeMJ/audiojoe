@@ -260,6 +260,16 @@ try {
   await shot("04-jetzt-laeuft");
   const here = await page.evaluate(() => document.querySelector(".fmt .row:last-child")?.innerText.replace(/\s+/g, " "));
   check("plays from cache: one quality line, Cache pill, no Quelle/Hier", /^Cache MP3 \d+ kbit\/s/.test(here ?? "") && !/Quelle|Hier/.test(here ?? ""), here);
+  // "Als Nächstes: …" small below the quality line (user 2026-11-09): the next episode of the continue list.
+  const un = await page.evaluate(async (key) => {
+    const list = await (await fetch("/api/v1/lists/podcasts")).json();
+    const i = list.findIndex((e) => e.key === key);
+    const el = document.querySelector(".fmt .upnext"), q = document.querySelector(".fmt .row");
+    return { want: (i < 0 ? list[0] : list[i + 1])?.title ?? "", text: el?.innerText ?? null, size: el ? getComputedStyle(el).fontSize : "",
+             below: !!(el && q && el.getBoundingClientRect().top >= q.getBoundingClientRect().bottom - 1) };
+  }, ep.key);
+  check("„Als Nächstes“ below the quality line, small", un.want ? un.text === `Als Nächstes: ${un.want}` && un.below && un.size === "13px" : !un.text,
+    JSON.stringify(un));
   const sizes = await page.evaluate(() => [...document.querySelectorAll(".ctrl button, .tools button, .tools .badge")].map((b) => Math.min(b.offsetWidth, b.offsetHeight)));
   check("controls large enough for driving (≥ 64 px)", sizes.length >= 4 && Math.min(...sizes) >= 64, sizes.join(", "));
   const fits = await page.evaluate(() => document.querySelector("main").scrollHeight <= document.querySelector("main").clientHeight + 2);

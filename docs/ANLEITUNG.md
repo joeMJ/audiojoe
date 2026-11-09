@@ -76,6 +76,9 @@ live; es lässt sich nicht offline speichern.
 - **Qualität:** Codec, Bitrate, Bittiefe und Abtastrate. Verlustfreie Formate (FLAC, ALAC, PCM)
   sind gelb bei 16 Bit und rot ab 24 Bit. Wird umgerechnet oder aus dem Cache gespielt, steht das
   dabei.
+- **Als Nächstes:** klein unter der Qualität – im Album der nächste Titel, im Hörbuch das nächste
+  Kapitel, bei Podcasts die nächste Folge aus **Weiterhören**. Bei Radio und beim letzten Eintrag
+  steht nichts. Auch im Web-Player. Ab 0.2.5.
 - **Bedienung:** 15 Sekunden zurück, 30 Sekunden vor. ⏮ ⏭ springen bei Kapiteln zum vorigen bzw.
   nächsten Kapitel (⏮ in den ersten 3 Sekunden eines Kapitels zum vorigen, sonst an den Anfang),
   sonst zum vorigen bzw. nächsten Titel. Sperrbildschirm und Benachrichtigung machen dasselbe.
@@ -93,6 +96,11 @@ Jede Position geht sofort an den Server; die anderen Geräte folgen, solange sie
 spielen. Beim nächsten Start setzt ein Gerät dort fort, wo zuletzt gehört wurde – auch wenn das
 auf einem anderen Gerät war – und zeigt kurz „Übernommen von …“. Lief dort ein Album, kommt das
 ganze Album mit, samt ⏮ ⏭ und dem nächsten Titel.
+
+Beginnt ein anderes Gerät oder ein Sonos-Raum zu spielen, während in der App nichts spielt, zeigt
+sie das sofort und steuert es – wie beim Start, auch nach einer Unterbrechung der Verbindung. Im
+Ausgabe-Fenster steht bei einem Sonos-Raum, den ein anderes Gerät gestartet hat, was dort läuft und
+„gestartet von …“, mit **Steuern** und **Hier**. Ab 0.2.5.
 
 ## Offline
 

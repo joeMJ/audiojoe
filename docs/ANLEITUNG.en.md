@@ -74,6 +74,9 @@ plays live; it cannot be saved offline.
   chapters "(1 of 21)" follows the chapter. A title too long for the line flows through.
 - **Quality:** codec, bit rate, bit depth and sample rate. Lossless formats (FLAC, ALAC, PCM) are
   yellow at 16 bit and red from 24 bit. Conversion or playback from the cache is shown too.
+- **Up next:** small below the quality – in an album the next title, in an audiobook the next
+  chapter, for podcasts the next episode of **Continue**. Nothing for radio and the last entry.
+  Also in the web player. From 0.2.5.
 - **Controls:** 15 seconds back, 30 seconds forward. With chapters ⏮ ⏭ jump to the previous or
   next chapter (⏮ within the first 3 seconds of a chapter to the previous one, otherwise to its
   start), otherwise to the previous or next title. Lock screen and notification do the same.
@@ -91,6 +94,11 @@ Every position goes to the server at once; the other devices follow as long as t
 playing themselves. At the next start a device continues where you listened last – also when that
 was on another device – and briefly shows "Taken over from …". If an album was playing there, the
 whole album comes along, with ⏮ ⏭ and the next title.
+
+When another device or a Sonos room begins to play while nothing plays in the app, the app shows it
+at once and controls it – as at the start, also after the connection was interrupted. In the output
+overlay a Sonos room that another device started shows what plays there and "started by …", with
+**Control** and **Here**. From 0.2.5.
 
 ## Offline
 
