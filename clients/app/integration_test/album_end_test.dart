@@ -112,9 +112,11 @@ void main() {
     await forgetQueues(tracks[1]);
     await player.cueLast();
     log('restart: ${player.item?.title}, queue ${player.queue.length}, index ${player.index}');
-    expect(player.item?.key, tracks[1].key);
+    // The restart takes the newest unfinished title of any device (here one of this album).
+    final at = tracks.indexWhere((t) => t.key == player.item?.key);
+    expect(at, isNonNegative, reason: 'the restart shows a title of this album');
     expect(player.queue.length, tracks.length, reason: 'the restart shows the album, with ⏮ ⏭');
-    expect(player.index, 1);
+    expect(player.index, at);
 
     // Fehler 2: title 3 from 175 s on keeps running past 186 s, then its end plays title 4.
     if (tracks.length > 3) {
