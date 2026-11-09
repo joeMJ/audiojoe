@@ -26,6 +26,9 @@ const user = String.fromEnvironment('USER');
 const pass = String.fromEnvironment('PASS');
 const secret = String.fromEnvironment('TOTP_SECRET');
 const search = String.fromEnvironment('SEARCH', defaultValue: 'Anjunabeats');
+/// FULL=true: only "Fehler 2" with title 3 played from its start to its end without any seek (as
+/// on 171, where it stopped after 186 s), e.g. through the reverse proxy (SERVER=https://…).
+const full = bool.fromEnvironment('FULL');
 
 // ignore: avoid_print
 void log(String s) => print('${DateTime.now().toIso8601String().substring(11, 19)} $s');
@@ -55,6 +58,27 @@ void main() {
     final tracks = [for (final j in res['items'] as List) Item.fromJson((j as Map).cast<String, dynamic>())].where((i) => i.kind == 'track').toList();
     log('album ${album.title}: ${tracks.length} titles, first ${tracks[0].title}, next ${tracks[1].title}');
 
+    if (full) {
+      await player.play(tracks, 2, (list: 'music', key: album.key));
+      await waitUntil(tester, () => player.audio.playing, seconds: 20, what: 'title 3 playing');
+      final len = tracks[2].durationMs ?? 330000;
+      log('title 3 ${tracks[2].title}: ${len ~/ 1000} s, played from the start without seeking');
+      final end = DateTime.now().add(Duration(milliseconds: len + 40000));
+      var last = -1;
+      while (player.item?.key == tracks[2].key && DateTime.now().isBefore(end)) {
+        await tester.pump(const Duration(seconds: 10));
+        final p = player.position;
+        log('title 3 at ${p ~/ 1000} s, playing ${player.audio.playing}, state ${player.audio.processingState}, buffered ${player.audio.bufferedPosition.inSeconds} s');
+        if (p == last && player.item?.key == tracks[2].key) log('  ✖ position stands');
+        last = p;
+      }
+      log('now ${player.item?.title} at ${player.position}, playing ${player.audio.playing}');
+      expect(player.item?.key, tracks[3].key, reason: 'the end of title 3 plays title 4');
+      await tester.pump(const Duration(seconds: 4));
+      expect(player.audio.playing, isTrue);
+      await player.audio.pause();
+      return;
+    }
     await player.play(tracks, 0, (list: 'music', key: album.key));
     await waitUntil(tester, () => player.audio.playing && (player.audio.duration ?? Duration.zero) > Duration.zero, seconds: 20, what: 'playing');
     final d = player.audio.duration!;
