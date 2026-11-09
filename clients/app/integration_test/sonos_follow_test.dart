@@ -1,5 +1,5 @@
 // A Sonos session another device started (user 2026-11-09: the notebook sent an album to the
-// bedroom, the open app on Office PC showed neither it nor a way to fetch it until a restart). Run by
+// bedroom, the open app on the desktop PC showed neither it nor a way to fetch it until a restart). Run by
 // hand against a real speaker, quietly (tools/dev/sonos-follow-test-linux.sh):
 //
 //   flutter test integration_test/sonos_follow_test.dart -d linux --dart-define=SERVER=… --dart-define=USER=…

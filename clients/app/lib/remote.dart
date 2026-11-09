@@ -73,7 +73,7 @@ class Remote extends ChangeNotifier {
   void _onDevice(Device d) {
     final i = devices.indexWhere((x) => x.name == d.name);
     // Another app or one of our speakers begins to play while nothing plays here and nothing is
-    // controlled: show it and control it, as after a start (user 2026-11-09, "106 ja": Office PC showed
+    // controlled: show it and control it, as after a start (user 2026-11-09, "106 ja": the desktop PC showed
     // the radio while the notebook had sent an album to the bedroom).
     final began = d.playing && !d.current && d.online && !d.web && (i < 0 || !devices[i].playing);
     if (began && !active && !player.playing) unawaited(_followStart());
