@@ -342,6 +342,9 @@ msgstr "Gefällt mir"
 msgid "Likes"
 msgstr "Likes"
 
+msgid "Books"
+msgstr "Bücher"
+
 msgid "No likes yet. Mark titles with the heart in the player."
 msgstr "Noch keine Likes. Titel im Player mit dem Herz markieren."
 

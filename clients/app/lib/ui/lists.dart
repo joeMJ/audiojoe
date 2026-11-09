@@ -221,7 +221,8 @@ class _ContinueViewState extends State<ContinueView> {
           showSelectedIcon: false,
           segments: [
             ButtonSegment(value: 'podcasts', label: Text(t('Podcasts'))),
-            ButtonSegment(value: 'books', label: Text(t('Audiobooks'))),
+            // Phones: "Books" – with four segments "Audiobooks" broke into two lines (user 2026-11-09, "149 ja").
+            ButtonSegment(value: 'books', label: Text(MediaQuery.sizeOf(context).width < 600 ? t('Books') : t('Audiobooks'))),
             ButtonSegment(value: 'music', label: Text(t('Music'))),
             ButtonSegment(value: 'likes', label: Text(t('Likes'))),
           ],

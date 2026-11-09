@@ -238,11 +238,14 @@ check("likes: title added, other devices told (SSE)", s == 200 and b.get("added"
       and any(e[1].get("type") == "lists" and e[1].get("list") == "likes" for e in events), json.dumps(b))
 call("PUT", f"/api/v1/playback/{LIKE}", {"position_ms": 300000, "duration_ms": 300000, "finished": True, "updated_at": iso(now),
                                          "title": "e2e like"}, token=A)
-s, b, _ = call("GET", "/api/v1/lists/likes", token=A)
-check("likes: a heard title stays in the list", s == 200 and LIKE in [x["key"] for x in b], str([x["key"] for x in b][:5]))
+def like_keys():
+    s, b, _ = call("GET", "/api/v1/lists/likes", token=A)
+    return [x["key"] for x in b] if s == 200 and isinstance(b, list) else None
+keys = like_keys()
+check("likes: a heard title stays in the list", keys is not None and LIKE in keys, str(keys[:5] if keys else keys))
 s, b, _ = call("DELETE", f"/api/v1/lists/likes/{LIKE}", token=A)
-s2, b2, _ = call("GET", "/api/v1/lists/likes", token=A)
-check("likes: the heart again removes it", s == 200 and s2 == 200 and LIKE not in [x["key"] for x in b2])
+keys = like_keys()
+check("likes: the heart again removes it", s == 200 and keys is not None and LIKE not in keys)
 
 # ------------------------------------------------------------------ internet radio
 s, st, _ = call("GET", "/api/v1/radio/search?q=deutschlandfunk", token=A)

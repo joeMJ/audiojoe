@@ -45,6 +45,7 @@ const deStrings = <String, String>{
   "Back {n} s": "{n} s zurück",
   "Background": "Hintergrund",
   "Below it no download starts; waiting ones load once there is room again.": "Darunter beginnt kein Download; wartende laden weiter, sobald wieder Platz ist.",
+  "Books": "Bücher",
   "Cache": "Cache",
   "Cache {p}": "Cache {p}",
   "Cancel": "Abbrechen",
