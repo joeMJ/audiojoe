@@ -26,6 +26,10 @@ you append episodes, audiobooks or whole albums at the end. At the end of a titl
 the same list plays. Drag to change the order; the bin takes an entry out (for episodes and
 audiobooks: **Mark as heard**).
 
+**Likes:** music titles you mark with the heart (**Like**) in the player. A second tap on the heart
+takes the title out again. A like stays in the list when heard; at the end of a title the next like
+plays. From 0.2.6.
+
 ## Podcasts
 
 **New** shows the latest episodes of all subscriptions, **Subscribed** the podcasts themselves.
@@ -80,7 +84,8 @@ plays live; it cannot be saved offline.
 - **Controls:** 15 seconds back, 30 seconds forward. With chapters ⏮ ⏭ jump to the previous or
   next chapter (⏮ within the first 3 seconds of a chapter to the previous one, otherwise to its
   start), otherwise to the previous or next title. Lock screen and notification do the same.
-- **At the bottom:** **Sleep timer** (5 to 60 minutes, end of chapter, end of title), **Speed**,
+- **At the bottom:** **Sleep timer** (5 to 60 minutes, end of chapter, end of title), **Speed**
+  (for episodes and audiobooks; for music the heart **Like** is there, music always plays at 1.0×),
   **Output** (this device or a Sonos room) and **Offline**.
 - **Volume:** the device's, with Sonos the room's or group's; rooms can be added to or taken out of
   the group.

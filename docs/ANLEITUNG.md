@@ -27,6 +27,10 @@ Plus) hängst du Folgen, Hörbücher oder ganze Alben ans Ende an. Am Ende eines
 nächste Eintrag derselben Liste. Die Reihenfolge lässt sich durch Ziehen ändern; der
 Papierkorb nimmt einen Eintrag heraus (bei Folgen und Hörbüchern: **Als gehört markieren**).
 
+**Likes:** Musiktitel, die du im Player mit dem Herz (**Gefällt mir**) markierst. Ein zweiter Tipp
+auf das Herz nimmt den Titel wieder heraus. Ein Like bleibt nach dem Hören in der Liste; am Ende
+eines Titels spielt der nächste Like. Ab 0.2.6.
+
 ## Podcasts
 
 **Neu** zeigt die neuesten Folgen aller Abonnements, **Abonniert** die Podcasts selbst. Je Folge:
@@ -82,8 +86,9 @@ live; es lässt sich nicht offline speichern.
 - **Bedienung:** 15 Sekunden zurück, 30 Sekunden vor. ⏮ ⏭ springen bei Kapiteln zum vorigen bzw.
   nächsten Kapitel (⏮ in den ersten 3 Sekunden eines Kapitels zum vorigen, sonst an den Anfang),
   sonst zum vorigen bzw. nächsten Titel. Sperrbildschirm und Benachrichtigung machen dasselbe.
-- **Unten:** **Schlaf-Timer** (5 bis 60 Minuten, Ende des Kapitels, Ende des Titels), **Tempo**,
-  **Ausgabe** (dieses Gerät oder ein Sonos-Raum) und **Offline**.
+- **Unten:** **Schlaf-Timer** (5 bis 60 Minuten, Ende des Kapitels, Ende des Titels), **Tempo**
+  (bei Folgen und Hörbüchern; bei Musik steht dort das Herz **Gefällt mir**, Musik spielt immer mit
+  1,0×), **Ausgabe** (dieses Gerät oder ein Sonos-Raum) und **Offline**.
 - **Lautstärke:** die des Geräts, bei Sonos die des Raums bzw. der Gruppe; Räume lassen sich zur
   Gruppe hinzufügen oder herausnehmen.
 - **Schlummern** (Sonos, im Ausgabe-Fenster neben Hierher, Stoppen und Gruppe): stellt den
