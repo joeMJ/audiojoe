@@ -270,6 +270,19 @@ try {
   }, ep.key);
   check("„Als Nächstes“ below the quality line, small", un.want ? un.text === `Als Nächstes: ${un.want}` && un.below && un.size === "13px" : !un.text,
     JSON.stringify(un));
+  // Another episode joins the continue list after this one: the line follows (event "lists", at the latest 30 s).
+  for (const e of [ep, other]) await call("POST", "/lists/podcasts", { key: e.key, title: e.title, subtitle: "" });
+  const t0 = Date.now();
+  const joined = await page.waitForFunction((title) => document.querySelector(".fmt .upnext")?.innerText === `Als Nächstes: ${title}`,
+    { timeout: 40000, polling: 250 }, other.title).then(() => true, () => false);
+  const unBox = await page.evaluate(() => {
+    const el = document.querySelector(".fmt .upnext"), q = document.querySelector(".fmt .row");
+    return { text: el?.innerText ?? null, size: el ? getComputedStyle(el).fontSize : "",
+             below: !!(el && q && el.getBoundingClientRect().top >= q.getBoundingClientRect().bottom - 1) };
+  });
+  check("„Als Nächstes“ follows the continue list: the next episode, small, below the quality line",
+    joined && unBox.below && unBox.size === "13px", `${JSON.stringify(unBox)} after ${Math.round((Date.now() - t0) / 1000)} s`);
+  await call("DELETE", `/lists/podcasts/${encodeURIComponent(other.key)}`);
   const sizes = await page.evaluate(() => [...document.querySelectorAll(".ctrl button, .tools button, .tools .badge")].map((b) => Math.min(b.offsetWidth, b.offsetHeight)));
   check("controls large enough for driving (≥ 64 px)", sizes.length >= 4 && Math.min(...sizes) >= 64, sizes.join(", "));
   const fits = await page.evaluate(() => document.querySelector("main").scrollHeight <= document.querySelector("main").clientHeight + 2);

@@ -357,8 +357,9 @@ function upNextText(): string {
   const s = player.state, it = s.item;
   if (!it || it.kind === "radio" || player.isLive()) return "";
   let next = "";
-  if (it.chapters?.length) next = it.chapters[player.chapterIndex() + 1]?.title ?? "";
-  else if (it.kind === "episode") next = npNextEpisode;
+  // A podcast episode: the next episode, also when it has chapters (rule "108 ja"); chapters for books.
+  if (it.kind === "episode") next = npNextEpisode;
+  else if (it.chapters?.length) next = it.chapters[player.chapterIndex() + 1]?.title ?? "";
   else next = s.queue[s.index + 1]?.title ?? "";
   return next ? t("Up next: {title}", { title: next }) : "";
 }
@@ -369,16 +370,23 @@ onRemote((p) => {
   if (!p.key && it?.kind === "episode") void loadNextEpisode(it.key);
 });
 
+/** Loads the next episode; the newest request wins. Also every 30 s while an episode is shown
+ *  (updateNowPlaying), since the list can change without the view being drawn again. */
+let npNextSeq = 0, npNextAt = 0;
 async function loadNextEpisode(key: string) {
-  npNextEpisode = "";
+  const seq = ++npNextSeq;
+  npNextAt = Date.now();
+  let next = "";
   try {
     const list = await api<ListEntry[]>("GET", "/lists/podcasts");
     // Not in the list: nothing plays after it (see setNextAfter), so no line.
     const i = list.findIndex((x) => x.key === key);
-    npNextEpisode = i < 0 ? "" : list[i + 1]?.title ?? "";
+    next = i < 0 ? "" : list[i + 1]?.title ?? "";
   } catch {
-    npNextEpisode = "";
+    next = "";
   }
+  if (seq !== npNextSeq) return;
+  npNextEpisode = next;
   if (player.state.item?.key === key) updateNowPlaying();
 }
 
@@ -614,6 +622,7 @@ function updateNowPlaying() {
     npRefs.here.dataset.v = here;
     npRefs.here.replaceChildren(qualityRow(s.delivered ?? s.item?.quality, s.fromCache, s.transcoded ? s.item?.quality : null));
   }
+  if (s.item?.kind === "episode" && Date.now() - npNextAt > 30000) void loadNextEpisode(s.item.key);
   const un = upNextText();
   if (npRefs.upnext.textContent !== un) npRefs.upnext.textContent = un;
   const ci = player.chapterIndex();

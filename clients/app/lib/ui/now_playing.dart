@@ -250,7 +250,9 @@ class _UpNextLineState extends State<_UpNextLine> {
   @override
   Widget build(BuildContext context) {
     final it = widget.it;
-    final sig = [it.key, player.index, player.queue.length, player.chapterIndex, remote.target ?? ''].join('|');
+    // An episode's continue list can change without an event reaching this view: again every 30 s.
+    final slot = it.kind == 'episode' ? DateTime.now().millisecondsSinceEpoch ~/ 30000 : 0;
+    final sig = [it.key, player.index, player.queue.length, player.chapterIndex, remote.target ?? '', slot].join('|');
     if (sig != _sig || _next == null) {
       _sig = sig;
       _next = upNextNow(it).catchError((_) => null);
