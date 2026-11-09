@@ -54,7 +54,9 @@ Future<void> main() async {
 }
 
 /// The window is to close: save the position, shut libmpv down, then close (at most 4 s, so a
-/// server that does not answer never keeps the window open).
+/// server that does not answer never keeps the window open). Closed the normal way, not with
+/// `destroy()`: on Windows that only posts WM_QUIT, the engine went down outside the window's own
+/// teardown and Windows logged an APPCRASH in flutter_windows.dll (VM 2026-11-09, 0.2.5 baed8c3).
 class _Quit with WindowListener {
   bool _closing = false;
 
@@ -65,7 +67,8 @@ class _Quit with WindowListener {
     try {
       await player.shutdown().timeout(const Duration(seconds: 4));
     } catch (_) {}
-    await windowManager.destroy();
+    await windowManager.setPreventClose(false);
+    await windowManager.close();
   }
 }
 
