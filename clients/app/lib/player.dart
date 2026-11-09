@@ -33,7 +33,7 @@ class Player extends ChangeNotifier {
       notifyListeners();
     });
     audio.currentIndexStream.listen(_onIndex);
-    audio.errorStream.listen((_) => _interrupted());
+    audio.errorStream.listen(_onError);
     downloads.addListener(_onDownloads);
     sync.reconnected.listen((_) => _retryNow());
     sync.remote.listen(_onRemote);
@@ -373,6 +373,74 @@ class Player extends ChangeNotifier {
     }
   }
 
+  /// A spot in the file that cannot be decoded (not the connection): mpv reports "Header missing" /
+  /// "Error decoding audio" again on every attempt there (title 3 of an album on 171 at 186 s and at
+  /// its end, user 2026-11-08). Counted per spot and attempt, see [_onError].
+  int _badAt = -1, _badCount = 0;
+  DateTime _badSeen = DateTime(0);
+  /// The end of the item is being handled (one error can come as several messages).
+  bool _ending = false;
+
+  static bool _decoding(PlayerException e) {
+    final m = '${e.message}'.toLowerCase();
+    return m.contains('decod') || m.contains('header missing');
+  }
+
+  /// A playback error. Within the last 5 s of the item it counts as the end (the next title plays,
+  /// user 2026-11-09 "92 ja"). A decoding error that comes back after two attempts at the same spot
+  /// continues 5 s later ("93 ja"); everything else waits for the connection ([_interrupted]).
+  void _onError(PlayerException e) {
+    final it = item;
+    if (_ending) return;
+    if (it == null || _cued || remote.active || _switching) return _interrupted();
+    final length = it.kind == 'radio' ? 0 : it.durationMs ?? 0;
+    final ms = _lastMs;
+    if (length > 0 && ms >= length - 5000) {
+      _stopWaiting();
+      unawaited(_atEnd());
+      return;
+    }
+    if (length > 0 && _decoding(e)) {
+      final now = DateTime.now();
+      // The messages of one attempt come together: one count.
+      if (now.difference(_badSeen) > const Duration(seconds: 1)) {
+        if (_badAt >= 0 && (ms - _badAt).abs() <= 2000) {
+          _badCount++;
+        } else {
+          _badAt = ms;
+          _badCount = 1;
+        }
+      }
+      _badSeen = now;
+      if (_badCount >= 3) {
+        _badAt = -1;
+        _badCount = 0;
+        final on = ms + 5000;
+        if (on >= length - 5000) {
+          _stopWaiting();
+          unawaited(_atEnd());
+          return;
+        }
+        _lastMs = on;
+        return _interrupted(at: on);
+      }
+    }
+    _interrupted();
+  }
+
+  /// The item ended here: the next title (or the next list entry), unless the sleep timer stops here.
+  Future<void> _atEnd() async {
+    if (_ending) return;
+    _ending = true;
+    try {
+      final stopHere = sleepAtEnd != null;
+      if (stopHere) setSleep();
+      await _ended(stopHere);
+    } finally {
+      _ending = false;
+    }
+  }
+
   void _track() {
     if (_cued || item == null || _switching || audio.processingState == ProcessingState.idle) return;
     if (audio.processingState == ProcessingState.ready || audio.processingState == ProcessingState.buffering) {
@@ -685,11 +753,7 @@ class Player extends ChangeNotifier {
       _interrupted();
       return notifyListeners();
     }
-    if (s.processingState == ProcessingState.completed) {
-      final stopHere = sleepAtEnd != null;
-      if (stopHere) setSleep();
-      unawaited(_ended(stopHere));
-    }
+    if (s.processingState == ProcessingState.completed) unawaited(_atEnd());
     notifyListeners();
   }
 

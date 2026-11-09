@@ -492,11 +492,11 @@ function mailText(): { subject: string; body: string; full: string } {
   const prompted = new Set(result.steps.map(([id]) => id));
   const ev = log.filter((e) => !e.a.startsWith("el:") && !prompted.has(e.step))
     .map((e) => `${e.a.replace(/^vis:/, "v:")}@${(e.t / 1000).toFixed(1)}`);
-  const lines = [
+  const lines = (ua: string) => [
     `audiojoe testcar 1${result.server ? ` server ${result.server}` : ""}`,
     `car: ${v.make} / ${v.model} / ${v.year}`,
     `when: ${d.toISOString().slice(0, 16)}Z, ${Math.round(now() / 1000)}s`,
-    `ua: ${result.env.ua}`,
+    `ua: ${ua}`,
     `screen: ${result.env.screen}`,
     `input: ${result.env.input}`,
     `feat: ${result.env.features}`,
@@ -512,7 +512,8 @@ function mailText(): { subject: string; body: string; full: string } {
   ].filter(Boolean);
   // The event log is cut so the QR code stays coarse enough to read from a photo: at most
   // QR_MODULES modules, so 800×480 still has 4 pixels per module (user 2026-11-08, "81 ja").
-  let body = lines.join("\n");
+  // The QR code names only browser and car of the user agent (user 2026-11-09, "94 ja").
+  let body = lines(shortUa(result.env.ua)).join("\n");
   const rest = ev.slice();
   let logLine = `log: ${rest.join(" ") || "-"}`;
   while (qrModules(mailUrl({ subject, body: body + "\n" + logLine })) > QR_MODULES && rest.length) {
@@ -520,9 +521,19 @@ function mailText(): { subject: string; body: string; full: string } {
     logLine = `log:${rest.length ? ` ${rest.join(" ")}` : ""}(cut)`;
   }
   // "Show mail text" keeps the whole log (user 2026-11-07 "3 ja"); only the QR code is cut.
-  const full = `${body}\nlog: ${ev.join(" ") || "-"}`;
+  const full = `${lines(result.env.ua).join("\n")}\nlog: ${ev.join(" ") || "-"}`;
   body += `\n${logLine}`;
   return { subject, body, full };
+}
+
+/** Browser and car of a user agent for the QR code, e.g. "Chrome/136 Tesla/2025.32.3"; the whole one
+ *  when none of them is in it. */
+export function shortUa(ua: string): string {
+  const browser = ua.match(/\b(Edg|OPR|Firefox|Chrome|Chromium|QtWebEngine)\/(\d+)/) ?? ua.match(/\bVersion\/(\d+)[^ ]* (Safari)\//);
+  const name = browser ? (browser[2] === "Safari" ? `Safari/${browser[1]}` : `${browser[1]}/${browser[2]}`) : "";
+  const car = ua.match(/\bTesla\/[\w.-]+/)?.[0] ?? "";
+  const short = [name, car].filter(Boolean).join(" ");
+  return short || ua;
 }
 
 /** Percent-encoding for a mailto header value: only what RFC 6068 requires (/ : , ; = @ stay as they are). */
