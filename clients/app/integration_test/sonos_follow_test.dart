@@ -86,6 +86,12 @@ void main() {
     Finder inRoomCard(String label) => find.descendant(
         of: find.ancestor(of: find.byKey(ValueKey('room-line-$roomId')), matching: find.byType(Card)),
         matching: find.widgetWithText(FilledButton, label));
+    // The rooms stand at the end of the overlay, below the window's height: scroll there first.
+    Future<void> tapInRoom(String label) async {
+      await tester.ensureVisible(inRoomCard(label));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(inRoomCard(label));
+    }
     Future<void> idle() async {
       remote.release();
       await player.pauseHere();
@@ -110,13 +116,13 @@ void main() {
       final line = (tester.widget(find.byKey(const ValueKey('room-line-$roomId'))) as Text).data ?? '';
       log('A line: $line');
       expect(line, contains('Notebook (Test)'));
-      await tester.tap(inRoomCard('Control'));
+      await tapInRoom('Control');
       await waitUntil(tester, controlling, seconds: 20, what: 'A: "Control" controls the room');
       log('A control ok');
       await idle();
       outputOpen.value = true;
       await waitFor(tester, inRoomCard('Here'), seconds: 20);
-      await tester.tap(inRoomCard('Here'));
+      await tapInRoom('Here');
       await waitUntil(tester, () => player.audio.playing && !remote.active && player.item?.key == key, seconds: 30,
           what: 'A: "Here" plays here');
       final after = (await sonos.rooms()).firstWhere((r) => r.id == roomId);
