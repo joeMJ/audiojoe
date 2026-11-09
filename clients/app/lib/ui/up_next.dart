@@ -56,10 +56,16 @@ Future<List<UpNextRow>> upNextRows(Item it, List<Item> queue, int index,
 
 /// The entry after the current one, for the small line "Up next: …" below the format chips (user
 /// 2026-11-09, "107–109 ja"): in an album the next title, in a book the next chapter, for a podcast the
-/// next episode of the continue list. Radio and the last entry: none.
+/// next episode of the continue list. Radio and the last entry: none – as what plays at the end
+/// (`connectLists`): an episode that is not in the continue list is followed by nothing.
 Future<String?> upNextTitle(Item it, List<Item> queue, int index,
     {Future<List<ListEntry>> Function(String list) load = loadList}) async {
   if (it.kind == 'radio') return null;
+  if (it.kind == 'episode') {
+    final list = await load('podcasts');
+    final i = list.indexWhere((e) => e.key == it.key);
+    return i >= 0 && i + 1 < list.length ? list[i + 1].title : null;
+  }
   final rows = await upNextRows(it, queue, index, local: false, load: load);
   final i = rows.indexWhere((r) => r.current);
   return i >= 0 && i + 1 < rows.length ? rows[i + 1].title : null;

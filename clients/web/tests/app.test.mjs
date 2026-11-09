@@ -265,7 +265,7 @@ try {
     const list = await (await fetch("/api/v1/lists/podcasts")).json();
     const i = list.findIndex((e) => e.key === key);
     const el = document.querySelector(".fmt .upnext"), q = document.querySelector(".fmt .row");
-    return { want: (i < 0 ? list[0] : list[i + 1])?.title ?? "", text: el?.innerText ?? null, size: el ? getComputedStyle(el).fontSize : "",
+    return { want: i < 0 ? "" : list[i + 1]?.title ?? "", text: el?.innerText ?? null, size: el ? getComputedStyle(el).fontSize : "",
              below: !!(el && q && el.getBoundingClientRect().top >= q.getBoundingClientRect().bottom - 1) };
   }, ep.key);
   check("„Als Nächstes“ below the quality line, small", un.want ? un.text === `Als Nächstes: ${un.want}` && un.below && un.size === "13px" : !un.text,

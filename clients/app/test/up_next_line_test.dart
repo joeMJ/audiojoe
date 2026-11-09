@@ -48,8 +48,8 @@ void main() {
     Future<List<ListEntry>> load(String l) async => l == 'podcasts' ? [for (final e in list) entry(e)] : [];
     expect(await upNextTitle(list[1], [list[1]], 0, load: load), 'Episode 3');
     expect(await upNextTitle(list[2], [list[2]], 0, load: load), isNull);
-    // Not in the list (e.g. played from the show page): the first entry of the list.
-    expect(await upNextTitle(episode(9), [episode(9)], 0, load: load), 'Episode 1');
+    // Not in the list (e.g. played from the show page): nothing plays after it, so none.
+    expect(await upNextTitle(episode(9), [episode(9)], 0, load: load), isNull);
   });
 
   test('book: the next chapter, after the last none', () async {

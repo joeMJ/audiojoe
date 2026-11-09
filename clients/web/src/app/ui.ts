@@ -5,7 +5,7 @@ import { addOffline, clearOffline, dropPlayedOn, offlineEntry, offlineList, remo
 import { ago, bytes, clock, t } from "./i18n";
 import { idbAll } from "./idb";
 import * as player from "./player";
-import { pendingCount, savePosition, stale } from "./sync";
+import { onRemote, pendingCount, savePosition, stale } from "./sync";
 import { isDark, onAppearance, toggleDark } from "./theme";
 
 type View = "np" | "cont" | "pod" | "books" | "lib" | "radio" | "off";
@@ -363,12 +363,19 @@ function upNextText(): string {
   return next ? t("Up next: {title}", { title: next }) : "";
 }
 
+// A continue list changed (or a resync): the next episode may be another one.
+onRemote((p) => {
+  const it = player.state.item;
+  if (!p.key && it?.kind === "episode") void loadNextEpisode(it.key);
+});
+
 async function loadNextEpisode(key: string) {
   npNextEpisode = "";
   try {
     const list = await api<ListEntry[]>("GET", "/lists/podcasts");
+    // Not in the list: nothing plays after it (see setNextAfter), so no line.
     const i = list.findIndex((x) => x.key === key);
-    npNextEpisode = (i < 0 ? list[0] : list[i + 1])?.title ?? "";
+    npNextEpisode = i < 0 ? "" : list[i + 1]?.title ?? "";
   } catch {
     npNextEpisode = "";
   }
