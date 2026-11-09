@@ -120,7 +120,8 @@ async function environment() {
 // Sample rate of the browser's audio output (user 2026-11-07: "ob das Ding 24 Bit 48 kHz kann").
 // AudioContext.sampleRate is the rate the browser mixes at for the output device (the device's
 // rate as the system set it); the bit depth of the output is not visible to a web page – the
-// stages below show which files the car decodes and plays.
+// stages below show which files the car decodes. A stage above that rate plays only because the
+// browser converts it down: it counts as "resampled", not as the highest stage (user 2026-11-09).
 
 let audioRate = 0;
 function audioOutput(): string {
@@ -177,20 +178,40 @@ function mailAudio(): string {
   return `${m[1]}Hz,out=${m[3] ?? "?"}ms${m[4] && m[4] !== "running" ? `,${m[4]}` : ""}`;
 }
 
-/** PCM stages for the mail: how many played, the highest, and each one that failed with its
- * reason – e.g. "7/7,max=24/192" or "5/7,max=24/96,24/192-err4,wav24/48-timeout". */
-function mailStages(): string {
-  const failed = STAGES.flatMap(([label, id]) => {
-    const f = result.formats.find((x) => x.startsWith(`${id}+`) || x.startsWith(`${id}-`)) ?? `${id}-`;
-    if (f.startsWith(`${id}+`)) return [];
-    return [`${label.startsWith("WAV") ? "wav" : ""}${label.split(" ")[1]}${f.slice(id.length)}`];
-  });
-  return [`${STAGES.length - failed.length}/${STAGES.length}`, `max=${highestStage() || "-"}`, ...failed].join(",");
+/** The measured result of one format ("+<ms>" or "-<reason>"), "" when not measured. Exact: the id
+ * "flac24" must not take the result of "flac24-44" (0.2.4 mailed "24/96-44+687" as failed). */
+function resultOf(id: string): string {
+  const ids = FORMATS.map(([, i]) => i);
+  const f = result.formats.find((x) => x.startsWith(id) && /^[+-]/.test(x.slice(id.length))
+    && !ids.some((o) => o.length > id.length && x.startsWith(o) && /^[+-]/.test(x.slice(o.length))));
+  return f ? f.slice(id.length) : "";
 }
 
-/** The highest PCM stage that played, e.g. "24/96"; "" when none. */
+/** kHz of a stage label: "FLAC 24/96" → 96 (44 stands for 44.1). */
+const stageKhz = (label: string) => Number(label.split(" ")[1].split("/")[1]);
+const stageHz = (label: string) => (stageKhz(label) === 44 ? 44100 : stageKhz(label) * 1000);
+
+/** A stage above the browser's output rate plays only because the browser converts it down (user
+ * 2026-11-09: "Er kann nur 48kHz … Der Browser spielt alle Files trotzdem ab, weil er dann downsamplet"). */
+const resampled = (label: string) => audioRate > 0 && stageHz(label) > audioRate;
+
+/** PCM stages for the mail: how many played, the highest at most at the output rate
+ * (AudioContext.sampleRate), the rates the browser converted down, and each one that failed with
+ * its reason – e.g. "7/7,max=24/48,resampled=96,192" or "5/7,max=24/48,24/192-err4,wav24/48-timeout". */
+function mailStages(): string {
+  const failed = STAGES.flatMap(([label, id]) => {
+    const r = resultOf(id) || "-";
+    if (r.startsWith("+")) return [];
+    return [`${label.startsWith("WAV") ? "wav" : ""}${label.split(" ")[1]}${r}`];
+  });
+  const down = [...new Set(STAGES.filter(([label, id]) => resultOf(id).startsWith("+") && resampled(label)).map(([label]) => stageKhz(label)))];
+  return [`${STAGES.length - failed.length}/${STAGES.length}`, `max=${highestStage() || "-"}`,
+    ...(down.length ? [`resampled=${down.join(",")}`] : []), ...failed].join(",");
+}
+
+/** The highest PCM stage that played at most at the output rate, e.g. "24/48"; "" when none. */
 function highestStage(): string {
-  const played = STAGES.filter(([, id]) => result.formats.some((f) => f.startsWith(`${id}+`)))
+  const played = STAGES.filter(([label, id]) => resultOf(id).startsWith("+") && !resampled(label))
     .map(([label]) => label.split(" ")[1].split("/").map(Number) as [number, number]);
   played.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
   const top = played.at(-1);
@@ -339,7 +360,10 @@ async function formatsScreen() {
     step = `fmt-${id}`;
     const r = await playShort(`/testcar/${file}`);
     result.formats.push(`${id}${r}`);
-    chips.append(h("span", { className: r.startsWith("+") ? "chip ok" : "chip bad" }, `${label} ${r.startsWith("+") ? "✓" : "✗"}`));
+    // Above the output rate: plays, but converted down by the browser.
+    const down = r.startsWith("+") && STAGES.some(([l, i]) => i === id && resampled(l));
+    chips.append(h("span", { className: down ? "chip warn" : r.startsWith("+") ? "chip ok" : "chip bad" },
+      `${label} ${down ? t("resampled") : r.startsWith("+") ? "✓" : "✗"}`));
   }
   step = "cache";
   result.cache = await cacheTest();
@@ -586,6 +610,7 @@ function endScreen() {
   const formatsOk = result.formats.filter((f) => f.includes("+")).length;
   const failed = FORMATS.filter(([, id]) => !result.formats.find((f) => f.startsWith(`${id}+`))).map(([l]) => l);
   const [bits, khz] = highestStage().split("/");
+  const downKhz = [...new Set(STAGES.filter(([label, id]) => resultOf(id).startsWith("+") && resampled(label)).map(([label]) => stageKhz(label)))];
   const khzText = khz === "44" ? (navigator.language.toLowerCase().startsWith("de") ? "44,1" : "44.1") : khz;
   const count = (l: [string, string][]) => l.length && l.every(([, r]) => r === "none")
     ? h("span", {}, t("no buttons"))
@@ -599,6 +624,7 @@ function endScreen() {
     h("span", {}, t("Audio output")), h("span", {}, audioRate ? `${audioRate} Hz` : "?"),
     h("span", {}, t("Highest stage")), h("span", { className: bits ? "" : "bad", id: "stage" },
       bits ? t("{b} bit / {k} kHz", { b: bits, k: khzText }) : "✗"),
+    ...(downKhz.length ? [h("span", {}, t("Resampled")), h("span", { className: "warn", id: "resampled" }, `${downKhz.join(", ")} kHz`)] : []),
     h("span", {}, t("Cache")), h("span", { className: result.cache.startsWith("+") ? "ok" : "bad" }, result.cache.startsWith("+") ? "✓" : "✗"),
     h("span", {}, t("Music shown")), h("span", {}, shownLabel),
     ...(bar.length ? [h("span", {}, t("Music bar")), count(bar)] : []),

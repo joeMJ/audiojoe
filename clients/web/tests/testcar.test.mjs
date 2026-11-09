@@ -133,6 +133,20 @@ try {
     check("Mail enthält Audioausgabe und PCM-Stufen", /\naudio: \d{4,6}Hz,out=\d+ms/.test(body) && /\npcm: \d\/7,max=/.test(body), body.match(/\naudio: [^\n]*/)?.[0]);
     const stage = await page.$eval("#stage", (s) => s.textContent);
     check("Ergebnis nennt die höchste Stufe", /^\d\d (bit|Bit) \/ [\d.,]+ kHz$/.test(stage), stage);
+    // The highest stage follows the output rate (AudioContext.sampleRate); higher ones only play converted
+    // down (user 2026-11-09: "Er kann nur 48kHz … weil er dann downsamplet").
+    const rate = Number(body.match(/\naudio: (\d+)Hz/)?.[1] ?? 0);
+    const pcm = body.match(/\npcm: ([^\n]*)/)?.[1] ?? "";
+    const hz = (k) => (k === 44 ? 44100 : k * 1000);
+    const maxK = Number(pcm.match(/max=\d+\/(\d+)/)?.[1] ?? 0);
+    const playedK = ["flac16", "flac16-48", "flac24-44", "flac24-48", "flac24", "flac24-192", "wav24-48"]
+      .map((id, i) => [id, [44, 48, 44, 48, 96, 192, 48][i]]).filter(([id]) => r1.formats.some((f) => f.startsWith(`${id}+`))).map(([, k]) => k);
+    const above = [...new Set(playedK.filter((k) => hz(k) > rate))];
+    const listed = pcm.match(/resampled=([\d,]+?)(?:,\d+\/|,wav|$)/)?.[1]?.split(",").map(Number) ?? [];
+    const shownDown = await page.$eval("#resampled", (e) => e.textContent).catch(() => "");
+    check("höchste Stufe höchstens mit der Ausgaberate, höhere als „umgerechnet“",
+      rate > 0 && hz(maxK) <= rate && JSON.stringify(listed) === JSON.stringify(above) && (above.length ? shownDown === `${above.join(", ")} kHz` : !shownDown),
+      `audio ${rate} Hz, pcm ${pcm}, shown ${shownDown || "–"}`);
     check("Mail enthält Ergebnis der Knöpfe", body.includes("wheel-next: "));
     const shown = await page.$eval("#mailtext", (p) => p.textContent);
     check("„Mailtext anzeigen“ mit ungekürztem Protokoll", /\nlog: /.test(shown) && !shown.includes("(cut)") && shown.split("\nlog:")[1].length >= (body.split("\nlog:")[1] ?? "").length,

@@ -957,6 +957,12 @@ msgstr "Audioausgabe"
 msgid "Highest stage"
 msgstr "Höchste Stufe"
 
+msgid "Resampled"
+msgstr "Umgerechnet"
+
+msgid "resampled"
+msgstr "umgerechnet"
+
 msgid "{b} bit / {k} kHz"
 msgstr "{b} Bit / {k} kHz"
 
