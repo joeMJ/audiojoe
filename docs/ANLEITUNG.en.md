@@ -134,6 +134,9 @@ button. On screens narrower than the Tesla's (less than 420 px right of the cove
 buttons stack under the cover; the controls stay at the bottom right. Links in show notes are
 shown as text only.
 
+The Tesla browser does not pass the steering wheel buttons or ⏭ and ⏮ of the music bar on to web
+pages; from the music bar only pause/play arrives. So the web player is operated on the screen.
+
 <p align="center">
   <img src="screenshots/web-player.webp" alt="Web player in the size of the car screen" width="580">
   <br>

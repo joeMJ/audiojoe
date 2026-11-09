@@ -136,6 +136,10 @@ Hörbüchern fehlt der Knopf. Auf schmaleren Bildschirmen als dem des Tesla (wen
 rechts vom Cover) stehen die drei Knöpfe untereinander unter dem Cover, die Bedienknöpfe bleiben
 rechts unten. Links in den Shownotes stehen nur als Text.
 
+Der Browser im Tesla gibt die Tasten am Lenkrad sowie ⏭ und ⏮ der Musikleiste nicht an Webseiten
+weiter; aus der Musikleiste kommt nur Pause/Wiedergabe an. Bedient wird der Web-Player deshalb auf
+dem Bildschirm.
+
 <p align="center">
   <img src="screenshots/web-player.webp" alt="Web-Player im Format des Auto-Bildschirms" width="580">
   <br>
