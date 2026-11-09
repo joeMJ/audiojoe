@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 
 import '../downloads.dart';
 import '../l10n.dart';
+import '../likes.dart';
 import '../models.dart';
 import '../player.dart';
 import '../remote.dart';
@@ -535,8 +536,26 @@ class _Toolbar extends StatelessWidget {
     final tools = [
         tool(Icon(player.sleeping ? Icons.bedtime : Icons.bedtime_outlined, size: 28, color: player.sleeping ? accent : null), sleepLabel,
             local && !player.live ? () => _sleepSheet(context) : null, tip: t('Sleep timer')),
-        tool(Text('${_rate(player.rate)}×', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)), t('Speed'),
-            local && !player.live ? () => _rateSheet(context) : null),
+        // Music: the heart in place of the speed (user 2026-11-09, "143 ja"); podcasts and books keep the speed.
+        if (Likes.likeable(it))
+          Expanded(
+            child: ListenableBuilder(
+              listenable: likes,
+              builder: (context, _) {
+                final on = likes.has(it.key);
+                // tool() is an Expanded for the row; here its content, the Expanded stands outside.
+                return KeyedSubtree(key: const ValueKey('like'), child: (tool(Icon(on ? Icons.favorite : Icons.favorite_border, size: 28, color: on ? accent : null), t('Like'), () {
+                  final messenger = ScaffoldMessenger.of(context);
+                  unawaited(likes.toggle(it).catchError((Object e) {
+                    messenger.showSnackBar(SnackBar(content: Text('${t('Error')}: $e')));
+                  }));
+                }) as Expanded).child);
+              },
+            ),
+          )
+        else
+          tool(Text('${_rate(player.rate)}×', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)), t('Speed'),
+              local && !player.live ? () => _rateSheet(context) : null),
         tool(Icon(local ? Icons.smartphone : out != null ? Icons.speaker : Icons.devices, size: 28, color: local ? null : accent),
             local ? t('This device') : out?.short ?? remote.shown(remote.target!), () => outputOpen.value = true,
             tip: t('Output')),

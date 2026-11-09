@@ -229,6 +229,21 @@ check("device B receives the settings live (SSE)",
       any(e[1].get("type") == "settings" and e[1]["playback"] == b for e in events))
 call("PUT", "/api/v1/settings/playback", before, token=A)
 
+# Likes (0.2.6, user 2026-11-09 "144 ja", "147 ja"): a music title marked with the heart; it stays when heard.
+LIKE = "jellyfin:9:e2elike"
+call("DELETE", f"/api/v1/lists/likes/{LIKE}", token=A)
+s, b, _ = call("POST", "/api/v1/lists/likes", {"key": LIKE, "title": "e2e like", "subtitle": "e2e"}, token=A)
+time.sleep(1.0)
+check("likes: title added, other devices told (SSE)", s == 200 and b.get("added") is True
+      and any(e[1].get("type") == "lists" and e[1].get("list") == "likes" for e in events), json.dumps(b))
+call("PUT", f"/api/v1/playback/{LIKE}", {"position_ms": 300000, "duration_ms": 300000, "finished": True, "updated_at": iso(now),
+                                         "title": "e2e like"}, token=A)
+s, b, _ = call("GET", "/api/v1/lists/likes", token=A)
+check("likes: a heard title stays in the list", s == 200 and LIKE in [x["key"] for x in b], str([x["key"] for x in b][:5]))
+s, b, _ = call("DELETE", f"/api/v1/lists/likes/{LIKE}", token=A)
+s2, b2, _ = call("GET", "/api/v1/lists/likes", token=A)
+check("likes: the heart again removes it", s == 200 and s2 == 200 and LIKE not in [x["key"] for x in b2])
+
 # ------------------------------------------------------------------ internet radio
 s, st, _ = call("GET", "/api/v1/radio/search?q=deutschlandfunk", token=A)
 if not isinstance(st, list):  # directory unreachable: report, do not crash

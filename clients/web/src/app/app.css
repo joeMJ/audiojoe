@@ -124,6 +124,10 @@ main.dock .tools .big { white-space: normal; line-height: 1.15; text-overflow: c
 .tools .offtool > *, .tools .offtool > .badge.slot { flex: 1; min-width: 0; }
 .tools .next { display: flex; align-items: center; justify-content: center; gap: 6px; }
 .tools .next svg { width: 20px; height: 20px; flex: none; }
+/* The heart for music (user 2026-11-09): outline, filled and in the accent colour when liked */
+.tools .like { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.tools .like svg { width: 22px; height: 22px; flex: none; }
+.tools .like.on { color: var(--accent); }
 .tools .next:disabled { opacity: .4; }
 /* Equal columns whatever the padding of the fields. */
 .tools { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; }

@@ -62,6 +62,9 @@ try {
     codec: [...document.querySelectorAll(".fchip")].map((c) => `${c.innerText}:${c.className}`).join(" ") }));
   check("„(1 von n)“ after the title", /^\(1 von \d+\)$/.test(facts.place ?? ""), facts.place);
   check("lossless codec chip coloured by bit depth", /(FLAC|PCM|ALAC):fchip (hi|cd)/.test(facts.codec) || !/FLAC|PCM|ALAC/.test(facts.codec), facts.codec);
+  // Music: the heart in place of the speed (user 2026-11-09, "143 ja").
+  const tb = await page.evaluate(() => [...document.querySelectorAll(".tools button")].map((b) => `${b.className}:${b.innerText.trim()}`));
+  check("music: heart „Gefällt mir“ instead of the speed", tb.some((x) => x.includes("like") && x.endsWith("Gefällt mir")) && !tb.some((x) => /Tempo/.test(x)), tb.join(" | "));
   await page.evaluate(() => document.querySelector(".ctrl .play").click()); // pause, position saved
   await sleep(1500);
   await page.reload({ waitUntil: "domcontentloaded" });
@@ -115,6 +118,14 @@ try {
   await page.evaluate(() => document.querySelector(".ctrl .play").click());
   await sleep(2500);
   const before = await page.evaluate((q) => JSON.parse(localStorage.getItem(q)), QUEUE);
+  // Like this title (the heart is a switch); it must stay in the likes when it has been heard.
+  const likedKey = before.queue[before.index].key;
+  await page.evaluate(async (k) => fetch(`/api/v1/lists/likes/${encodeURIComponent(k)}`, { method: "DELETE" }), likedKey);
+  await page.click(".tools .like");
+  await page.waitForFunction(() => document.querySelector(".tools .like")?.classList.contains("on"), { timeout: 5000, polling: 200 }).catch(() => undefined);
+  await sleep(800);
+  const liked = await page.evaluate(async () => (await (await fetch("/api/v1/lists/likes")).json()).map((e) => e.key));
+  check("heart: title in the likes, heart filled", liked.includes(likedKey) && await page.$eval(".tools .like", (b) => b.classList.contains("on")), liked.join(","));
   const bar = await page.$(".bar");
   const box = await bar.boundingBox();
   await page.mouse.click(box.x + box.width - 1, box.y + box.height / 2);
@@ -125,6 +136,18 @@ try {
   check("at the end of a title the next one plays, none skipped", after.index === before.index + 1 && (await title()) !== second,
     `index ${before.index} → ${after.index}, ${await title()}`);
   check("the title that ended is saved as heard", heard.finished === true, JSON.stringify({ finished: heard.finished, position: heard.position_ms, duration: heard.duration_ms }));
+  const still = await page.evaluate(async () => (await (await fetch("/api/v1/lists/likes")).json()).map((e) => e.key));
+  check("a liked title stays in the likes when heard", still.includes(likedKey), still.join(","));
+  // Continue → Likes shows it; the bin takes it out.
+  await nav("Weiterhören");
+  await page.evaluate(() => [...document.querySelectorAll(".chips.seg button")].find((b) => b.innerText === "Likes").click());
+  await page.waitForFunction(() => document.querySelectorAll("main .list .item").length > 0, { timeout: 10000, polling: 250 }).catch(() => undefined);
+  const rows = await page.evaluate(() => [...document.querySelectorAll("main .list .item")].map((r) => r.innerText.split("\n")[0]));
+  check("Weiterhören → Likes shows the liked title", rows.length >= 1, rows.join(" | "));
+  await page.evaluate(() => document.querySelector("main .list .item button[aria-label='Aus der Liste nehmen']")?.click());
+  await sleep(1500);
+  const gone = await page.evaluate(async () => (await (await fetch("/api/v1/lists/likes")).json()).map((e) => e.key));
+  check("the bin removes it from the likes", !gone.includes(likedKey), gone.join(","));
   await page.evaluate(() => document.querySelector(".ctrl .play")?.innerText === "❚❚" && document.querySelector(".ctrl .play").click());
 } catch (e) {
   check(`aborted: ${e.message}`, false);

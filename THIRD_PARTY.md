@@ -306,7 +306,7 @@ Die vollständigen Lizenztexte stehen in `THIRD_PARTY_LICENSES.txt`. Beide Datei
 | jni_util | 1.0.0 | BSD-3-Clause |
 | js | 0.7.2 | BSD-3-Clause |
 | json_annotation | 4.12.0 | BSD-3-Clause |
-| just_audio | 0.10.6 | Apache-2.0 |
+| just_audio | 0.10.6 (angepasst) | MIT, Apache-2.0 |
 | just_audio_media_kit | 2.1.0 (angepasst) | Unlicense |
 | just_audio_platform_interface | 4.6.0 | MIT |
 | just_audio_web | 0.4.16 | MIT |

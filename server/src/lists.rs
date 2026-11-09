@@ -1,8 +1,9 @@
-//! "Continue" lists per kind – podcasts, books, music – in the user's order, on all devices.
+//! "Continue" lists per kind – podcasts, books, music, likes – in the user's order, on all devices.
 //!
 //! Started, unfinished episodes and books join their list at the top by themselves (see
 //! `playback::apply`); "Next" appends at the end; finished items leave. Music only holds what
-//! was added with "Next" (albums), a track position alone does not add anything.
+//! was added with "Next" (albums), a track position alone does not add anything. Likes are music
+//! titles marked with the heart (user 2026-11-09, "144 ja", "147 ja"): they stay when heard.
 
 use axum::{
     extract::{Path, State},
@@ -17,7 +18,7 @@ use crate::{
     AppState,
 };
 
-const LISTS: [&str; 3] = ["podcasts", "books", "music"];
+const LISTS: [&str; 4] = ["podcasts", "books", "music", "likes"];
 
 fn check(list: &str) -> ApiResult<()> {
     if LISTS.contains(&list) { Ok(()) } else { Err(ApiError::NotFound) }
@@ -43,7 +44,8 @@ pub fn auto_list(key: &str) -> Option<&'static str> {
 pub fn follow(c: &rusqlite::Connection, user: i64, key: &str, finished: bool, position_ms: i64, title: &str, subtitle: &str)
     -> rusqlite::Result<bool> {
     if finished {
-        return Ok(c.execute("DELETE FROM list_entry WHERE user_id = ?1 AND item_key = ?2", (user, key))? > 0);
+        // A liked title stays in "likes" when it has been heard.
+        return Ok(c.execute("DELETE FROM list_entry WHERE user_id = ?1 AND item_key = ?2 AND list != 'likes'", (user, key))? > 0);
     }
     let Some(list) = auto_list(key) else { return Ok(false) };
     if position_ms <= 0 {
@@ -183,5 +185,18 @@ mod tests {
         assert!(keys(&c, "music").is_empty());
         follow(&c, 1, "episode:2", true, 0, "", "").unwrap();
         assert_eq!(keys(&c, "podcasts"), ["episode:1"]);
+    }
+
+    #[test]
+    fn liked_titles_stay_when_heard() {
+        let c = db();
+        c.execute("INSERT INTO list_entry (user_id, list, item_key, position, title, subtitle) VALUES (1, 'likes', 'jellyfin:1:t', 1, 'Track', '')", [])
+            .unwrap();
+        c.execute("INSERT INTO list_entry (user_id, list, item_key, position, title, subtitle) VALUES (1, 'music', 'jellyfin:1:t', 1, 'Track', '')", [])
+            .unwrap();
+        follow(&c, 1, "jellyfin:1:t", true, 0, "", "").unwrap();
+        assert_eq!(keys(&c, "likes"), ["jellyfin:1:t"]);
+        assert!(keys(&c, "music").is_empty());
+        assert!(check("likes").is_ok() && check("other").is_err());
     }
 }

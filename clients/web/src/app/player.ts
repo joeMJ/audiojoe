@@ -14,7 +14,7 @@ import { localPosition, onRemote, savePosition } from "./sync";
 import { playbackPrefs } from "./prefs";
 
 /** The continue-list entry being played (an album for music): its successor plays next. */
-export interface Entry { list: "podcasts" | "books" | "music"; key: string }
+export interface Entry { list: "podcasts" | "books" | "music" | "likes"; key: string }
 
 export interface PlayerState {
   item?: Item;
@@ -177,8 +177,9 @@ async function serverQueue(key: string): Promise<Saved | null> {
 
 export async function play(queue: Item[], index = 0, entry?: Entry) {
   await persist();
-  // A single title another device played within an album: continue that album here.
-  const other = queue.length === 1 && queue[0].kind === "track" ? await serverQueue(queue[0].key) : null;
+  // A single title another device played within an album: continue that album here. A title from the
+  // likes plays on its own; at its end the next like follows (setNextAfter), not its album.
+  const other = entry?.list !== "likes" && queue.length === 1 && queue[0].kind === "track" ? await serverQueue(queue[0].key) : null;
   state.queue = queue;
   state.index = index;
   const it = queue[index];
@@ -211,7 +212,8 @@ async function seekGlobal(ms: number, autoplay: boolean) {
   if (!audio.src || part !== state.part || !audio.src.includes(srcFor(it, part))) {
     state.part = part;
     audio.src = srcFor(it, part);
-    audio.playbackRate = state.rate;
+    // Music has no speed button (the heart is there, user 2026-11-09): always 1.0×.
+    audio.playbackRate = it.kind === "track" ? 1 : state.rate;
     audio.addEventListener("loadedmetadata", () => local > 0 && (audio.currentTime = local), { once: true });
     if (autoplay) await audio.play().catch(() => notify());
   } else {

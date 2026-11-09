@@ -76,6 +76,9 @@ class Player extends ChangeNotifier {
     }
   }
   double rate = 1;
+  /// Music has no speed button (the heart is there, user 2026-11-09): it always plays at 1.0×; the
+  /// speed set for podcasts and books stays for them.
+  double get _speed => item?.kind == 'track' ? 1 : rate;
   Timer? _saveTimer;
   Entry? entry;
   /// Set by the UI: what plays after [entry] (asked before the item is saved as finished).
@@ -254,12 +257,14 @@ class Player extends ChangeNotifier {
     // Episodes and books are list entries themselves; music only when played as an album entry.
     entry = from ?? entryOf(items[i]);
     final full = await meta(items[i].key);
+    // A title from the likes plays on its own; at its end the next like follows (nextAfter), not its album.
+    final liked = from?.list == 'likes';
     // A single title another device played within an album: continue that album here.
-    final other = items.length == 1 && items[i].kind == 'track' ? await _serverQueue(items[i].key) : null;
+    final other = !liked && items.length == 1 && items[i].kind == 'track' ? await _serverQueue(items[i].key) : null;
     queue = [...items];
     if (full != null) queue[i] = full;
     index = i;
-    final album = other == null && items.length == 1 ? await _albumOf(queue[i]) : null;
+    final album = !liked && other == null && items.length == 1 ? await _albumOf(queue[i]) : null;
     if (other != null) {
       _restoreQueue(queue[i], other);
     } else if (album != null) {
@@ -312,7 +317,7 @@ class Player extends ChangeNotifier {
     _followed = from;
     takenOver = null;
     await _setSources(it, start.ms);
-    await audio.setSpeed(rate);
+    await audio.setSpeed(it.kind == 'track' ? 1 : rate);
     // Radio has no position; one entry still marks it as the last thing played on any device.
     if (it.kind == 'radio') {
       sync.savePosition(Playback(key: it.key, positionMs: 0, finished: false, title: it.title, subtitle: it.subtitle,
@@ -484,7 +489,7 @@ class Player extends ChangeNotifier {
     if (it == null) return;
     try {
       await _setSources(it, ms);
-      await audio.setSpeed(rate);
+      await audio.setSpeed(_speed);
       if (play) unawaited(audio.play());
     } catch (_) {
       _interrupted(at: ms);
@@ -528,7 +533,7 @@ class Player extends ChangeNotifier {
       await _setSources(it, _cuedMs, limit: const Duration(seconds: 30));
       _cued = false;
       _stopWaiting();
-      await audio.setSpeed(rate);
+      await audio.setSpeed(_speed);
       unawaited(audio.play());
     } catch (_) {
       // Still no connection: stays waiting at the position.
@@ -672,7 +677,7 @@ class Player extends ChangeNotifier {
 
   Future<void> setRate(double r) async {
     rate = r;
-    await audio.setSpeed(rate);
+    await audio.setSpeed(_speed);
     notifyListeners();
   }
 

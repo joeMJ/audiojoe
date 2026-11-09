@@ -60,9 +60,14 @@ for p in crates:
 # field, so the licence is read from the text (only the common ones; otherwise "see text").
 def spdx(body):
     b = " ".join(body.split())
-    if "Apache License" in b and "Version 2.0" in b:
+    mit = "Permission is hereby granted, free of charge" in b
+    apache = "Apache License" in b and "Version 2.0" in b
+    # just_audio: MIT for the package, plus the Apache text of the ExoPlayer it includes.
+    if mit and apache:
+        return "MIT, Apache-2.0"
+    if apache:
         return "Apache-2.0"
-    if "Permission is hereby granted, free of charge" in b:
+    if mit:
         return "MIT"
     if "Redistribution and use in source and binary forms" in b:
         return "BSD-3-Clause" if re.search(r"Neither the name|names of its\s+contributors", b) else "BSD-2-Clause"

@@ -18,6 +18,7 @@ import 'player.dart';
 import 'prefs.dart';
 import 'storage.dart';
 import 'l10n.dart';
+import 'likes.dart';
 import 'store.dart';
 import 'sync.dart';
 import 'updates.dart';
@@ -122,6 +123,7 @@ class _AudiojoeAppState extends State<AudiojoeApp> {
     sync.remote.listen((_) => _sweepPlayed());
     Timer.periodic(const Duration(minutes: 1), (_) => _sweepPlayed());
     connectLists();
+    likes.start();
     unawaited(player.cueLast().then((_) => remote.findPlaying()));
     unawaited(_offerUpdate());
   }

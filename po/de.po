@@ -336,6 +336,15 @@ msgstr "Schlummern · {n} min"
 msgid "Speed"
 msgstr "Tempo"
 
+msgid "Like"
+msgstr "Gefällt mir"
+
+msgid "Likes"
+msgstr "Likes"
+
+msgid "No likes yet. Mark titles with the heart in the player."
+msgstr "Noch keine Likes. Titel im Player mit dem Herz markieren."
+
 msgid "Subscriptions as OPML file, the format other podcast apps read and write."
 msgstr "Abos als OPML-Datei – das Format, das andere Podcast-Apps lesen und schreiben."
 

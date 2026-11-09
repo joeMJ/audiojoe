@@ -56,7 +56,8 @@ Future<void> playEntry(BuildContext? context, String list, ListEntry e, VoidCall
     context != null && context.mounted ? await startPlayback(context, tracks, 0, onPlay, from) : await player.play(tracks, 0, from);
     return;
   }
-  final it = Item(key: e.key, kind: list == 'podcasts' ? 'episode' : 'book', title: e.title, subtitle: e.subtitle, image: coverOf(e.key));
+  final it = Item(key: e.key, kind: list == 'podcasts' ? 'episode' : list == 'likes' ? 'track' : 'book', title: e.title, subtitle: e.subtitle,
+      image: coverOf(e.key));
   context != null && context.mounted ? await startPlayback(context, [it], 0, onPlay, from) : await player.play([it], 0, from);
 }
 
@@ -107,7 +108,7 @@ class _NextButtonState extends State<NextButton> {
   }
 }
 
-const _lists = ['podcasts', 'books', 'music'];
+const _lists = ['podcasts', 'books', 'music', 'likes'];
 
 class ContinueView extends StatefulWidget {
   final VoidCallback onPlay;
@@ -185,8 +186,8 @@ class _ContinueViewState extends State<ContinueView> {
     Playback state(bool finished) => Playback(key: e.key, positionMs: e.positionMs, durationMs: e.durationMs, finished: finished,
         title: e.title, subtitle: e.subtitle, device: api.device, updatedAt: now());
     try {
-      if (l == 'music') {
-        await api.call('DELETE', '/lists/music/${Uri.encodeComponent(e.key)}');
+      if (l == 'music' || l == 'likes') {
+        await api.call('DELETE', '/lists/$l/${Uri.encodeComponent(e.key)}');
       } else {
         sync.savePosition(state(true));
       }
@@ -195,11 +196,11 @@ class _ContinueViewState extends State<ContinueView> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       duration: const Duration(seconds: 6),
       persist: false,
-      content: Text(l == 'music' ? t('Removed from the list') : t('Marked as heard')),
+      content: Text(l == 'music' || l == 'likes' ? t('Removed from the list') : t('Marked as heard')),
       action: SnackBarAction(
         label: t('Undo'),
         onPressed: () async {
-          if (l != 'music') sync.savePosition(state(false));
+          if (l != 'music' && l != 'likes') sync.savePosition(state(false));
           try {
             await api.call('POST', '/lists/$l', body: {'key': e.key, 'title': e.title, 'subtitle': e.subtitle});
             await api.call('PUT', '/lists/$l', body: keys);
@@ -222,6 +223,7 @@ class _ContinueViewState extends State<ContinueView> {
             ButtonSegment(value: 'podcasts', label: Text(t('Podcasts'))),
             ButtonSegment(value: 'books', label: Text(t('Audiobooks'))),
             ButtonSegment(value: 'music', label: Text(t('Music'))),
+            ButtonSegment(value: 'likes', label: Text(t('Likes'))),
           ],
           selected: {_lists.contains(list) ? list : 'podcasts'},
           onSelectionChanged: (s) => _switch(s.first),
@@ -233,7 +235,11 @@ class _ContinueViewState extends State<ContinueView> {
     if (l == null) {
       body = const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()));
     } else if (l.isEmpty) {
-      body = emptyText(context, list == 'music' ? t('Nothing here yet. Add albums with Next.') : t('Nothing to continue.'));
+      body = emptyText(context, list == 'music'
+          ? t('Nothing here yet. Add albums with Next.')
+          : list == 'likes'
+              ? t('No likes yet. Mark titles with the heart in the player.')
+              : t('Nothing to continue.'));
     } else {
       body = ReorderableListView.builder(
         padding: const EdgeInsets.all(12),
@@ -241,8 +247,10 @@ class _ContinueViewState extends State<ContinueView> {
         itemCount: l.length,
         onReorderItem: _reorder,
         itemBuilder: (context, i) {
-          final e = l[i], music = list == 'music';
-          final base = Item(key: e.key, kind: list == 'podcasts' ? 'episode' : list == 'books' ? 'book' : 'album', title: e.title,
+          // Likes are titles: like music they play on a tap and leave the list with the bin.
+          final e = l[i], music = list == 'music' || list == 'likes';
+          final base = Item(key: e.key, kind: list == 'podcasts' ? 'episode' : list == 'books' ? 'book' : list == 'likes' ? 'track' : 'album',
+              title: e.title,
               subtitle: e.subtitle, image: coverOf(e.key), positionMs: e.positionMs, durationMs: e.durationMs);
           final info = e.positionMs > 0
               ? '${clock(e.positionMs)}${e.durationMs != null ? ' / ${clock(e.durationMs!)}' : ''}'

@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 0.2.5+115
+version: 0.2.6+116
 
 environment:
   sdk: ^3.13.7
@@ -56,6 +56,9 @@ dependency_overrides:
   # Adapted copy with fastseek for MP3 without a seek index (third_party/just_audio_media_kit/AUDIOJOE.md).
   just_audio_media_kit:
     path: third_party/just_audio_media_kit
+  # Adapted copy: Android plays 24-bit sources at full resolution (third_party/just_audio/AUDIOJOE.md).
+  just_audio:
+    path: third_party/just_audio
 
 dev_dependencies:
   flutter_test:

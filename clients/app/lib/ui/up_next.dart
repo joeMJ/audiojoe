@@ -77,6 +77,13 @@ Future<String?> upNextNow(Item it) async {
     final q = await _otherQueue(it.key);
     return upNextTitle(it, q.items, q.index);
   }
+  // A title from the likes: after it the next like plays (connectLists), not its album.
+  final e = player.entry;
+  if (e != null && e.list == 'likes' && player.index + 1 >= player.queue.length) {
+    final l = await loadList('likes');
+    final i = l.indexWhere((x) => x.key == e.key);
+    return i >= 0 && i + 1 < l.length ? l[i + 1].title : null;
+  }
   return upNextTitle(it, player.queue, player.index);
 }
 

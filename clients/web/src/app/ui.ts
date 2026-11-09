@@ -142,7 +142,7 @@ async function playEntry(list: ListName, e: ListEntry) {
     if (tracks.length) await start(tracks, 0, entry);
     return;
   }
-  await start([{ key: e.key, kind: list === "podcasts" ? "episode" : "book", title: e.title, subtitle: e.subtitle }], 0, entry);
+  await start([{ key: e.key, kind: list === "podcasts" ? "episode" : list === "likes" ? "track" : "book", title: e.title, subtitle: e.subtitle }], 0, entry);
 }
 
 /** Whether the continue list has an entry after this one. */
@@ -350,6 +350,46 @@ let npRefs: { bar: HTMLElement; fill: HTMLElement; knob: HTMLElement; pos: HTMLE
 /** For an episode: the title of the next episode of the continue list (loaded with the view). */
 let npNextEpisode = "";
 
+// ---------------------------------------------------------------- likes
+
+/** Music titles marked with the heart (list "likes" on the server; they stay when heard). */
+let likedKeys = new Set<string>();
+async function loadLikes() {
+  try {
+    likedKeys = new Set((await api<ListEntry[]>("GET", "/lists/likes")).map((e) => e.key));
+  } catch { /* offline: keep what is known */ }
+  document.querySelectorAll<HTMLButtonElement>("button.like").forEach((b) => paintLike(b, likedKeys.has(b.dataset.key ?? "")));
+}
+void loadLikes();
+onRemote((p) => { if (!p.key) void loadLikes(); });
+
+const HEART = '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>';
+function paintLike(b: HTMLButtonElement, on: boolean) {
+  b.classList.toggle("on", on);
+  b.ariaPressed = on ? "true" : "false";
+  b.replaceChildren(icon(HEART.replace("/>", on ? ' fill="currentColor"/>' : "/>")), t("Like"));
+}
+
+/** The heart: a switch – a second tap takes the title out of the likes again. */
+function likeButton(it: Item) {
+  const b = h("button", { className: "big sec like" }) as HTMLButtonElement;
+  b.dataset.key = it.key;
+  paintLike(b, likedKeys.has(it.key));
+  b.onclick = async () => {
+    const on = !likedKeys.has(it.key);
+    on ? likedKeys.add(it.key) : likedKeys.delete(it.key);
+    paintLike(b, on);
+    try {
+      if (on) await api("POST", "/lists/likes", { key: it.key, title: it.title, subtitle: it.subtitle ?? "" });
+      else await api("DELETE", `/lists/likes/${encodeURIComponent(it.key)}`);
+    } catch {
+      on ? likedKeys.delete(it.key) : likedKeys.add(it.key);
+      paintLike(b, !on);
+    }
+  };
+  return b;
+}
+
 /** "Up next: …" small below the format line (user 2026-11-09, "107–109 ja"): in an album the next
  *  title, in a book the next chapter, for a podcast the next episode of the continue list. Radio and
  *  the last entry: none. */
@@ -358,7 +398,8 @@ function upNextText(): string {
   if (!it || it.kind === "radio" || player.isLive()) return "";
   let next = "";
   // A podcast episode: the next episode, also when it has chapters (rule "108 ja"); chapters for books.
-  if (it.kind === "episode") next = npNextEpisode;
+  // A title from the likes: the next like (it plays after it, not the album).
+  if (nextList()) next = npNextEpisode;
   else if (it.chapters?.length) next = it.chapters[player.chapterIndex() + 1]?.title ?? "";
   else next = s.queue[s.index + 1]?.title ?? "";
   return next ? t("Up next: {title}", { title: next }) : "";
@@ -367,18 +408,27 @@ function upNextText(): string {
 // A continue list changed (or a resync): the next episode may be another one.
 onRemote((p) => {
   const it = player.state.item;
-  if (!p.key && it?.kind === "episode") void loadNextEpisode(it.key);
+  if (!p.key && it && nextList()) void loadNextEpisode(it.key);
 });
 
 /** Loads the next episode; the newest request wins. Also every 30 s while an episode is shown
  *  (updateNowPlaying), since the list can change without the view being drawn again. */
 let npNextSeq = 0, npNextAt = 0;
+/** The continue list whose next entry follows what plays now: podcasts for an episode, likes for a
+ *  title played from the likes; null when the queue decides (album, chapters). */
+function nextList(): "podcasts" | "likes" | null {
+  const s = player.state;
+  if (s.item?.kind === "episode") return "podcasts";
+  if (s.entry?.list === "likes" && s.index + 1 >= s.queue.length) return "likes";
+  return null;
+}
+
 async function loadNextEpisode(key: string) {
   const seq = ++npNextSeq;
   npNextAt = Date.now();
   let next = "";
   try {
-    const list = await api<ListEntry[]>("GET", "/lists/podcasts");
+    const list = await api<ListEntry[]>("GET", `/lists/${nextList() ?? "podcasts"}`);
     // Not in the list: nothing plays after it (see setNextAfter), so no line.
     const i = list.findIndex((x) => x.key === key);
     next = i < 0 ? "" : list[i + 1]?.title ?? "";
@@ -460,11 +510,13 @@ function renderNowPlaying() {
   if (entry) void nextInList(entry).then((ok) => (next.disabled = !ok));
   const here = h("div");
   const upnext = h("div", { className: "upnext" });
-  if (it.kind === "episode") void loadNextEpisode(it.key);
+  if (nextList()) void loadNextEpisode(it.key);
   const kind = it.kind === "episode" ? `Podcast · ${it.subtitle ?? ""}` : it.subtitle ?? "";
   const sub = h("div", { className: "sub" }, it.kind === "episode" ? it.published?.slice(0, 10) ?? "" : it.kind === "book" ? "" : it.subtitle ?? "");
   const off = h("div", { className: "offtool" });
-  const tools = h("div", { className: "tools" }, off, rate, it.kind === "episode" || it.kind === "track" ? next : null);
+  // Music: the heart in place of the speed (user 2026-11-09, "143 ja"); podcasts and books keep the speed.
+  const like = it.kind === "track" ? likeButton(it) : null;
+  const tools = h("div", { className: "tools" }, off, like ?? rate, it.kind === "episode" || it.kind === "track" ? next : null);
   void fillOffTool(off);
   // "(16 of 21)" after the title in a queue (an album); with chapters after the chapter name.
   // A long title (and chapter) flows, so the count stays visible.
@@ -622,7 +674,7 @@ function updateNowPlaying() {
     npRefs.here.dataset.v = here;
     npRefs.here.replaceChildren(qualityRow(s.delivered ?? s.item?.quality, s.fromCache, s.transcoded ? s.item?.quality : null));
   }
-  if (s.item?.kind === "episode" && Date.now() - npNextAt > 30000) void loadNextEpisode(s.item.key);
+  if (s.item && nextList() && Date.now() - npNextAt > 30000) void loadNextEpisode(s.item.key);
   const un = upNextText();
   if (npRefs.upnext.textContent !== un) npRefs.upnext.textContent = un;
   const ci = player.chapterIndex();
@@ -648,7 +700,8 @@ async function renderContinue() {
     className: contList === v ? "chip on" : "chip",
     onclick: () => { contList = v; try { localStorage.setItem(CONT, v); } catch { /* private window */ } show("cont"); },
   }, label);
-  main.append(h("div", { className: "chips seg" }, mode("podcasts", t("Podcasts")), mode("books", t("Audiobooks")), mode("music", t("Music"))));
+  main.append(h("div", { className: "chips seg" }, mode("podcasts", t("Podcasts")), mode("books", t("Audiobooks")), mode("music", t("Music")),
+    mode("likes", t("Likes"))));
   const list = contList;
   let entries: ListEntry[] | null = null;
   if (online) {
@@ -662,7 +715,10 @@ async function renderContinue() {
     entries = (await idbAll<Playback>("positions")).filter((p) => mine(p.key) && !p.finished && p.position_ms > 0)
       .sort((a, b) => b.updated_at.localeCompare(a.updated_at)).map((p) => ({ ...p, duration_ms: p.duration_ms ?? null }));
   }
-  if (!entries.length) return void main.append(h("div", { className: "empty" }, list === "music" ? t("Nothing here yet. Add albums with Next.") : t("Nothing to continue.")));
+  if (!entries.length) return void main.append(h("div", { className: "empty" }, list === "music" ? t("Nothing here yet. Add albums with Next.")
+    : list === "likes" ? t("No likes yet. Mark titles with the heart in the player.") : t("Nothing to continue.")));
+  // Likes are titles: like music they play on a tap and leave the list with the bin (user 2026-11-09).
+  const removes = list === "music" || list === "likes";
   const all = entries;
   const keys = all.map((e) => e.key);
   const move = async (i: number, d: number) => {
@@ -673,31 +729,31 @@ async function renderContinue() {
   };
   const box = h("div", { className: "list" });
   for (const [i, e] of all.entries()) {
-    const kind = list === "podcasts" ? "episode" : list === "books" ? "book" : "album";
-    const off = kind === "album" ? undefined : await offlineEntry(e.key);
+    const kind = list === "podcasts" ? "episode" : list === "books" ? "book" : list === "likes" ? "track" : "album";
+    const off = kind === "album" || kind === "track" ? undefined : await offlineEntry(e.key);
     const f = e.duration_ms && e.position_ms ? e.position_ms / e.duration_ms : 0;
     const base: Item = { key: e.key, kind, title: e.title, subtitle: e.subtitle, image: `/api/v1/image/${encodeURIComponent(e.key)}`,
       duration_ms: e.duration_ms ?? undefined, position_ms: e.position_ms };
     const info = e.position_ms > 0
       ? `${clock(e.position_ms)}${e.duration_ms ? " / " + clock(e.duration_ms) : ""}${e.updated_at ? " · " + (e.device ? t("Last on {device} · {ago}", { device: e.device, ago: ago(e.updated_at) }) : ago(e.updated_at)) : ""}`
       : e.subtitle;
-    const row = h("div", { className: "item tap", onclick: () => (kind === "album" ? void playEntry(list, e) : openDetails(base)) },
+    const row = h("div", { className: "item tap", onclick: () => (removes ? void playEntry(list, e) : openDetails(base)) },
       thumb({ title: e.subtitle || e.title, image: base.image }),
       h("div", { className: "tx" }, h("div", { className: "t1" }, e.title || e.key), h("div", { className: "t2" }, info),
         f ? h("div", { className: "prog" }, h("i", { style: `width:${f * 100}%` })) : null),
-      kind === "album" ? null : h("span", { className: off?.status === "done" ? "badge ok" : "badge warn" }, off?.status === "done" ? t("in cache") : t("online only")),
+      removes ? null : h("span", { className: off?.status === "done" ? "badge ok" : "badge warn" }, off?.status === "done" ? t("in cache") : t("online only")),
       h("button", { className: "big sec arrow", disabled: i === 0, ariaLabel: t("Move up"), onclick: own(() => void move(i, -1)) }, "▲"),
       h("button", { className: "big sec arrow", disabled: i === all.length - 1, ariaLabel: t("Move down"), onclick: own(() => void move(i, 1)) }, "▼"),
-      h("button", { className: "big sec arrow", ariaLabel: list === "music" ? t("Remove from the list") : t("Mark as heard"), title: list === "music" ? t("Remove from the list") : t("Mark as heard"),
+      h("button", { className: "big sec arrow", ariaLabel: removes ? t("Remove from the list") : t("Mark as heard"), title: removes ? t("Remove from the list") : t("Mark as heard"),
         onclick: own(() => void trash(e)) }, icon('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>')),
       h("button", { className: "big", onclick: own(() => void playEntry(list, e)) }, e.position_ms > 0 ? t("Resume") : t("Play")));
     const trash = async (x: ListEntry) => {
       row.remove();
       const now = () => new Date().toISOString();
-      if (list === "music") await api("DELETE", `/lists/music/${encodeURIComponent(x.key)}`).catch(() => undefined);
+      if (removes) await api("DELETE", `/lists/${list}/${encodeURIComponent(x.key)}`).catch(() => undefined);
       else await savePosition({ key: x.key, position_ms: x.position_ms, duration_ms: x.duration_ms, finished: true, updated_at: now(), title: x.title, subtitle: x.subtitle });
-      undoBar(list === "music" ? t("Removed from the list") : t("Marked as heard"), async () => {
-        if (list !== "music") await savePosition({ key: x.key, position_ms: x.position_ms, duration_ms: x.duration_ms, finished: false, updated_at: now(), title: x.title, subtitle: x.subtitle });
+      undoBar(removes ? t("Removed from the list") : t("Marked as heard"), async () => {
+        if (!removes) await savePosition({ key: x.key, position_ms: x.position_ms, duration_ms: x.duration_ms, finished: false, updated_at: now(), title: x.title, subtitle: x.subtitle });
         await api("POST", `/lists/${list}`, { key: x.key, title: x.title, subtitle: x.subtitle });
         await api("PUT", `/lists/${list}`, keys);
       });
