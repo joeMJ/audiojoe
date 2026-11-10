@@ -179,7 +179,7 @@ class WasapiDac implements UsbDac {
 /// The USB DACs of this computer (Linux: ALSA; Windows: WASAPI devices of USB sound devices).
 Future<List<UsbDac>> usbDacs() async => Platform.isLinux ? await alsaUsbCards() : Platform.isWindows ? await wasapiUsbDacs() : const [];
 
-/// Names of the USB sound devices (Win32_SoundDevice with a USB PnP id), read once per [usbNamesFor].
+/// Names of the USB sound devices (PnP entries of class MEDIA with a USB id), read once per [usbNamesFor].
 List<String>? _usbNames;
 DateTime? _usbNamesAt;
 @visibleForTesting
@@ -193,7 +193,9 @@ Future<List<UsbDac>> wasapiUsbDacs() async {
     try {
       final r = await Process.run('powershell', [
         '-NoProfile', '-NonInteractive', '-Command',
-        r"Get-CimInstance Win32_SoundDevice | Where-Object { $_.PNPDeviceID -like 'USB*' } | ForEach-Object { $_.Name }",
+        // The device's own name ("Scarlett Solo 4th Gen") is that of its PnP entry of class MEDIA;
+        // Win32_SoundDevice.Name is the class driver's ("USB Audio 2.0", VM report 2026-11-10 11:51).
+        r"Get-CimInstance Win32_PnPEntity | Where-Object { $_.PNPClass -eq 'MEDIA' -and $_.PNPDeviceID -like 'USB*' } | ForEach-Object { $_.Name }",
       ]);
       _usbNames = ('${r.stdout}').split(RegExp(r'\r?\n')).map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
       _usbNamesAt = now;
