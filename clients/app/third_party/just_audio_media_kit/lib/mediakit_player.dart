@@ -1,6 +1,7 @@
 library just_audio_media_kit;
 
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 import 'package:just_audio_platform_interface/just_audio_platform_interface.dart';
@@ -57,14 +58,31 @@ class MediaKitPlayer extends AudioPlayerPlatform {
   /// audiojoe: the player created last of the live ones, for Settings → Quality.
   static MediaKitPlayer? get last => live.isEmpty ? null : live.last;
 
-  /// audiojoe: libmpv's audio device for all players – "auto" (the system mixer) or, for bit-perfect playback
-  /// on Linux, the DAC itself ("alsa/hw:CARD=…,DEV=0"). Set on each new player; takes effect at once.
+  /// audiojoe: libmpv's audio device for all players – "auto" (the system mixer) or, for bit-perfect playback,
+  /// the DAC itself: on Linux "alsa/hw:CARD=…,DEV=0", on Windows the WASAPI device with [audioExclusive].
+  /// Set on each new player; takes effect at once.
   static String audioDevice = 'auto';
+  static bool audioExclusive = false;
 
-  static Future<void> setAudioDeviceAll(String device) async {
+  static Future<void> setAudioDeviceAll(String device, {bool exclusive = false}) async {
+    final reopen = exclusive != audioExclusive;
     audioDevice = device;
+    audioExclusive = exclusive;
     for (final p in List.of(live)) {
+      await setProperty(p._player, 'audio-exclusive', exclusive ? 'yes' : 'no');
       await setProperty(p._player, 'audio-device', device);
+      // A change of the exclusive mode alone needs a new audio output.
+      if (reopen) await command(p._player, ['ao-reload']);
+    }
+  }
+
+  /// audiojoe: the audio devices libmpv knows ("audio-device-list": name and description).
+  Future<List<Map<String, String>>> audioDevices() async {
+    try {
+      final list = jsonDecode(await getProperty(_player, 'audio-device-list')) as List;
+      return [for (final d in list) {'name': '${(d as Map)['name']}', 'description': '${d['description']}'}];
+    } catch (_) {
+      return const [];
     }
   }
 
@@ -110,6 +128,7 @@ class MediaKitPlayer extends AudioPlayerPlatform {
       setProperty(_player, 'ao', const String.fromEnvironment('AUDIOJOE_AO'));
     }
     // audiojoe: the device chosen for the current title (bit-perfect on Linux), also for a new player.
+    if (audioExclusive) setProperty(_player, 'audio-exclusive', 'yes');
     if (audioDevice != 'auto') setProperty(_player, 'audio-device', audioDevice);
 
     _streamSubscriptions = [

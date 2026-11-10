@@ -70,7 +70,7 @@ void main() {
   tearDown(() {
     asoundRoot = '/proc/asound';
     qualityPrefs.bitPerfect = false;
-    qualityPrefs.linuxDevice = null;
+    qualityPrefs.desktopDac = null;
   });
 
   test('ALSA: the USB DAC with its playback formats', () async {
@@ -96,14 +96,14 @@ void main() {
         quality: Quality(codec: 'flac', sampleRate: rate, bitDepth: 16));
     qualityPrefs.bitPerfect = true;
     await qualityPrefs.apply(music(44100));
-    expect(qualityPrefs.linuxDevice?.device, 'alsa/hw:CARD=Gen,DEV=0');
+    expect(qualityPrefs.desktopDac?.device, 'alsa/hw:CARD=Gen,DEV=0');
     await qualityPrefs.apply(music(384000));
-    expect(qualityPrefs.linuxDevice, isNull);
+    expect(qualityPrefs.desktopDac, isNull);
     await qualityPrefs.apply(const Item(key: 'episode:1', kind: 'episode', title: 'E', subtitle: 'P'));
-    expect(qualityPrefs.linuxDevice, isNull);
+    expect(qualityPrefs.desktopDac, isNull);
     qualityPrefs.bitPerfect = false;
     await qualityPrefs.apply(music(44100));
-    expect(qualityPrefs.linuxDevice, isNull);
+    expect(qualityPrefs.desktopDac, isNull);
   });
 
   testWidgets('desktop: Now playing with Source and Output', (tester) async {
@@ -144,6 +144,19 @@ void main() {
     expect(find.text('None connected'), findsOneWidget);
     expect(find.text('Needs a USB DAC.'), findsOneWidget);
     expect(tester.widget<SwitchListTile>(find.byKey(const ValueKey('bit-perfect'))).onChanged, isNull);
+  });
+
+  test('Windows: WASAPI devices of USB sound devices', () {
+    final dacs = matchWasapi(['Scarlett Solo 4th Gen'], [
+      {'name': 'auto', 'description': 'Autoselect device'},
+      {'name': 'wasapi/{0.0.0.00000000}.{aaa}', 'description': 'Lautsprecher (Realtek(R) Audio)'},
+      {'name': 'wasapi/{0.0.0.00000000}.{bbb}', 'description': 'Lautsprecher (Scarlett Solo 4th Gen)'},
+    ]);
+    expect(dacs, hasLength(1));
+    expect(dacs.first.name, 'Scarlett Solo 4th Gen');
+    expect(dacs.first.device, 'wasapi/{0.0.0.00000000}.{bbb}');
+    expect(dacs.first.exclusive, isTrue);
+    expect(matchWasapi(const [], const [{'name': 'wasapi/x', 'description': 'Speakers (USB DAC)'}]), isEmpty);
   });
 
   test('texts of the diagnostics', () {

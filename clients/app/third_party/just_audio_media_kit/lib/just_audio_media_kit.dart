@@ -14,7 +14,11 @@ import 'package:universal_platform/universal_platform.dart';
 Future<Map<String, String>> audiojoeOutputInfo() async => await MediaKitPlayer.last?.outputInfo() ?? const {};
 
 /// audiojoe: see [MediaKitPlayer.setAudioDeviceAll].
-Future<void> audiojoeSetAudioDevice(String device) => MediaKitPlayer.setAudioDeviceAll(device);
+Future<void> audiojoeSetAudioDevice(String device, {bool exclusive = false}) =>
+    MediaKitPlayer.setAudioDeviceAll(device, exclusive: exclusive);
+
+/// audiojoe: see [MediaKitPlayer.audioDevices]; empty while no player exists.
+Future<List<Map<String, String>>> audiojoeAudioDevices() async => await MediaKitPlayer.last?.audioDevices() ?? const [];
 
 /// audiojoe: see [MediaKitPlayer.reloadAudioOutput].
 Future<void> audiojoeReloadAudioOutput() async => await MediaKitPlayer.last?.reloadAudioOutput();

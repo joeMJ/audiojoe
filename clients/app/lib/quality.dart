@@ -46,7 +46,7 @@ class QualityPrefs extends ChangeNotifier {
   /// Tells the player about the title it loads next (only music goes bit-perfect).
   Future<void> apply(Item? it) async {
     _current = it;
-    if (Platform.isLinux) return _applyLinux(it);
+    if (Platform.isLinux || Platform.isWindows) return _applyDesktop(it);
     if (!Platform.isAndroid) return;
     try {
       await _channel.invokeMethod('set', {
@@ -60,51 +60,52 @@ class QualityPrefs extends ChangeNotifier {
     }
   }
 
-  // ---------------------------------------------------------------- Linux
+  // ---------------------------------------------------------------- Linux, Windows
 
   /// The DAC libmpv plays on directly, null: the system mixer ("auto").
-  AlsaCard? linuxDevice;
+  UsbDac? desktopDac;
   int _watch = 0;
 
-  /// How often and how far apart a DAC still held by PipeWire is tried again (PipeWire releases an idle
-  /// device after about 5 s).
+  /// How often and how far apart a DAC still held by another program is tried again (PipeWire releases an
+  /// idle device after about 5 s).
   static Duration retryEvery = const Duration(seconds: 2);
   static int retries = 4;
 
-  Future<void> _applyLinux(Item? it) async {
-    AlsaCard? card;
+  Future<void> _applyDesktop(Item? it) async {
+    UsbDac? dac;
     if (bitPerfect && it?.kind == 'track') {
       final rate = it?.quality?.sampleRate;
-      for (final c in await alsaUsbCards()) {
-        // Only at a rate the DAC takes itself; otherwise the system mixer converts as before.
-        if (rate == null || c.rates.contains(rate)) {
-          card = c;
+      for (final d in await usbDacs()) {
+        // Only at a rate the DAC takes itself (Linux knows them; Windows: WASAPI decides).
+        if (rate == null || d.rates.isEmpty || d.rates.contains(rate)) {
+          dac = d;
           break;
         }
       }
     }
-    linuxDevice = card;
+    desktopDac = dac;
     final watch = ++_watch;
     try {
-      await mk.audiojoeSetAudioDevice(card?.device ?? 'auto');
+      await mk.audiojoeSetAudioDevice(dac?.device ?? 'auto', exclusive: dac?.exclusive ?? false);
     } catch (e, s) {
       bitPerfectLog('audio device failed: $e', s);
     }
     notifyListeners();
-    if (card != null) unawaited(_watchLinux(card, watch));
+    if (dac != null) unawaited(_watchDesktop(dac, watch));
   }
 
-  /// libmpv cannot open the DAC while PipeWire still holds it ("device busy"): it decodes but outputs
-  /// nothing. Try again a few times, then play through the system mixer and note it in the error log.
-  Future<void> _watchLinux(AlsaCard card, int watch) async {
+  /// libmpv cannot open the DAC while another program holds it (PipeWire on Linux, an exclusive program on
+  /// Windows): it decodes but outputs nothing. Try again a few times, then play through the system mixer
+  /// and note it in the error log.
+  Future<void> _watchDesktop(UsbDac dac, int watch) async {
     var silent = 0;
     for (var i = 0; i < retries * 2 + 2; i++) {
       await Future<void>.delayed(retryEvery);
       if (watch != _watch) return;
       final o = await mk.audiojoeOutputInfo();
-      if (o['audio-device'] != card.device) {
+      if (o['audio-device'] != dac.device) {
         // A new player of just_audio that did not get the device yet.
-        await mk.audiojoeSetAudioDevice(card.device);
+        await mk.audiojoeSetAudioDevice(dac.device, exclusive: dac.exclusive);
         continue;
       }
       if ((o['audio-params/samplerate'] ?? '').isEmpty) continue; // nothing decoded yet (loading, paused)
@@ -117,8 +118,8 @@ class QualityPrefs extends ChangeNotifier {
     if (watch != _watch) return;
     final o = await mk.audiojoeOutputInfo();
     if ((o['audio-params/samplerate'] ?? '').isEmpty || (o['audio-out-params/samplerate'] ?? '').isNotEmpty) return;
-    bitPerfectLog('${card.name} is in use by another program; the title plays through the system mixer');
-    linuxDevice = null;
+    bitPerfectLog('${dac.name} is in use by another program; the title plays through the system mixer');
+    desktopDac = null;
     await mk.audiojoeSetAudioDevice('auto');
     notifyListeners();
   }
@@ -126,16 +127,96 @@ class QualityPrefs extends ChangeNotifier {
 
 final qualityPrefs = QualityPrefs.instance;
 
+/// A USB DAC libmpv can play on directly.
+abstract class UsbDac {
+  String get name;
+
+  /// libmpv's audio device ("alsa/hw:…" or "wasapi/{…}").
+  String get device;
+
+  /// Whether the device needs the exclusive mode (WASAPI).
+  bool get exclusive;
+
+  /// Rates the DAC takes; empty: not known (Windows).
+  List<int> get rates;
+
+  /// Bit depth of the DAC; 0: not known (Windows).
+  int get bits;
+}
+
 /// A USB DAC as ALSA lists it (/proc/asound): card id, name and its playback formats.
-class AlsaCard {
-  final String id, name;
+class AlsaCard implements UsbDac {
+  final String id;
+  @override
+  final String name;
+  @override
   final List<int> rates;
-  final int bits, channels;
+  @override
+  final int bits;
+  final int channels;
   const AlsaCard(this.id, this.name, this.rates, this.bits, this.channels);
 
   /// libmpv's device for the card itself, without dmix or PipeWire.
+  @override
   String get device => 'alsa/hw:CARD=$id,DEV=0';
+  @override
+  bool get exclusive => false;
 }
+
+/// A USB DAC on Windows: a WASAPI device of libmpv whose name is that of a USB sound device.
+class WasapiDac implements UsbDac {
+  @override
+  final String name, device;
+  const WasapiDac(this.name, this.device);
+  @override
+  bool get exclusive => true;
+  @override
+  List<int> get rates => const [];
+  @override
+  int get bits => 0;
+}
+
+/// The USB DACs of this computer (Linux: ALSA; Windows: WASAPI devices of USB sound devices).
+Future<List<UsbDac>> usbDacs() async => Platform.isLinux ? await alsaUsbCards() : Platform.isWindows ? await wasapiUsbDacs() : const [];
+
+/// Names of the USB sound devices (Win32_SoundDevice with a USB PnP id), read once per [usbNamesFor].
+List<String>? _usbNames;
+DateTime? _usbNamesAt;
+@visibleForTesting
+Duration usbNamesFor = const Duration(seconds: 30);
+
+/// Windows: libmpv's WASAPI devices whose description names a USB sound device, e.g.
+/// "Lautsprecher (Scarlett Solo 4th Gen)" for the USB device "Scarlett Solo 4th Gen".
+Future<List<UsbDac>> wasapiUsbDacs() async {
+  final now = DateTime.now();
+  if (_usbNames == null || _usbNamesAt == null || now.difference(_usbNamesAt!) > usbNamesFor) {
+    try {
+      final r = await Process.run('powershell', [
+        '-NoProfile', '-NonInteractive', '-Command',
+        r"Get-CimInstance Win32_SoundDevice | Where-Object { $_.PNPDeviceID -like 'USB*' } | ForEach-Object { $_.Name }",
+      ]);
+      _usbNames = ('${r.stdout}').split(RegExp(r'\r?\n')).map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
+      _usbNamesAt = now;
+    } catch (e, s) {
+      bitPerfectLog('USB sound devices not readable: $e', s);
+      _usbNames = const [];
+      _usbNamesAt = now;
+    }
+  }
+  return matchWasapi(_usbNames!, await mk.audiojoeAudioDevices());
+}
+
+/// The WASAPI devices of libmpv whose description contains one of the USB names.
+@visibleForTesting
+List<UsbDac> matchWasapi(List<String> usbNames, List<Map<String, String>> devices) => [
+      for (final d in devices)
+        if ((d['name'] ?? '').startsWith('wasapi/'))
+          for (final n in usbNames)
+            if ((d['description'] ?? '').toLowerCase().contains(n.toLowerCase())) WasapiDac(n, d['name']!),
+    ];
+
+/// "Windows 10 Pro (Build 19045)" from the system.
+String windowsName() => Platform.operatingSystemVersion.replaceAll('"', '');
 
 /// Root of /proc/asound (tests point it elsewhere).
 @visibleForTesting

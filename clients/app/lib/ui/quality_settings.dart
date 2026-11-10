@@ -29,7 +29,7 @@ class QualitySettings extends StatefulWidget {
 class _QualitySettingsState extends State<QualitySettings> {
   Map<String, dynamic>? _android;
   Map<String, String> _desktop = const {};
-  List<AlsaCard> _cards = const [];
+  List<UsbDac> _dacs = const [];
   String _os = '';
   Timer? _timer;
 
@@ -55,13 +55,13 @@ class _QualitySettingsState extends State<QualitySettings> {
   Future<void> _read() async {
     final a = await androidDiagnostics();
     final d = await desktopOutput();
-    final cards = Platform.isLinux ? await alsaUsbCards() : const <AlsaCard>[];
-    final os = Platform.isLinux && _os.isEmpty ? await linuxName() : _os;
+    final dacs = await usbDacs();
+    final os = _os.isNotEmpty ? _os : Platform.isLinux ? await linuxName() : Platform.isWindows ? windowsName() : '';
     if (!mounted) return;
     setState(() {
       _android = a;
       _desktop = d;
-      _cards = cards;
+      _dacs = dacs;
       _os = os;
     });
   }
@@ -117,8 +117,8 @@ class _QualitySettingsState extends State<QualitySettings> {
               key: const ValueKey('quality-path')),
         ] else ...[
           _row(t('Output'), player.item == null ? '' : _mpvOut, key: const ValueKey('quality-output')),
-          if (Platform.isLinux)
-            _row(t('Path'), player.item == null ? '' : _linuxBitPerfect ? t('Bit-perfect') : t('System mixer'),
+          if (Platform.isLinux || Platform.isWindows)
+            _row(t('Path'), player.item == null ? '' : _desktopBitPerfect ? t('Bit-perfect') : t('System mixer'),
                 key: const ValueKey('quality-path')),
         ],
       ]),
@@ -134,19 +134,20 @@ class _QualitySettingsState extends State<QualitySettings> {
         ]),
         SettingsGroup(children: [_bitPerfect(a), _lower()]),
       ],
-      if (Platform.isLinux) ...[
+      if (Platform.isLinux || Platform.isWindows) ...[
         SettingsGroup(title: t('This device'), children: [
-          _row('Linux', _os),
-          _row(t('USB audio'), _cards.isEmpty ? t('None connected') : _cards.first.name, key: const ValueKey('quality-usb')),
-          if (_cards.isNotEmpty) ...[
+          _row(Platform.isLinux ? 'Linux' : 'Windows', _os),
+          _row(t('USB audio'), _dacs.isEmpty ? t('None connected') : _dacs.first.name, key: const ValueKey('quality-usb')),
+          // Linux knows the formats of the DAC (/proc/asound); Windows decides them in WASAPI.
+          if (_dacs.isNotEmpty && _dacs.first.rates.isNotEmpty) ...[
             _row(t('Offered over USB'),
-                offeredText([for (final r in _cards.first.rates) {'encoding': '${_cards.first.bits}', 'rate': r}])),
+                offeredText([for (final r in _dacs.first.rates) {'encoding': '${_dacs.first.bits}', 'rate': r}])),
             _row(t('Bit-perfect'), t('Offered'), key: const ValueKey('quality-offered')),
           ],
         ]),
         SettingsGroup(children: [
           _bitPerfectTile(
-            ok: _cards.isNotEmpty || qualityPrefs.bitPerfect,
+            ok: _dacs.isNotEmpty || qualityPrefs.bitPerfect,
             hint: t('Needs a USB DAC.'),
             confirm: _confirmOnDesktop,
           ),
@@ -155,10 +156,14 @@ class _QualitySettingsState extends State<QualitySettings> {
     ]);
   }
 
-  /// libmpv plays on the DAC itself and hands it data (Linux).
-  bool get _linuxBitPerfect {
-    final dev = qualityPrefs.linuxDevice;
-    return dev != null && _desktop['audio-device'] == dev.device && (_desktop['audio-out-params/samplerate'] ?? '').isNotEmpty;
+  /// libmpv plays on the DAC itself and hands it data at the title's rate (Linux: ALSA hw, Windows: WASAPI
+  /// exclusive).
+  bool get _desktopBitPerfect {
+    final dac = qualityPrefs.desktopDac;
+    if (dac == null || _desktop['audio-device'] != dac.device) return false;
+    final out = _desktop['audio-out-params/samplerate'] ?? '';
+    final rate = player.item?.quality?.sampleRate;
+    return out.isNotEmpty && (rate == null || out == '$rate');
   }
 
   /// Usable with Android 14 and a USB DAC offered bit-perfect; while on it stays usable to turn it off.
