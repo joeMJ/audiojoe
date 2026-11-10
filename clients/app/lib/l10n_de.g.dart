@@ -367,6 +367,7 @@ const deStrings = <String, String>{
   "Too many attempts. Please wait 15 minutes.": "Zu viele Versuche. Bitte 15 Minuten warten.",
   "Troubleshooting": "Fehlerbehebung",
   "Turn off anyway": "Trotzdem ausschalten",
+  "USB DACs usually have no volume limit like the one prescribed in the EU for music players and phones. With bit-perfect playback their full level reaches your headphones. Use with care.": "USB-DACs haben in der Regel keine Lautstärkebegrenzung, wie sie in der EU für Musikplayer und Telefone vorgeschrieben ist. Bei bit-perfekter Wiedergabe kommt ihr voller Pegel am Kopfhörer an. Mit Vorsicht verwenden.",
   "USB audio": "USB-Audio",
   "Undo": "Rückgängig",
   "Unsubscribe": "Abbestellen",

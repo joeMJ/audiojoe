@@ -171,10 +171,20 @@ class _QualitySettingsState extends State<QualitySettings> {
         context: context,
         builder: (c) => AlertDialog(
           key: const ValueKey('bit-perfect-confirm'),
+          icon: const Icon(Icons.warning_amber_rounded),
           title: Text(t('Bit-perfect over USB')),
-          // Second paragraph: AOSP AudioPolicyManager::updateClientsInternalMute (user 2026-11-10, text still to be approved).
-          content: Text('${t('Android no longer lowers the signal. Loudness depends on the USB DAC alone. Start low.')}\n\n'
-              '${t('While music plays bit-perfect, system sounds such as touch tones are muted, and a notification sound mutes the music while it plays. Ringtone and alarm still sound.')}'),
+          // First paragraph: user 2026-11-10 „174/175“ (no detection, a clear note on the volume; text to be
+          // approved); second: „169“; third: AOSP AudioPolicyManager::updateClientsInternalMute („172 ja“).
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(t('USB DACs usually have no volume limit like the one prescribed in the EU for music players and phones. With bit-perfect playback their full level reaches your headphones. Use with care.'),
+                  style: const TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 12),
+              Text(t('Android no longer lowers the signal. Loudness depends on the USB DAC alone. Start low.')),
+              const SizedBox(height: 12),
+              Text(t('While music plays bit-perfect, system sounds such as touch tones are muted, and a notification sound mutes the music while it plays. Ringtone and alarm still sound.')),
+            ]),
+          ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(c, false), child: Text(t('Cancel'))),
             FilledButton(key: const ValueKey('bit-perfect-on'), onPressed: () => Navigator.pop(c, true), child: Text(t('Switch on'))),

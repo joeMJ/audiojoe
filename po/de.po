@@ -1553,3 +1553,6 @@ msgstr "Trotzdem ausschalten"
 
 msgid "While music plays bit-perfect, system sounds such as touch tones are muted, and a notification sound mutes the music while it plays. Ringtone and alarm still sound."
 msgstr "Während Musik bit-perfekt läuft, sind Systemtöne wie Tastentöne stumm, und ein Benachrichtigungston schaltet die Musik stumm, solange er klingt. Klingelton und Wecker sind weiter zu hören."
+
+msgid "USB DACs usually have no volume limit like the one prescribed in the EU for music players and phones. With bit-perfect playback their full level reaches your headphones. Use with care."
+msgstr "USB-DACs haben in der Regel keine Lautstärkebegrenzung, wie sie in der EU für Musikplayer und Telefone vorgeschrieben ist. Bei bit-perfekter Wiedergabe kommt ihr voller Pegel am Kopfhörer an. Mit Vorsicht verwenden."
