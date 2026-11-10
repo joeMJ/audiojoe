@@ -41,7 +41,7 @@ tasks.withType<JavaCompile>().configureEach {
 
 android {
     namespace = "com.ryanheise.just_audio"
-    compileSdk = 35
+    compileSdk = 36 // audiojoe: Media3 1.11.1 needs 36 (checkAarMetadata)
 
     defaultConfig {
         minSdk = 16
@@ -68,7 +68,7 @@ android {
 }
 
 dependencies {
-    val exoplayerVersion = "1.4.1"
+    val exoplayerVersion = "1.11.1"
     implementation("androidx.media3:media3-exoplayer:$exoplayerVersion")
     implementation("androidx.media3:media3-exoplayer-dash:$exoplayerVersion")
     implementation("androidx.media3:media3-exoplayer-hls:$exoplayerVersion")

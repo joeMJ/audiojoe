@@ -16,6 +16,7 @@ import 'media_session.dart';
 import 'remote.dart';
 import 'player.dart';
 import 'prefs.dart';
+import 'quality.dart';
 import 'storage.dart';
 import 'l10n.dart';
 import 'likes.dart';
@@ -49,6 +50,7 @@ Future<void> main() async {
     appVersion = (await PackageInfo.fromPlatform()).version;
   } catch (_) {}
   await Stores.open();
+  startQualityEvents();
   await errorLog.open(Stores.dir);
   final signedIn = await api.loadSession();
   runApp(AudiojoeApp(signedIn: signedIn));

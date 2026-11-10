@@ -387,7 +387,7 @@ Bestandteile und Lizenzen zeigt die App unter **Einstellungen → Über audiojoe
 
 | Bibliothek | Lizenz | Verwendung |
 |---|---|---|
-| [AndroidX Media3](https://developer.android.com/media/media3) (ExoPlayer) 1.4.1 | Apache-2.0 | Wiedergabe |
+| [AndroidX Media3](https://developer.android.com/media/media3) (ExoPlayer) 1.11.1 | Apache-2.0 | Wiedergabe (seit 0.3.0 auch bit-perfekt über USB) |
 | AndroidX Core, AndroidX Media | Apache-2.0 | Mediensitzung, Sperrbildschirm, Benachrichtigung |
 
 ## Linux und Windows: Wiedergabe

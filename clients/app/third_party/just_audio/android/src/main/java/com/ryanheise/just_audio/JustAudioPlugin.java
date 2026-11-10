@@ -23,6 +23,7 @@ public class JustAudioPlugin implements FlutterPlugin {
         Context applicationContext = binding.getApplicationContext();
         BinaryMessenger messenger = binding.getBinaryMessenger();
         methodCallHandler = new MainMethodCallHandler(applicationContext, messenger);
+        BitPerfect.init(applicationContext, messenger); // audiojoe
 
         channel = new MethodChannel(messenger, "com.ryanheise.just_audio.methods");
         channel.setMethodCallHandler(methodCallHandler);

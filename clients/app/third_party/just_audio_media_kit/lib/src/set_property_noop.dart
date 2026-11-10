@@ -9,3 +9,6 @@ Future<void> setProperty(Player player, String key, dynamic value) {
 
 /// audiojoe: see set_property_io.dart.
 Future<void> appendToList(Player player, String key, String value) => Future.value();
+
+/// audiojoe: see set_property_io.dart.
+Future<String> getProperty(Player player, String key) => Future.value('');

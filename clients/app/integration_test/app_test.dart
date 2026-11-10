@@ -187,9 +187,16 @@ void main() {
     await tester.tap(find.text('Settings').first);
     await waitFor(tester, find.text('Add source'));
     await shot(tester, 'settings-sources');
-    for (final name in ['podcasts', 'storage', 'devices', 'maintenance', 'about']) {
+    for (final name in ['podcasts', 'quality', 'storage', 'devices', 'maintenance', 'about']) {
       await tester.tap(find.byKey(ValueKey('settings-page-$name')));
-      await tester.pump(const Duration(seconds: 2));
+      await tester.pump(const Duration(seconds: 3));
+      if (name == 'quality') {
+        // 0.3.0: source of the loaded title and what libmpv hands to the system (audio-out-params).
+        String row(String key) => (tester.widget<Text>(find.descendant(of: find.byKey(ValueKey(key)), matching: find.byType(Text)).last)).data!;
+        // ignore: avoid_print
+        print('QUALITY source="${row('quality-source')}" output="${row('quality-output')}"');
+        expect(find.text('Bit-perfect over USB'), findsNothing);
+      }
       await shot(tester, 'settings-$name');
     }
 

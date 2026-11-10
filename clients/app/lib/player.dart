@@ -16,6 +16,7 @@ import 'cache.dart' show albumTracksOf;
 import 'downloads.dart';
 import 'models.dart';
 import 'prefs.dart';
+import 'quality.dart';
 import 'remote.dart';
 import 'store.dart';
 import 'sync.dart';
@@ -337,6 +338,8 @@ class Player extends ChangeNotifier {
     _lastPart = part;
     _switching = true;
     try {
+      // Android: only music may go bit-perfect over USB (Settings → Quality, 0.3.0).
+      await qualityPrefs.apply(it);
       final load = audio.setAudioSources(
         parts.isEmpty ? [_source(it, null)] : [for (final p in parts) _source(it, p.index)],
         initialIndex: part,

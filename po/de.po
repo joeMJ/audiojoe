@@ -1481,3 +1481,75 @@ msgstr "Letzter Versuch"
 
 msgid "{from} → {to} on {when} · failed: {msg}"
 msgstr "{from} → {to} am {when} · fehlgeschlagen: {msg}"
+
+msgid "Quality"
+msgstr "Qualität"
+
+msgid "Source"
+msgstr "Quelle"
+
+msgid "Handed to Android"
+msgstr "An Android übergeben"
+
+msgid "Path"
+msgstr "Weg"
+
+msgid "Android mixer"
+msgstr "Android-Mischer"
+
+msgid "Bit-perfect"
+msgstr "Bit-perfekt"
+
+msgid "USB audio"
+msgstr "USB-Audio"
+
+msgid "None connected"
+msgstr "Keins angesteckt"
+
+msgid "Offered over USB"
+msgstr "Über USB angeboten"
+
+msgid "Offered"
+msgstr "Angeboten"
+
+msgid "Not offered by this device"
+msgstr "Von diesem Gerät nicht angeboten"
+
+msgid "Bit-perfect over USB"
+msgstr "Bit-perfekt über USB"
+
+msgid "Music goes unchanged to the USB DAC. Podcasts and audiobooks keep the normal path."
+msgstr "Musik geht unverändert an den USB-DAC. Podcasts und Hörbücher bleiben auf dem normalen Weg."
+
+msgid "Needs Android 14 and a USB DAC for which the device offers bit-perfect."
+msgstr "Braucht Android 14 und einen USB-DAC, für den das Gerät bit-perfekt anbietet."
+
+msgid "Android no longer lowers the signal. Loudness depends on the USB DAC alone. Start low."
+msgstr "Android senkt das Signal nicht mehr ab. Die Lautstärke hängt allein am USB-DAC. Leise beginnen."
+
+msgid "Switch on"
+msgstr "Einschalten"
+
+msgid "Lower volume before bit-perfect playback"
+msgstr "Vor bit-perfekter Wiedergabe leiser stellen"
+
+msgid "Sets the media volume to 20 % before the first title after connecting."
+msgstr "Stellt die Medienlautstärke vor dem ersten Titel nach dem Anstecken auf 20 %."
+
+msgid "Volume lowered to 20 % for bit-perfect playback."
+msgstr "Lautstärke für bit-perfekte Wiedergabe auf 20 % gesenkt."
+
+msgid "Risk of hearing damage"
+msgstr "Gefahr für das Gehör"
+
+msgid "Without lowering, bit-perfect playback can start at full level. With sensitive in-ear headphones this can damage your hearing."
+msgstr "Ohne Absenkung kann bit-perfekte Wiedergabe mit vollem Pegel beginnen. Mit empfindlichen In-Ear-Hörern kann das das Gehör schädigen."
+
+msgid "Keep lowering"
+msgstr "Absenkung behalten"
+
+msgid "Turn off anyway"
+msgstr "Trotzdem ausschalten"
+
+msgid "While music plays bit-perfect, system sounds such as touch tones are muted, and a notification sound mutes the music while it plays. Ringtone and alarm still sound."
+msgstr "Während Musik bit-perfekt läuft, sind Systemtöne wie Tastentöne stumm, und ein Benachrichtigungston schaltet die Musik stumm, solange er klingt. Klingelton und Wecker sind weiter zu hören."

@@ -13,3 +13,13 @@ Future<void> appendToList(Player player, String key, String value) async {
   if (player.platform is! NativePlayer) return;
   await (player.platform as NativePlayer).command(['change-list', key, 'append', value]);
 }
+
+/// audiojoe: reads an mpv property as text ('' when unavailable), for Settings → Quality.
+Future<String> getProperty(Player player, String key) async {
+  if (player.platform is! NativePlayer) return '';
+  try {
+    return await (player.platform as NativePlayer).getProperty(key);
+  } catch (_) {
+    return '';
+  }
+}

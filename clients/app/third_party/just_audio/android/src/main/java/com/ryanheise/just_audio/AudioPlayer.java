@@ -21,6 +21,7 @@ import androidx.media3.common.PlaybackParameters;
 import androidx.media3.common.Player;
 import androidx.media3.common.Player.PositionInfo;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.audio.AudioSink;
 import androidx.media3.common.Timeline;
 import androidx.media3.common.Tracks;
 import androidx.media3.common.TrackSelectionParameters;
@@ -780,11 +781,14 @@ public class AudioPlayer implements MethodCallHandler, Player.Listener, Metadata
                 // audiojoe: float output keeps 24-bit sources at full resolution (without it Media3's
                 // DefaultAudioSink converts every PCM format to 16 bit, ToInt16PcmAudioProcessor). With float
                 // output the speed no longer goes through Sonic (16-bit only), so the speed is set on the
-                // AudioTrack itself (playback params, API 23+). See third_party/just_audio/AUDIOJOE.md.
-                Renderer[] defaultRenderers = new DefaultRenderersFactory(context)
-                    .setEnableAudioFloatOutput(true)
-                    .setEnableAudioTrackPlaybackParams(true)
-                    .createRenderers(eventHandler, videoListener, audioListener, textOutput, metadataOutput);
+                // AudioTrack itself (playback params, API 23+). The sink's output goes through
+                // BitPerfect (bit-perfect USB for music, 0.3.0). See third_party/just_audio/AUDIOJOE.md.
+                Renderer[] defaultRenderers = new DefaultRenderersFactory(context) {
+                    @Override
+                    protected AudioSink buildAudioSink(Context c, boolean enableFloatOutput, boolean enableAudioOutputPlaybackParams) {
+                        return BitPerfect.sink(c);
+                    }
+                }.createRenderers(eventHandler, videoListener, audioListener, textOutput, metadataOutput);
                 Renderer[] allRenderers = Arrays.copyOf(defaultRenderers, defaultRenderers.length + 1);
                 allRenderers[defaultRenderers.length] = new ObserverRenderer();
                 return allRenderers;

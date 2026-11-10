@@ -24,6 +24,7 @@ import '../remote.dart';
 import '../storage.dart';
 import '../updates.dart';
 import 'common.dart';
+import 'quality_settings.dart';
 import 'shell.dart';
 import 'title_bar.dart' show appVersion;
 
@@ -144,6 +145,7 @@ class _SettingsViewState extends State<SettingsView> {
     final out = <String, String>{
       'podcasts': t('OPML, sync with podcast apps'),
       'playback': PlaybackSettings.summary(),
+      'quality': QualitySettings.summary(),
       'music': t('MusicBrainz labels'),
       'storage': [
         t('{used} used', {'used': bytes(downloads.entries.fold<int>(0, (s, e) => s + e.bytes))}),
@@ -248,6 +250,7 @@ class _SettingsViewState extends State<SettingsView> {
         ('sources', Icons.storage, t('Sources')),
         ('podcasts', Icons.podcasts, t('Podcasts')),
         ('playback', Icons.replay_10, t('Playback')),
+        ('quality', Icons.graphic_eq, t('Quality')),
         ('music', Icons.library_music, t('Music')),
         ('sonos', Icons.speaker, t('Sonos')),
         ('storage', Icons.download_for_offline_outlined, t('Storage')),
@@ -268,6 +271,7 @@ class _SettingsViewState extends State<SettingsView> {
             SettingsGroup(title: t('Sync with other podcast apps'), children: [GpodderSettings(key: ValueKey('gpodder$_gen'))]),
           ],
         'playback' => [const PlaybackSettings()],
+        'quality' => [const QualitySettings()],
         'music' => [SettingsGroup(children: [MusicSettings(key: ValueKey('music$_gen'))])],
         'sonos' => [const SettingsGroup(children: [SonosSettings()])],
         'storage' => [const StorageSettings()],

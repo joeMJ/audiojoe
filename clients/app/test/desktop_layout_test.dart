@@ -325,16 +325,18 @@ void main() {
           }),
           200,
           headers: {'content-type': 'application/json'}));
-      await show(tester, SettingsView(onSignOut: () {}), size: const Size(360, 760));
+      // 0.3.0: one page more (Quality), the phone is taller than in 0.2.x.
+      await show(tester, SettingsView(onSignOut: () {}), size: const Size(360, 840));
       for (var i = 0; i < 5; i++) {
         await tester.pump(const Duration(milliseconds: 50));
       }
-      for (final p in ['Sources', 'Podcasts', 'Music', 'Sonos', 'Storage', 'Appearance', 'Devices', 'Maintenance', 'About']) {
+      for (final p in ['Sources', 'Podcasts', 'Quality', 'Music', 'Sonos', 'Storage', 'Appearance', 'Devices', 'Maintenance', 'About']) {
         expect(find.text(p), findsOneWidget, reason: p);
       }
       // Storage (0.2.0: used, free, loading as in the mockup), Appearance only on Android.
       expect(find.textContaining(RegExp(r'^\d.* used')), findsOneWidget);
       expect(find.text('System'), findsOneWidget);
+      expect(find.text('Bit-perfect over USB: off'), findsOneWidget);
       expect(find.text('Jellyfin · 2 libraries'), findsOneWidget);
       expect(find.text('2 speakers'), findsOneWidget);
       expect(find.text('1 signed in · sign out this device'), findsOneWidget);

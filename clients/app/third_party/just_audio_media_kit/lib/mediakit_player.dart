@@ -50,7 +50,22 @@ class MediaKitPlayer extends AudioPlayerPlatform {
     return medias[_player.state.playlist.index];
   }
 
+  /// audiojoe: the player created last (audiojoe has one), for Settings → Quality.
+  static MediaKitPlayer? last;
+
+  /// audiojoe: what libmpv decodes ("audio-params") and hands to the system ("audio-out-params"),
+  /// and the audio output in use.
+  Future<Map<String, String>> outputInfo() async {
+    final keys = [
+      'audio-params/format', 'audio-params/samplerate', 'audio-params/channel-count',
+      'audio-out-params/format', 'audio-out-params/samplerate', 'audio-out-params/channel-count',
+      'current-ao', 'audio-device',
+    ];
+    return {for (final k in keys) k: await getProperty(_player, k)};
+  }
+
   MediaKitPlayer(super.id) {
+    last = this;
     _player = Player(
         configuration: PlayerConfiguration(
       pitch: JustAudioMediaKit.pitch,
