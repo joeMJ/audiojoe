@@ -30,6 +30,7 @@ class _QualitySettingsState extends State<QualitySettings> {
   Map<String, dynamic>? _android;
   Map<String, String> _desktop = const {};
   Timer? _timer;
+  bool _logged = false;
 
   @override
   void initState() {
@@ -54,6 +55,10 @@ class _QualitySettingsState extends State<QualitySettings> {
     final a = await androidDiagnostics();
     final d = await desktopOutput();
     if (!mounted) return;
+    if (!_logged && a != null) {
+      _logged = true;
+      bitPerfectLog('page opened; diagnostics=${diagnosticsText(a)}');
+    }
     setState(() {
       _android = a;
       _desktop = d;
@@ -137,20 +142,34 @@ class _QualitySettingsState extends State<QualitySettings> {
 
   Widget _bitPerfect(Map? a) {
     final ok = _available(a);
-    return SwitchListTile(
-      key: const ValueKey('bit-perfect'),
-      contentPadding: EdgeInsets.zero,
-      title: Text(t('Bit-perfect over USB')),
-      subtitle: Text(ok
-          ? t('Music goes unchanged to the USB DAC. Podcasts and audiobooks keep the normal path.')
-          : t('Needs Android 14 and a USB DAC for which the device offers bit-perfect.')),
-      value: qualityPrefs.bitPerfect,
-      onChanged: !ok
-          ? null
-          : (v) async {
-              if (v && !await _confirmOn()) return;
-              await qualityPrefs.set(bitPerfect: v);
-            },
+    // Every touch of the row goes into the log, also while the switch is locked (Pixel test build).
+    return Listener(
+      onPointerDown: (_) => bitPerfectLog('tap; switch=${qualityPrefs.bitPerfect}, usable=$ok, diagnostics=${diagnosticsText(a)}'),
+      child: SwitchListTile(
+        key: const ValueKey('bit-perfect'),
+        contentPadding: EdgeInsets.zero,
+        title: Text(t('Bit-perfect over USB')),
+        subtitle: Text(ok
+            ? t('Music goes unchanged to the USB DAC. Podcasts and audiobooks keep the normal path.')
+            : t('Needs Android 14 and a USB DAC for which the device offers bit-perfect.')),
+        value: qualityPrefs.bitPerfect,
+        onChanged: !ok
+            ? null
+            : (v) async {
+                bitPerfectLog('onChanged($v)');
+                try {
+                  if (v) {
+                    final yes = await _confirmOn();
+                    bitPerfectLog('confirm dialog: ${yes ? 'switch on' : 'cancel'}');
+                    if (!yes) return;
+                  }
+                  await qualityPrefs.set(bitPerfect: v);
+                  bitPerfectLog('saved; switch=${qualityPrefs.bitPerfect}');
+                } catch (e, s) {
+                  bitPerfectLog('switch failed: $e', s);
+                }
+              },
+      ),
     );
   }
 

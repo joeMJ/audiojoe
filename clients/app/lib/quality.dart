@@ -3,12 +3,14 @@
 // The switches belong to this device (Stores.device), not to the account.
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:just_audio_media_kit/just_audio_media_kit.dart' as mk;
 
+import 'errors.dart';
 import 'l10n.dart';
 import 'main.dart' show messenger;
 import 'models.dart';
@@ -51,7 +53,9 @@ class QualityPrefs extends ChangeNotifier {
         'lower': lower,
         'bits': it?.quality?.bitDepth ?? 0,
       });
-    } catch (_) {}
+    } catch (e, s) {
+      bitPerfectLog('set failed: $e', s);
+    }
   }
 }
 
@@ -59,10 +63,27 @@ final qualityPrefs = QualityPrefs.instance;
 
 const _channel = MethodChannel('com.ryanheise.just_audio.audiojoe');
 
-/// Android reports that it lowered the volume before bit-perfect playback.
+/// Log of the bit-perfect path into Settings → Maintenance → Error log (test build for the Pixel,
+/// user 2026-11-10: „Generiere APK mit Logfunktion“).
+void bitPerfectLog(String message, [StackTrace? stack]) => errorLog.record('Bit-perfect: $message', stack);
+
+/// Diagnostics as one line for the log.
+String diagnosticsText(Map? a) {
+  try {
+    return jsonEncode(a);
+  } catch (_) {
+    return '$a';
+  }
+}
+
+/// Android reports that it lowered the volume before bit-perfect playback, and lines for the log.
 void startQualityEvents() {
   if (!Platform.isAndroid) return;
   _channel.setMethodCallHandler((call) async {
+    if (call.method == 'log') {
+      bitPerfectLog('Android: ${call.arguments}');
+      return null;
+    }
     if (call.method == 'lowered') {
       messenger.currentState?.showSnackBar(SnackBar(content: Text(t('Volume lowered to 20 % for bit-perfect playback.'))));
     }

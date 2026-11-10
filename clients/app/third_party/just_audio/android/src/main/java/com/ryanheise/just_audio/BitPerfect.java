@@ -127,6 +127,7 @@ final class BitPerfect implements AudioOutputProvider {
                 music = m != null && m;
                 lower = l == null || l;
                 sourceBits = b == null ? 0 : b;
+                log("set enabled=" + enabled + " music=" + music + " lower=" + lower + " bits=" + sourceBits);
                 if (!(enabled && music)) clear();
                 if (before != (enabled && music)) changed();
                 result.success(null);
@@ -140,9 +141,27 @@ final class BitPerfect implements AudioOutputProvider {
         }
     }
 
+    /** A line for the app's error log (test build for the Pixel, user 2026-11-10). */
+    static void log(String line) {
+        main.post(() -> {
+            if (channel != null) channel.invokeMethod("log", line);
+        });
+    }
+
     /** Media3 asks again for the output (e.g. after a switch or a USB device comes or goes). */
     private static void changed() {
-        for (BitPerfect p : providers) for (Listener l : p.listeners) l.onFormatSupportChanged();
+        int n = 0;
+        for (BitPerfect p : providers) {
+            for (Listener l : p.listeners) {
+                try {
+                    l.onFormatSupportChanged();
+                    n++;
+                } catch (RuntimeException e) {
+                    log("format support listener failed: " + e);
+                }
+            }
+        }
+        log("output asked again (" + n + " listeners)");
     }
 
     @Override
@@ -153,7 +172,13 @@ final class BitPerfect implements AudioOutputProvider {
     @Override
     public OutputConfig getOutputConfig(FormatConfig fc) throws ConfigurationException {
         lastIn = describe(fc.format.pcmEncoding, fc.format.sampleRate, fc.format.channelCount);
-        Choice c = choose(fc);
+        Choice c;
+        try {
+            c = choose(fc);
+        } catch (RuntimeException e) {
+            log("choose failed: " + e);
+            c = null;
+        }
         OutputConfig out;
         if (c == null) {
             clear();
@@ -205,6 +230,9 @@ final class BitPerfect implements AudioOutputProvider {
         if (dev != null) track.setPreferredDevice(dev);
         AudioOutput out = new Converting(track, bits(t), dev);
         lastOutput = out;
+        AudioTrack at = track.getAudioTrack();
+        log("AudioTrack opened: encoding=" + at.getAudioFormat() + " rate=" + at.getSampleRate()
+            + " preferred=" + (dev == null ? "none" : dev.getProductName()));
         return out;
     }
 
@@ -285,30 +313,55 @@ final class BitPerfect implements AudioOutputProvider {
 
     @Nullable
     private static Choice choose(FormatConfig fc) {
-        if (!enabled || !music) return null;
         Format f = fc.format;
-        if (f.pcmEncoding != C.ENCODING_PCM_FLOAT || f.sampleRate <= 0) return null;
+        String what = "pcm=" + f.pcmEncoding + " rate=" + f.sampleRate + " ch=" + f.channelCount;
+        if (!enabled || !music) {
+            log("normal path (" + (!enabled ? "switch off" : "not music") + "), " + what);
+            return null;
+        }
+        if (f.pcmEncoding != C.ENCODING_PCM_FLOAT || f.sampleRate <= 0) {
+            log("normal path (not float), " + what);
+            return null;
+        }
         int test = testBits();
         if (test != 0) {
+            log("test integer output " + test + " bit, " + what);
             return new Choice(test == 16 ? C.ENCODING_PCM_16BIT : test == 24 ? C.ENCODING_PCM_24BIT : C.ENCODING_PCM_32BIT, null);
         }
-        if (Build.VERSION.SDK_INT < 34) return null;
+        if (Build.VERSION.SDK_INT < 34) {
+            log("normal path (SDK " + Build.VERSION.SDK_INT + "), " + what);
+            return null;
+        }
         AudioDeviceInfo dev = usbDevice();
-        if (dev == null) return null;
+        if (dev == null) {
+            log("normal path (no USB output), " + what);
+            return null;
+        }
         int mask = Util.getAudioTrackChannelConfig(f.channelCount);
         List<AudioMixerAttributes> offered = am.getSupportedMixerAttributes(dev);
+        StringBuilder all = new StringBuilder();
+        for (AudioMixerAttributes m : offered) {
+            AudioFormat af = m.getFormat();
+            all.append(" [enc=").append(af.getEncoding()).append(" rate=").append(af.getSampleRate())
+                .append(" mask=").append(af.getChannelMask()).append(" behavior=").append(m.getMixerBehavior()).append(']');
+        }
         for (int enc : candidates()) {
             for (AudioMixerAttributes m : offered) {
                 AudioFormat af = m.getFormat();
                 if (m.getMixerBehavior() == AudioMixerAttributes.MIXER_BEHAVIOR_BIT_PERFECT
                     && af.getEncoding() == enc && af.getSampleRate() == f.sampleRate && af.getChannelMask() == mask) {
                     lowerOnce(dev);
-                    if (!am.setPreferredMixerAttributes(MEDIA, dev, m)) return null;
+                    boolean set = am.setPreferredMixerAttributes(MEDIA, dev, m);
+                    log("USB " + dev.getProductName() + " id=" + dev.getId() + ": setPreferredMixerAttributes(enc=" + enc
+                        + " rate=" + f.sampleRate + " mask=" + mask + ") = " + set);
+                    if (!set) return null;
                     preferredFor = dev;
                     return new Choice(enc, dev);
                 }
             }
         }
+        log("normal path (no bit-perfect match for rate=" + f.sampleRate + " mask=" + mask + "), USB "
+            + dev.getProductName() + " offers" + all);
         return null;
     }
 
@@ -319,6 +372,7 @@ final class BitPerfect implements AudioOutputProvider {
         int to = Math.max(1, Math.round(max * LOWER_TO));
         if (am.getStreamVolume(AudioManager.STREAM_MUSIC) <= to) return;
         am.setStreamVolume(AudioManager.STREAM_MUSIC, to, 0);
+        log("media volume lowered to " + to + "/" + max);
         main.post(() -> {
             if (channel != null) channel.invokeMethod("lowered", Math.round(LOWER_TO * 100));
         });
