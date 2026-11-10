@@ -3,7 +3,6 @@
 // The switches belong to this device (Stores.device), not to the account.
 
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -63,18 +62,9 @@ final qualityPrefs = QualityPrefs.instance;
 
 const _channel = MethodChannel('com.ryanheise.just_audio.audiojoe');
 
-/// Log of the bit-perfect path into Settings → Maintenance → Error log (test build for the Pixel,
-/// user 2026-11-10: „Generiere APK mit Logfunktion“).
+/// Errors of the bit-perfect path into Settings → Maintenance → Error log (only errors, user 2026-11-10 „184“:
+/// the lines of the Pixel test build are gone).
 void bitPerfectLog(String message, [StackTrace? stack]) => errorLog.record('Bit-perfect: $message', stack);
-
-/// Diagnostics as one line for the log.
-String diagnosticsText(Map? a) {
-  try {
-    return jsonEncode(a);
-  } catch (_) {
-    return '$a';
-  }
-}
 
 /// Android reports that it lowered the volume before bit-perfect playback, and lines for the log.
 void startQualityEvents() {
