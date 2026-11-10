@@ -50,8 +50,23 @@ class MediaKitPlayer extends AudioPlayerPlatform {
     return medias[_player.state.playlist.index];
   }
 
-  /// audiojoe: the player created last (audiojoe has one), for Settings → Quality.
-  static MediaKitPlayer? last;
+  /// audiojoe: the players not released yet. just_audio creates a new one when it activates the platform
+  /// again and releases old ones, so settings go to every live player and to each new one.
+  static final List<MediaKitPlayer> live = [];
+
+  /// audiojoe: the player created last of the live ones, for Settings → Quality.
+  static MediaKitPlayer? get last => live.isEmpty ? null : live.last;
+
+  /// audiojoe: libmpv's audio device for all players – "auto" (the system mixer) or, for bit-perfect playback
+  /// on Linux, the DAC itself ("alsa/hw:CARD=…,DEV=0"). Set on each new player; takes effect at once.
+  static String audioDevice = 'auto';
+
+  static Future<void> setAudioDeviceAll(String device) async {
+    audioDevice = device;
+    for (final p in List.of(live)) {
+      await setProperty(p._player, 'audio-device', device);
+    }
+  }
 
   /// audiojoe: what libmpv decodes ("audio-params") and hands to the system ("audio-out-params"),
   /// and the audio output in use.
@@ -64,15 +79,11 @@ class MediaKitPlayer extends AudioPlayerPlatform {
     return {for (final k in keys) k: await getProperty(_player, k)};
   }
 
-  /// audiojoe: libmpv's audio device – "auto" (the system mixer) or, for bit-perfect playback on Linux,
-  /// the DAC itself ("alsa/hw:CARD=…,DEV=0"). Takes effect at once, also during playback.
-  Future<void> setAudioDevice(String device) => setProperty(_player, 'audio-device', device);
-
   /// audiojoe: opens the audio output again (the DAC was still held by the system mixer).
   Future<void> reloadAudioOutput() => command(_player, ['ao-reload']);
 
   MediaKitPlayer(super.id) {
-    last = this;
+    live.add(this);
     _player = Player(
         configuration: PlayerConfiguration(
       pitch: JustAudioMediaKit.pitch,
@@ -98,6 +109,8 @@ class MediaKitPlayer extends AudioPlayerPlatform {
     if (const String.fromEnvironment('AUDIOJOE_AO').isNotEmpty) {
       setProperty(_player, 'ao', const String.fromEnvironment('AUDIOJOE_AO'));
     }
+    // audiojoe: the device chosen for the current title (bit-perfect on Linux), also for a new player.
+    if (audioDevice != 'auto') setProperty(_player, 'audio-device', audioDevice);
 
     _streamSubscriptions = [
       _player.stream.duration.listen((duration) {
@@ -423,6 +436,7 @@ class MediaKitPlayer extends AudioPlayerPlatform {
 
   /// Release the resources used by this player.
   Future<void> release() async {
+    live.remove(this); // audiojoe
     _logger.info('releasing player resources');
     _mediaOpened = false;
     await _player.dispose();

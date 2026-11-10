@@ -97,13 +97,22 @@ class QualityPrefs extends ChangeNotifier {
   /// libmpv cannot open the DAC while PipeWire still holds it ("device busy"): it decodes but outputs
   /// nothing. Try again a few times, then play through the system mixer and note it in the error log.
   Future<void> _watchLinux(AlsaCard card, int watch) async {
-    for (var i = 0; i <= retries; i++) {
+    var silent = 0;
+    for (var i = 0; i < retries * 2 + 2; i++) {
       await Future<void>.delayed(retryEvery);
       if (watch != _watch) return;
       final o = await mk.audiojoeOutputInfo();
+      if (o['audio-device'] != card.device) {
+        // A new player of just_audio that did not get the device yet.
+        await mk.audiojoeSetAudioDevice(card.device);
+        continue;
+      }
       if ((o['audio-params/samplerate'] ?? '').isEmpty) continue; // nothing decoded yet (loading, paused)
       if ((o['audio-out-params/samplerate'] ?? '').isNotEmpty) return; // the DAC plays
-      if (i < retries) await mk.audiojoeReloadAudioOutput();
+      // Decoding but no output: only after two checks in a row (no reload for a short gap at the start).
+      if (++silent < 2) continue;
+      if (silent - 1 > retries) break;
+      await mk.audiojoeReloadAudioOutput();
     }
     if (watch != _watch) return;
     final o = await mk.audiojoeOutputInfo();
