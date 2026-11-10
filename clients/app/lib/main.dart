@@ -37,6 +37,9 @@ Future<void> main() async {
   } else {
     // Desktop: libmpv (bit-exact FLAC, any sample rate).
     JustAudioMediaKit.ensureInitialized(linux: true, windows: true);
+    // Speed through mpv's own "speed" (scaletempo2 only when it is not 1.0), not media_kit's pitch mode,
+    // which keeps af=scaletempo in the chain also at 1.0× – music must reach the DAC unchanged (0.3.0).
+    JustAudioMediaKit.pitch = false;
     JustAudioMediaKit.title = 'audiojoe';
     // The app draws the title bar itself (title_bar.dart); before the first frame, so the
     // system's bar never shows.

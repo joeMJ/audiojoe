@@ -23,3 +23,9 @@ Future<String> getProperty(Player player, String key) async {
     return '';
   }
 }
+
+/// audiojoe: runs an mpv command (e.g. `ao-reload`).
+Future<void> command(Player player, List<String> args) async {
+  if (player.platform is! NativePlayer) return;
+  await (player.platform as NativePlayer).command(args);
+}

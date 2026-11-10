@@ -64,6 +64,13 @@ class MediaKitPlayer extends AudioPlayerPlatform {
     return {for (final k in keys) k: await getProperty(_player, k)};
   }
 
+  /// audiojoe: libmpv's audio device – "auto" (the system mixer) or, for bit-perfect playback on Linux,
+  /// the DAC itself ("alsa/hw:CARD=…,DEV=0"). Takes effect at once, also during playback.
+  Future<void> setAudioDevice(String device) => setProperty(_player, 'audio-device', device);
+
+  /// audiojoe: opens the audio output again (the DAC was still held by the system mixer).
+  Future<void> reloadAudioOutput() => command(_player, ['ao-reload']);
+
   MediaKitPlayer(super.id) {
     last = this;
     _player = Player(

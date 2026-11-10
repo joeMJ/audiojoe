@@ -1495,10 +1495,10 @@ msgid "Path"
 msgstr "Weg"
 
 msgid "Android mixer"
-msgstr "Android-Mischer"
+msgstr "Android-Mixer"
 
 msgid "Bit-perfect"
-msgstr "Bit-perfekt"
+msgstr "Bit-perfect"
 
 msgid "USB audio"
 msgstr "USB-Audio"
@@ -1516,13 +1516,13 @@ msgid "Not offered by this device"
 msgstr "Von diesem Gerät nicht angeboten"
 
 msgid "Bit-perfect over USB"
-msgstr "Bit-perfekt über USB"
+msgstr "Bit-perfect über USB"
 
 msgid "Music goes unchanged to the USB DAC. Podcasts and audiobooks keep the normal path."
 msgstr "Musik geht unverändert an den USB-DAC. Podcasts und Hörbücher bleiben auf dem normalen Weg."
 
 msgid "Needs Android 14 and a USB DAC for which the device offers bit-perfect."
-msgstr "Braucht Android 14 und einen USB-DAC, für den das Gerät bit-perfekt anbietet."
+msgstr "Braucht Android 14 und einen USB-DAC, für den das Gerät bit-perfect anbietet."
 
 msgid "Android no longer lowers the signal. Loudness depends on the USB DAC alone. Start low."
 msgstr "Android senkt das Signal nicht mehr ab. Die Lautstärke hängt allein am USB-DAC. Leise beginnen."
@@ -1531,19 +1531,19 @@ msgid "Switch on"
 msgstr "Einschalten"
 
 msgid "Lower volume before bit-perfect playback"
-msgstr "Vor bit-perfekter Wiedergabe leiser stellen"
+msgstr "Vor Bit-perfect-Wiedergabe leiser stellen"
 
 msgid "Sets the media volume to 20 % before the first title after connecting."
 msgstr "Stellt die Medienlautstärke vor dem ersten Titel nach dem Anstecken auf 20 %."
 
 msgid "Volume lowered to 20 % for bit-perfect playback."
-msgstr "Lautstärke für bit-perfekte Wiedergabe auf 20 % gesenkt."
+msgstr "Lautstärke für Bit-perfect-Wiedergabe auf 20 % gesenkt."
 
 msgid "Risk of hearing damage"
 msgstr "Gefahr für das Gehör"
 
 msgid "Without lowering, bit-perfect playback can start at full level. With sensitive in-ear headphones this can damage your hearing."
-msgstr "Ohne Absenkung kann bit-perfekte Wiedergabe mit vollem Pegel beginnen. Mit empfindlichen In-Ear-Hörern kann das das Gehör schädigen."
+msgstr "Ohne Absenkung kann Bit-perfect-Wiedergabe mit vollem Pegel beginnen. Mit empfindlichen In-Ear-Hörern kann das das Gehör schädigen."
 
 msgid "Keep lowering"
 msgstr "Absenkung behalten"
@@ -1552,7 +1552,16 @@ msgid "Turn off anyway"
 msgstr "Trotzdem ausschalten"
 
 msgid "While music plays bit-perfect, system sounds such as touch tones are muted, and a notification sound mutes the music while it plays. Ringtone and alarm still sound."
-msgstr "Während Musik bit-perfekt läuft, sind Systemtöne wie Tastentöne stumm, und ein Benachrichtigungston schaltet die Musik stumm, solange er klingt. Klingelton und Wecker sind weiter zu hören."
+msgstr "Während Musik bit-perfect läuft, sind Systemtöne wie Tastentöne stumm, und ein Benachrichtigungston schaltet die Musik stumm, solange er klingt. Klingelton und Wecker sind weiter zu hören."
 
 msgid "USB DACs usually have no volume limit like the one prescribed in the EU for music players and phones. With bit-perfect playback their full level reaches your headphones. Use with care."
-msgstr "USB-DACs haben in der Regel keine Lautstärkebegrenzung, wie sie in der EU für Musikplayer und Telefone vorgeschrieben ist. Bei bit-perfekter Wiedergabe kommt ihr voller Pegel am Kopfhörer an. Mit Vorsicht verwenden."
+msgstr "USB-DACs haben in der Regel keine Lautstärkebegrenzung, wie sie in der EU für Musikplayer und Telefone vorgeschrieben ist. Bei Bit-perfect-Wiedergabe kommt ihr voller Pegel am Kopfhörer an. Mit Vorsicht verwenden."
+
+msgid "System mixer"
+msgstr "System-Mixer"
+
+msgid "Needs a USB DAC."
+msgstr "Braucht einen USB-DAC."
+
+msgid "While music plays bit-perfect, other programs cannot use this device."
+msgstr "Solange Musik bit-perfect läuft, können andere Programme dieses Gerät nicht nutzen."

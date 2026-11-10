@@ -13,6 +13,12 @@ import 'package:universal_platform/universal_platform.dart';
 /// audiojoe: see [MediaKitPlayer.outputInfo]; empty while no player exists.
 Future<Map<String, String>> audiojoeOutputInfo() async => await MediaKitPlayer.last?.outputInfo() ?? const {};
 
+/// audiojoe: see [MediaKitPlayer.setAudioDevice].
+Future<void> audiojoeSetAudioDevice(String device) async => await MediaKitPlayer.last?.setAudioDevice(device);
+
+/// audiojoe: see [MediaKitPlayer.reloadAudioOutput].
+Future<void> audiojoeReloadAudioOutput() async => await MediaKitPlayer.last?.reloadAudioOutput();
+
 class JustAudioMediaKit extends JustAudioPlatform {
   JustAudioMediaKit();
 

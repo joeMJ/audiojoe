@@ -29,6 +29,8 @@ class QualitySettings extends StatefulWidget {
 class _QualitySettingsState extends State<QualitySettings> {
   Map<String, dynamic>? _android;
   Map<String, String> _desktop = const {};
+  List<AlsaCard> _cards = const [];
+  String _os = '';
   Timer? _timer;
 
   @override
@@ -53,10 +55,14 @@ class _QualitySettingsState extends State<QualitySettings> {
   Future<void> _read() async {
     final a = await androidDiagnostics();
     final d = await desktopOutput();
+    final cards = Platform.isLinux ? await alsaUsbCards() : const <AlsaCard>[];
+    final os = Platform.isLinux && _os.isEmpty ? await linuxName() : _os;
     if (!mounted) return;
     setState(() {
       _android = a;
       _desktop = d;
+      _cards = cards;
+      _os = os;
     });
   }
 
@@ -109,8 +115,12 @@ class _QualitySettingsState extends State<QualitySettings> {
           _row(t('Output'), player.item == null ? '' : _routed(a?['routed'] as Map?), key: const ValueKey('quality-output')),
           _row(t('Path'), player.item == null ? '' : a?['bitPerfect'] == true ? t('Bit-perfect') : t('Android mixer'),
               key: const ValueKey('quality-path')),
-        ] else
+        ] else ...[
           _row(t('Output'), player.item == null ? '' : _mpvOut, key: const ValueKey('quality-output')),
+          if (Platform.isLinux)
+            _row(t('Path'), player.item == null ? '' : _linuxBitPerfect ? t('Bit-perfect') : t('System mixer'),
+                key: const ValueKey('quality-path')),
+        ],
       ]),
       if (Platform.isAndroid) ...[
         SettingsGroup(title: t('This device'), children: [
@@ -124,7 +134,31 @@ class _QualitySettingsState extends State<QualitySettings> {
         ]),
         SettingsGroup(children: [_bitPerfect(a), _lower()]),
       ],
+      if (Platform.isLinux) ...[
+        SettingsGroup(title: t('This device'), children: [
+          _row('Linux', _os),
+          _row(t('USB audio'), _cards.isEmpty ? t('None connected') : _cards.first.name, key: const ValueKey('quality-usb')),
+          if (_cards.isNotEmpty) ...[
+            _row(t('Offered over USB'),
+                offeredText([for (final r in _cards.first.rates) {'encoding': '${_cards.first.bits}', 'rate': r}])),
+            _row(t('Bit-perfect'), t('Offered'), key: const ValueKey('quality-offered')),
+          ],
+        ]),
+        SettingsGroup(children: [
+          _bitPerfectTile(
+            ok: _cards.isNotEmpty || qualityPrefs.bitPerfect,
+            hint: t('Needs a USB DAC.'),
+            confirm: _confirmOnDesktop,
+          ),
+        ]),
+      ],
     ]);
+  }
+
+  /// libmpv plays on the DAC itself and hands it data (Linux).
+  bool get _linuxBitPerfect {
+    final dev = qualityPrefs.linuxDevice;
+    return dev != null && _desktop['audio-device'] == dev.device && (_desktop['audio-out-params/samplerate'] ?? '').isNotEmpty;
   }
 
   /// Usable with Android 14 and a USB DAC offered bit-perfect; while on it stays usable to turn it off.
@@ -135,26 +169,29 @@ class _QualitySettingsState extends State<QualitySettings> {
     return a['usb'] != null && offersBitPerfect(a['offered'] as List);
   }
 
-  Widget _bitPerfect(Map? a) {
-    final ok = _available(a);
+  Widget _bitPerfect(Map? a) => _bitPerfectTile(
+        ok: _available(a),
+        hint: t('Needs Android 14 and a USB DAC for which the device offers bit-perfect.'),
+        confirm: _confirmOn,
+      );
+
+  Widget _bitPerfectTile({required bool ok, required String hint, required Future<bool> Function() confirm}) {
     return SwitchListTile(
-        key: const ValueKey('bit-perfect'),
-        contentPadding: EdgeInsets.zero,
-        title: Text(t('Bit-perfect over USB')),
-        subtitle: Text(ok
-            ? t('Music goes unchanged to the USB DAC. Podcasts and audiobooks keep the normal path.')
-            : t('Needs Android 14 and a USB DAC for which the device offers bit-perfect.')),
-        value: qualityPrefs.bitPerfect,
-        onChanged: !ok
-            ? null
-            : (v) async {
-                try {
-                  if (v && !await _confirmOn()) return;
-                  await qualityPrefs.set(bitPerfect: v);
-                } catch (e, s) {
-                  bitPerfectLog('switch failed: $e', s);
-                }
-              },
+      key: const ValueKey('bit-perfect'),
+      contentPadding: EdgeInsets.zero,
+      title: Text(t('Bit-perfect over USB')),
+      subtitle: Text(ok ? t('Music goes unchanged to the USB DAC. Podcasts and audiobooks keep the normal path.') : hint),
+      value: qualityPrefs.bitPerfect,
+      onChanged: !ok
+          ? null
+          : (v) async {
+              try {
+                if (v && !await confirm()) return;
+                await qualityPrefs.set(bitPerfect: v);
+              } catch (e, s) {
+                bitPerfectLog('switch failed: $e', s);
+              }
+            },
     );
   }
 
@@ -187,6 +224,30 @@ class _QualitySettingsState extends State<QualitySettings> {
               Text(t('Android no longer lowers the signal. Loudness depends on the USB DAC alone. Start low.')),
               const SizedBox(height: 12),
               Text(t('While music plays bit-perfect, system sounds such as touch tones are muted, and a notification sound mutes the music while it plays. Ringtone and alarm still sound.')),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: Text(t('Cancel'))),
+            FilledButton(key: const ValueKey('bit-perfect-on'), onPressed: () => Navigator.pop(c, true), child: Text(t('Switch on'))),
+          ],
+        ),
+      ) ==
+      true;
+
+  /// Linux/Windows (user „187 ja“): the volume note, and that the DAC is taken for the time being.
+  Future<bool> _confirmOnDesktop() async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          key: const ValueKey('bit-perfect-confirm'),
+          icon: const Icon(Icons.warning_amber_rounded),
+          title: Text(t('Bit-perfect over USB')),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(t('USB DACs usually have no volume limit like the one prescribed in the EU for music players and phones. With bit-perfect playback their full level reaches your headphones. Use with care.'),
+                  style: const TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 12),
+              Text(t('While music plays bit-perfect, other programs cannot use this device.')),
             ]),
           ),
           actions: [

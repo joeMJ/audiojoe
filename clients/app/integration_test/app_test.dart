@@ -195,7 +195,9 @@ void main() {
         String row(String key) => (tester.widget<Text>(find.descendant(of: find.byKey(ValueKey(key)), matching: find.byType(Text)).last)).data!;
         // ignore: avoid_print
         print('QUALITY source="${row('quality-source')}" output="${row('quality-output')}"');
-        expect(find.text('Bit-perfect over USB'), findsNothing);
+        // Linux (0.3.0): the switch is there, grey without a USB DAC (none in the test container).
+        expect(find.text('Bit-perfect over USB'), findsOneWidget);
+        expect(find.text('Needs a USB DAC.'), findsOneWidget);
       }
       await shot(tester, 'settings-$name');
     }
