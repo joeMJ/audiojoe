@@ -69,6 +69,14 @@ Titel startest): `access: … GET /api/v1/stream/… <status>`.
 - **Gar keine Stromzeile:** Das Gerät erreicht den Server nicht – siehe
   [Der Reverse Proxy meldet einen Fehler](#der-reverse-proxy-meldet-einen-fehler).
 
+## Die Wiedergabe endet im Hintergrund (Android)
+
+Hört die Wiedergabe wenige Sekunden auf, nachdem audiojoe in den Hintergrund geht, steht die Akkunutzung
+der App nicht auf **Uneingeschränkt**. Im Protokoll des Servers fehlen dann ab diesem Moment die Zeilen
+`POST /api/v1/playback`, die sonst alle 10 Sekunden kommen. Die Akkunutzung auf **Uneingeschränkt** stellen:
+in audiojoe unter **Einstellungen → Wiedergabe** mit **Ändern**, oder in den Einstellungen von Android bei
+der App. Nach einer Aktualisierung kann die Einstellung zurückgesetzt sein.
+
 ## Sonos erreicht den Server nicht
 
 - Beim Start muss im Protokoll `Sonos stream port on <adresse>:8081 (LAN only)` stehen. Fehlt die

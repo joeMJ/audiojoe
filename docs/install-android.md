@@ -42,6 +42,11 @@ installieren darf, und vor jeder Installation. Die App fragt dafür nie GitHub, 
 [Datenschutz](DATENSCHUTZ.md#updates-nur-mit-dem-server-paket). Von Hand: die neue APK wie oben
 installieren.
 
+**Akkunutzung:** Für die Wiedergabe im Hintergrund die Akkunutzung von audiojoe auf **Uneingeschränkt**
+stellen. Sonst kann Android die Wiedergabe im Hintergrund nach wenigen Sekunden beenden. audiojoe warnt dann
+beim Start der Wiedergabe und unter **Einstellungen → Wiedergabe**; **Ändern** öffnet die Abfrage von
+Android. Nach einer Aktualisierung kann die Einstellung zurückgesetzt sein.
+
 **Deinstallieren:** Einstellungen → Apps → **audiojoe** → **Deinstallieren**. Android entfernt
 dabei auch Anmeldung, Positionen auf dem Gerät und Offline-Titel; die Positionen auf dem Server
 bleiben.

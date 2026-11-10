@@ -66,6 +66,14 @@ start the title): `access: … GET /api/v1/stream/… <status>`.
 - **No stream line at all:** the device does not reach the server – see
   [The reverse proxy reports an error](#the-reverse-proxy-reports-an-error).
 
+## Playback stops in the background (Android)
+
+If playback stops a few seconds after audiojoe goes to the background, the app's battery usage is not set to
+**Unrestricted**. From that moment the log of the server then lacks the lines `POST /api/v1/playback` that
+otherwise come every 10 seconds. Set battery usage to **Unrestricted**: in audiojoe under
+**Settings → Playback** with **Change**, or in Android's settings for the app. After an update the setting
+may have been reset.
+
 ## Sonos cannot reach the server
 
 - At start the log must say `Sonos stream port on <address>:8081 (LAN only)`. Without that line the

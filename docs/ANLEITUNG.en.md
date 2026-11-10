@@ -162,6 +162,31 @@ other app choose the **custom server** under gpodder.net sync and enter the addr
 audiojoe server, your user name and the app password. The app password is valid for the sync
 only, for nothing else; **Switch off** signs all apps connected this way out.
 
+## Quality and bit-perfect
+
+**Settings → Quality** shows what is playing: **Source** (format of the file), what goes to the system
+(**Handed to Android** or **Output**) and the **Path** – **Bit-perfect**, Android mixer or system mixer.
+**This device** names the system and the connected USB DAC, on Android and Linux also the formats it offers.
+
+**Bit-perfect over USB:** with this switch, music goes unchanged to a USB DAC – no conversion of rate or bit
+depth and no volume in software. Podcasts, audiobooks and radio keep the normal path. The switch takes effect
+from the next title.
+
+- **Android:** from Android 14, when the device offers bit-perfect for the DAC. Meanwhile system sounds are
+  muted; a notification sound mutes the music briefly. Before the first title after connecting, audiojoe
+  sets the media volume to 20 % (can be turned off). After a start or seek the first 20 ms are faded in;
+  after that, playback is bit-exact.
+- **Linux:** audiojoe plays directly on the DAC, past PipeWire, and only at rates the DAC takes. Other
+  programs cannot use the DAC meanwhile.
+- **Windows:** WASAPI in exclusive mode. Other programs cannot use the DAC meanwhile.
+
+**Volume:** USB DACs usually have no volume limit like the one prescribed in the EU. Start low, especially
+with sensitive in-ear headphones.
+
+**Battery usage (Android):** if audiojoe's battery usage is not set to "Unrestricted", Android may stop
+playback in the background. audiojoe then warns when playback starts and on **Settings → Playback**;
+**Change** opens Android's question. After an update the setting may have been reset.
+
 ## Settings
 
 Sources and libraries, music (album index, MusicBrainz), Sonos (speakers), maintenance (server and

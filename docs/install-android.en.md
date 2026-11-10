@@ -42,6 +42,11 @@ install apps, and it asks before every installation. The app never asks GitHub f
 [Privacy](DATENSCHUTZ.en.md#updates-only-with-the-server-package). By hand: install the new APK as
 above.
 
+**Battery usage:** for playback in the background, set audiojoe's battery usage to **Unrestricted**.
+Otherwise Android may stop playback in the background after a few seconds. audiojoe then warns when playback
+starts and on **Settings → Playback**; **Change** opens Android's question. After an update the setting may
+have been reset.
+
 **Uninstall:** Settings → Apps → **audiojoe** → **Uninstall**. Android also removes the sign-in,
 the positions on the device and the offline titles; the positions on the server stay.
 

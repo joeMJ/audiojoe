@@ -166,6 +166,33 @@ gpodder.net-Abgleich den **eigenen Server** wählen, die Adresse des audiojoe-Se
 Benutzername und App-Passwort eintragen. Das App-Passwort gilt nur für den Abgleich, für nichts
 anderes; **Abschalten** meldet alle so verbundenen Apps ab.
 
+## Qualität und bit-perfect
+
+Unter **Einstellungen → Qualität** zeigt audiojoe, was gerade läuft: **Quelle** (Format der Datei), was ans
+System geht (**An Android übergeben** bzw. **Ausgabe**) und den **Weg** – **Bit-perfect**, Android-Mixer
+oder System-Mixer. **Dieses Gerät** nennt das System und den angesteckten USB-DAC, unter Android und Linux
+auch die Formate, die er anbietet.
+
+**Bit-perfect über USB:** Mit diesem Schalter geht Musik unverändert an einen USB-DAC – ohne Umrechnung von
+Rate oder Bittiefe und ohne Lautstärke in Software. Podcasts, Hörbücher und Radio bleiben auf dem normalen
+Weg. Der Schalter wirkt ab dem nächsten Titel.
+
+- **Android:** ab Android 14, wenn das Gerät für den DAC bit-perfect anbietet. Währenddessen sind
+  Systemtöne stumm; ein Benachrichtigungston schaltet die Musik kurz stumm. Vor dem ersten Titel nach dem
+  Anstecken stellt audiojoe die Medienlautstärke auf 20 % (abschaltbar). Nach Start oder Sprung wird der
+  Anfang 20 ms lang eingeblendet, danach ist die Wiedergabe bit-genau.
+- **Linux:** audiojoe spielt direkt auf den DAC, an PipeWire vorbei, und nur bei Raten, die der DAC kann.
+  Andere Programme können den DAC so lange nicht nutzen.
+- **Windows:** WASAPI im Exklusivmodus. Andere Programme können den DAC so lange nicht nutzen.
+
+**Lautstärke:** USB-DACs haben in der Regel keine Lautstärkebegrenzung, wie sie in der EU vorgeschrieben
+ist. Leise beginnen, besonders mit empfindlichen In-Ear-Hörern.
+
+**Akkunutzung (Android):** Steht die Akkunutzung von audiojoe nicht auf „Uneingeschränkt“, kann Android die
+Wiedergabe im Hintergrund beenden. audiojoe warnt dann beim Start der Wiedergabe und unter
+**Einstellungen → Wiedergabe**; **Ändern** öffnet die Abfrage von Android. Nach einer Aktualisierung kann
+die Einstellung zurückgesetzt sein.
+
 ## Einstellungen
 
 Quellen und Bibliotheken, Musik (Albenverzeichnis, MusicBrainz), Sonos (Lautsprecher), Wartung
