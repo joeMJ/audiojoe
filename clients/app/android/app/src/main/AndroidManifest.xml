@@ -6,6 +6,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- 0.3.0: bit-perfect over USB, AudioManager.setPreferredMixerAttributes (normal permission, no prompt) -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+    <!-- 0.3.0: "Change" asks the system to exempt audiojoe from battery optimization (user „192 ja“) -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <application
         android:label="audiojoe"
         android:name="${applicationName}"

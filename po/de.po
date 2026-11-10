@@ -1565,3 +1565,9 @@ msgstr "Braucht einen USB-DAC."
 
 msgid "While music plays bit-perfect, other programs cannot use this device."
 msgstr "Solange Musik bit-perfect läuft, können andere Programme dieses Gerät nicht nutzen."
+
+msgid "Battery optimization is on for audiojoe. Android may stop playback in the background. Set battery usage to Unrestricted."
+msgstr "Für audiojoe ist die Akku-Optimierung an. Android kann die Wiedergabe im Hintergrund beenden. Akkunutzung auf „Uneingeschränkt“ stellen."
+
+msgid "Change"
+msgstr "Ändern"

@@ -1,6 +1,9 @@
 package io.github.joemj.audiojoe
 
 import android.content.Intent
+import android.net.Uri
+import android.os.PowerManager
+import android.provider.Settings
 import android.os.StatFs
 import androidx.core.content.FileProvider
 import com.ryanheise.audioservice.AudioServiceActivity
@@ -48,6 +51,28 @@ class MainActivity : AudioServiceActivity() {
                 result.success(StatFs(call.arguments as String).availableBytes)
             } catch (e: Exception) {
                 result.error("statfs", e.message, null)
+            }
+        }
+        // Battery usage (0.3.0, user 2026-11-10 „190–192 ja“): "unrestricted" asks whether the app is exempt
+        // from battery optimization ("Unrestricted"); "request" opens the system question to exempt it.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "io.github.joemj.audiojoe/battery").setMethodCallHandler { call, result ->
+            try {
+                when (call.method) {
+                    "unrestricted" -> {
+                        val pm = getSystemService(POWER_SERVICE) as PowerManager
+                        result.success(pm.isIgnoringBatteryOptimizations(packageName))
+                    }
+                    "request" -> {
+                        @Suppress("BatteryLife")
+                        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                            .setData(Uri.parse("package:$packageName"))
+                        startActivity(intent)
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            } catch (e: Exception) {
+                result.error("battery", e.message, null)
             }
         }
     }

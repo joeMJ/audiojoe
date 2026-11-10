@@ -15,6 +15,7 @@ import 'errors.dart';
 import 'media_session.dart';
 import 'remote.dart';
 import 'player.dart';
+import 'battery.dart';
 import 'prefs.dart';
 import 'quality.dart';
 import 'storage.dart';
@@ -124,6 +125,8 @@ class _AudiojoeAppState extends State<AudiojoeApp> {
       if (k == _playingKey) return;
       _playingKey = k;
       _sweepPlayed();
+      // Android: warn once per app start when playback starts with battery optimization on (0.3.0).
+      if (k != null) unawaited(battery.warnOnce());
     });
     sync.remote.listen((_) => _sweepPlayed());
     Timer.periodic(const Duration(minutes: 1), (_) => _sweepPlayed());

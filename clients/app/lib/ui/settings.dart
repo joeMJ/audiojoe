@@ -16,6 +16,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../api.dart';
 import '../appearance.dart';
+import '../battery.dart';
 import '../downloads.dart';
 import '../errors.dart';
 import '../l10n.dart';
@@ -270,7 +271,7 @@ class _SettingsViewState extends State<SettingsView> {
             ),
             SettingsGroup(title: t('Sync with other podcast apps'), children: [GpodderSettings(key: ValueKey('gpodder$_gen'))]),
           ],
-        'playback' => [const PlaybackSettings()],
+        'playback' => [const BatteryWarning(), const PlaybackSettings()],
         'quality' => [const QualitySettings()],
         'music' => [SettingsGroup(children: [MusicSettings(key: ValueKey('music$_gen'))])],
         'sonos' => [const SettingsGroup(children: [SonosSettings()])],
@@ -556,6 +557,49 @@ class _MusicSettingsState extends State<MusicSettings> {
           ]);
         },
       );
+}
+
+/// Android: battery optimization is on – the warning with "Change" (0.3.0, user „190 ja“).
+class BatteryWarning extends StatefulWidget {
+  const BatteryWarning({super.key});
+
+  @override
+  State<BatteryWarning> createState() => _BatteryWarningState();
+}
+
+class _BatteryWarningState extends State<BatteryWarning> {
+  @override
+  void initState() {
+    super.initState();
+    battery.addListener(_changed);
+    unawaited(battery.refresh());
+  }
+
+  @override
+  void dispose() {
+    battery.removeListener(_changed);
+    super.dispose();
+  }
+
+  void _changed() => mounted ? setState(() {}) : null;
+
+  @override
+  Widget build(BuildContext context) {
+    if (battery.unrestricted != false) return const SizedBox.shrink();
+    final k = context.tok;
+    return SettingsGroup(key: const ValueKey('battery-group'), children: [
+      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(Icons.battery_alert, color: k.warn),
+        const SizedBox(width: 10),
+        Expanded(child: Text(BatteryUsage.warning)),
+      ]),
+      const SizedBox(height: 10),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: FilledButton(key: const ValueKey('battery-change'), onPressed: battery.request, child: Text(t('Change'))),
+      ),
+    ]);
+  }
 }
 
 /// Continue 10 s earlier, per kind, for the account (user 2026-11-06: two switches, on by default,
