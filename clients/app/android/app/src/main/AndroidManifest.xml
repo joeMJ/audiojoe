@@ -4,6 +4,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- 0.3.0: bit-perfect over USB, AudioManager.setPreferredMixerAttributes (normal permission, no prompt) -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
     <application
         android:label="audiojoe"
         android:name="${applicationName}"
