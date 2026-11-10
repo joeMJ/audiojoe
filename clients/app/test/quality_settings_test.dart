@@ -159,6 +159,16 @@ void main() {
     expect(matchWasapi(const [], const [{'name': 'wasapi/x', 'description': 'Speakers (USB DAC)'}]), isEmpty);
   });
 
+  test('Windows: USB names and playback endpoints from one PowerShell call', () {
+    final (names, endpoints) = parsePnp('N\tScarlett Solo 4th Gen\r\n'
+        'E\tLautsprecher (High Definition Audio Device)\tSWD\\MMDEVAPI\\{0.0.0.00000000}.{AAAA}\r\n'
+        'E\tLautsprecher (Scarlett Solo 4th Gen)\tSWD\\MMDEVAPI\\{0.0.0.00000000}.{1334EE5D-24C5-4AC6-9187-B877D48B3581}\r\n');
+    expect(names, ['Scarlett Solo 4th Gen']);
+    expect(endpoints, hasLength(2));
+    final dacs = matchWasapi(names, endpoints);
+    expect(dacs.single.device, 'wasapi/{0.0.0.00000000}.{1334ee5d-24c5-4ac6-9187-b877d48b3581}');
+  });
+
   test('texts of the diagnostics', () {
     expect(formatText({'encoding': 'float', 'rate': 96000, 'channels': 2}), '32-bit float · 96 kHz · 2 ch');
     expect(formatText({'encoding': '24', 'rate': 44100, 'channels': 2}), '24 bit · 44.1 kHz · 2 ch');

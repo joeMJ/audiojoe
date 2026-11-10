@@ -179,36 +179,62 @@ class WasapiDac implements UsbDac {
 /// The USB DACs of this computer (Linux: ALSA; Windows: WASAPI devices of USB sound devices).
 Future<List<UsbDac>> usbDacs() async => Platform.isLinux ? await alsaUsbCards() : Platform.isWindows ? await wasapiUsbDacs() : const [];
 
-/// Names of the USB sound devices (PnP entries of class MEDIA with a USB id), read once per [usbNamesFor].
+/// Names of the USB sound devices and the active playback endpoints, read once per [usbNamesFor].
 List<String>? _usbNames;
+List<Map<String, String>> _endpoints = const [];
 DateTime? _usbNamesAt;
 @visibleForTesting
 Duration usbNamesFor = const Duration(seconds: 30);
 
-/// Windows: libmpv's WASAPI devices whose description names a USB sound device, e.g.
-/// "Lautsprecher (Scarlett Solo 4th Gen)" for the USB device "Scarlett Solo 4th Gen".
+/// One PowerShell call: `N⇥name` for each USB sound device (PnP class MEDIA; Win32_SoundDevice.Name would be
+/// the class driver's "USB Audio 2.0", VM report 2026-11-10 11:51) and `E⇥name⇥id` for each active
+/// playback endpoint (PnP class AudioEndpoint, id SWD\MMDEVAPI\{0.0.0.00000000}.{…}).
+const _pnpQuery = r"Get-CimInstance Win32_PnPEntity | ForEach-Object { "
+    r"if ($_.PNPClass -eq 'MEDIA' -and $_.PNPDeviceID -like 'USB*') { 'N' + [char]9 + $_.Name } "
+    r"elseif ($_.PNPClass -eq 'AudioEndpoint' -and $_.Status -eq 'OK' -and $_.PNPDeviceID -like 'SWD\MMDEVAPI\{0.0.0.*') "
+    r"{ 'E' + [char]9 + $_.Name + [char]9 + $_.PNPDeviceID } }";
+
+/// Windows: the playback devices whose name contains a USB sound device's name, e.g. "Lautsprecher (Scarlett Solo
+/// 4th Gen)" for "Scarlett Solo 4th Gen". libmpv's own list when a player exists, else the endpoints from
+/// Windows – so the DAC is known right after the start, before anything played (VM report 2026-11-10 12:08).
 Future<List<UsbDac>> wasapiUsbDacs() async {
   final now = DateTime.now();
   if (_usbNames == null || _usbNamesAt == null || now.difference(_usbNamesAt!) > usbNamesFor) {
     try {
-      final r = await Process.run('powershell', [
-        '-NoProfile', '-NonInteractive', '-Command',
-        // The device's own name ("Scarlett Solo 4th Gen") is that of its PnP entry of class MEDIA;
-        // Win32_SoundDevice.Name is the class driver's ("USB Audio 2.0", VM report 2026-11-10 11:51).
-        r"Get-CimInstance Win32_PnPEntity | Where-Object { $_.PNPClass -eq 'MEDIA' -and $_.PNPDeviceID -like 'USB*' } | ForEach-Object { $_.Name }",
-      ]);
-      _usbNames = ('${r.stdout}').split(RegExp(r'\r?\n')).map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
+      final r = await Process.run('powershell', ['-NoProfile', '-NonInteractive', '-Command', _pnpQuery]);
+      final (names, endpoints) = parsePnp('${r.stdout}');
+      _usbNames = names;
+      _endpoints = endpoints;
       _usbNamesAt = now;
     } catch (e, s) {
       bitPerfectLog('USB sound devices not readable: $e', s);
       _usbNames = const [];
+      _endpoints = const [];
       _usbNamesAt = now;
     }
   }
-  return matchWasapi(_usbNames!, await mk.audiojoeAudioDevices());
+  final mpv = await mk.audiojoeAudioDevices();
+  return matchWasapi(_usbNames!, mpv.any((d) => (d['name'] ?? '').startsWith('wasapi/')) ? mpv : _endpoints);
 }
 
-/// The WASAPI devices of libmpv whose description contains one of the USB names.
+/// The lines of [_pnpQuery]: USB names, and the endpoints as libmpv names them ("wasapi/{0.0.0.00000000}.{guid}",
+/// the IMMDevice id, whose GUID Windows writes in lower case).
+@visibleForTesting
+(List<String>, List<Map<String, String>>) parsePnp(String out) {
+  final names = <String>[];
+  final endpoints = <Map<String, String>>[];
+  const prefix = r'SWD\MMDEVAPI\';
+  for (final line in out.split(RegExp(r'\r?\n'))) {
+    final f = line.split('\t');
+    if (f.length >= 2 && f[0] == 'N' && f[1].trim().isNotEmpty) names.add(f[1].trim());
+    if (f.length >= 3 && f[0] == 'E' && f[2].toUpperCase().startsWith(prefix)) {
+      endpoints.add({'name': 'wasapi/${f[2].trim().substring(prefix.length).toLowerCase()}', 'description': f[1].trim()});
+    }
+  }
+  return (names, endpoints);
+}
+
+/// The WASAPI devices whose description contains one of the USB names.
 @visibleForTesting
 List<UsbDac> matchWasapi(List<String> usbNames, List<Map<String, String>> devices) => [
       for (final d in devices)
