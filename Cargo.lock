@@ -84,7 +84,7 @@ dependencies = [
 
 [[package]]
 name = "audiojoe-server"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "ammonia",
  "anyhow",
