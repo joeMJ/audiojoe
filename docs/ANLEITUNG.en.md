@@ -15,10 +15,7 @@ The screenshots show the German interface.
   plays what is saved offline and remembers the positions. When the connection breaks while
   playing, the app continues from the saved copy at the same position; without a copy it waits at
   the position and continues by itself as soon as the server answers again (pause ends the
-  waiting). Since 0.1.9. When the server delivers but the device cannot play (for example without an
-  audio device), the app stops after three attempts in a row (about 15 seconds), stays at the
-  position and reports "Playback is not possible on this device" with the reason; the entry is also
-  in the error log (Settings → Maintenance). ▶ tries again. Since 0.3.2.
+  waiting). Since 0.1.9.
 - **✓ Position** green: all positions are with the server. Red with **✕** only when a position
   could not be saved for more than 30 seconds; it is sent as soon as the server is reachable again.
 

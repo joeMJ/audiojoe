@@ -1200,9 +1200,6 @@ msgstr "Spielt auf {device}"
 msgid "{device} is offline."
 msgstr "{device} ist offline."
 
-msgid "Playback is not possible on this device: {reason}"
-msgstr "Wiedergabe auf diesem Gerät nicht möglich: {reason}"
-
 msgid "here"
 msgstr "hier"
 

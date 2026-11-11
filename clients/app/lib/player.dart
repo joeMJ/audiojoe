@@ -14,8 +14,6 @@ import 'package:audio_service/audio_service.dart' show MediaItem;
 import 'api.dart';
 import 'cache.dart' show albumTracksOf;
 import 'downloads.dart';
-import 'errors.dart';
-import 'l10n.dart';
 import 'models.dart';
 import 'prefs.dart';
 import 'quality.dart';
@@ -315,8 +313,6 @@ class Player extends ChangeNotifier {
     item = it;
     _cued = false;
     _stopWaiting();
-    _failedStarts = 0;
-    _attemptAt = null;
     final start = at != null ? (ms: at, from: null) : it.kind == 'radio' || fromStart ? (ms: 0, from: null) : _startPosition(it);
     final from = start.from == null ? null : (device: start.from!.device, at: start.from!.updatedAt);
     _followed = from;
@@ -365,17 +361,6 @@ class Player extends ChangeNotifier {
   /// Set while waiting for the server after a break: playback continues by itself.
   Timer? _retry;
   bool get waiting => _retry != null;
-  /// Proposal A (user 2026-11-09 „133 A“, 2026-11-11 „215 ja 216 ja“): an attempt after a break whose
-  /// stream the server delivered, but which fails again before the position moved 1 s, is no
-  /// connection problem (e.g. no audio device). After 3 such attempts in a row (~15 s): no further
-  /// attempt, paused at the position, a message and an entry in the error log. ▶ tries again.
-  /// Breaks where the server does not answer keep waiting as before (0.1.9).
-  static const _giveUpAfter = 3;
-  int _failedStarts = 0;
-  /// Where the running attempt started with the server answering (null: no such attempt).
-  int? _attemptAt;
-  /// The message when playback gave up; the app shows it once and sets it back to null.
-  final failure = ValueNotifier<String?>(null);
   /// Whether the current title (or part of a book) plays from the copy on this device.
   bool get partFromCopy {
     final i = _parts.isEmpty ? 0 : _part;
@@ -448,38 +433,7 @@ class Player extends ChangeNotifier {
         return _interrupted(at: on);
       }
     }
-    if (_failedStart(e)) return;
     _interrupted();
-  }
-
-  /// An error after an attempt the server answered: counts unless the position moved 1 s since.
-  bool _failedStart(PlayerException e) {
-    final at = _attemptAt;
-    _attemptAt = null;
-    if (at == null) return false;
-    if (_lastMs - at >= 1000) {
-      _failedStarts = 0;
-      return false;
-    }
-    return _countFailedStart(e);
-  }
-
-  /// One more attempt that failed although the server answers; true when playback gave up.
-  bool _countFailedStart(PlayerException e) {
-    if (++_failedStarts < _giveUpAfter) return false;
-    _failedStarts = 0;
-    final it = item!;
-    final ms = it.kind == 'radio' ? 0 : _lastMs;
-    _stopWaiting();
-    _cued = true;
-    _cuedMs = ms;
-    unawaited(audio.stop().catchError((_) {}));
-    var reason = (e.message ?? 'error ${e.code}').replaceAll(RegExp(r'\s+'), ' ').trim();
-    if (reason.length > 120) reason = '${reason.substring(0, 119)}…';
-    errorLog.record('Playback is not possible on this device (gave up after $_giveUpAfter attempts): code ${e.code}, ${e.message}', null);
-    failure.value = t('Playback is not possible on this device: {reason}', {'reason': reason});
-    notifyListeners();
-    return true;
   }
 
   /// The item ended here: the next title (or the next list entry), unless the sleep timer stops here.
@@ -574,39 +528,20 @@ class Player extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Whether the server answers right now (a failed load is then the player's, not the connection's).
-  Future<bool> _serverAnswers() async {
-    try {
-      await api.call('GET', '/health', timeout: const Duration(seconds: 5));
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  bool _retrying = false;
-
   /// One attempt to continue after a break (also when the event stream is back).
   Future<void> _retryNow() async {
     final it = item;
-    if (_retry == null || it == null || !_cued || _switching || _retrying) return;
-    _retrying = true;
+    if (_retry == null || it == null || !_cued || _switching) return;
     try {
       await _setSources(it, _cuedMs, limit: const Duration(seconds: 30));
       _cued = false;
       _stopWaiting();
-      _attemptAt = _cuedMs;
       await audio.setSpeed(_speed);
       unawaited(audio.play());
-    } catch (e) {
-      // The player itself failed to load while the server answers (e.g. no audio device): a failed
-      // attempt (proposal A). Otherwise still no connection: stays waiting at the position.
+    } catch (_) {
+      // Still no connection: stays waiting at the position.
       _cued = true;
-      if (!(e is PlayerException && await _serverAnswers() && _retry != null && _countFailedStart(e))) {
-        unawaited(audio.stop().catchError((_) {}));
-      }
-    } finally {
-      _retrying = false;
+      unawaited(audio.stop().catchError((_) {}));
     }
     notifyListeners();
   }
