@@ -67,13 +67,10 @@ try {
   check("album not saved: „Cache 0 %“ in yellow", before.text === "Cache 0 %" && before.cls.includes("warn"), JSON.stringify(before));
 
   // A tap saves the album; the pill and the offline page count up on the way.
-  // Found and tapped in one step: the top bar is rebuilt when a position comes back from the server
-  // (since 0.3.2 also right at the start of a title), a handle taken before may be gone by the tap.
-  const tap = (sel) => page.evaluate((s) => document.querySelector(s).click(), sel);
-  await tap("#cache");
+  await page.click("#cache");
   const seen = new Set(), counted = new Set();
   const until = Date.now() + 240000;
-  await tap("#offsize");
+  await page.click("#offsize");
   while (Date.now() < until) {
     const p = await pill();
     seen.add(p.text);
