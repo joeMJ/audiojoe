@@ -11,6 +11,7 @@ import '../api.dart';
 import '../l10n.dart';
 import '../models.dart';
 import '../player.dart';
+import '../prefs.dart';
 import '../remote.dart';
 import '../sonos.dart';
 import '../tokens.g.dart';
@@ -182,7 +183,9 @@ class _OutputOverlayState extends State<OutputOverlay> {
                 for (final d in apps) _app(context, d),
                 if ((rooms ?? const []).isNotEmpty) ...[
                   KeyedSubtree(key: _roomsKey, child: section(t('Sonos'))),
-                  for (final r in rooms!) _room(context, r),
+                  // Switched-off (unreachable) speakers hidden unless they are the output (0.3.1, user „205 ja“).
+                  for (final r in rooms!)
+                    if (!sonosPrefs.hideOff || r.reachable || r.id == sonos.output?.id) _room(context, r),
                 ],
                 if (rooms == null) const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator())),
               ]),
@@ -256,8 +259,8 @@ class _OutputOverlayState extends State<OutputOverlay> {
             grouping ? _primary(t('Group'), () => setState(() => grouping = false)) : _secondary(t('Group'), _startGrouping),
             // Snooze (user 2026-11-07): the speaker's own sleep timer, remaining minutes on the button.
             out.sleepS == null
-                ? _secondary(t('Snooze'), () => _snoozeSheet(context))
-                : _primary(t('Snooze · {n} min', {'n': (out.sleepS! / 60).ceil()}), () => _snoozeSheet(context)),
+                ? _secondary(t('Snooze'), () => snoozeSheet(context))
+                : _primary(t('Snooze · {n} min', {'n': (out.sleepS! / 60).ceil()}), () => snoozeSheet(context)),
           ]),
         ]),
       );
@@ -285,27 +288,6 @@ class _OutputOverlayState extends State<OutputOverlay> {
       child: _head(context, Icons.smartphone, '${t('This device')} · ${remote.shown(api.device)}', line(), [_Pill(t('here'), kind: 'accent')]),
     );
   }
-
-  /// The choices of the app's sleep timer; the end of a chapter or item is not offered (the
-  /// speaker only knows a time).
-  void _snoozeSheet(BuildContext context) => showModalBottomSheet(
-        context: context,
-        builder: (context) {
-          void set(int minutes) {
-            Navigator.pop(context);
-            unawaited(_run(() => sonos.sleep(minutes)));
-          }
-
-          return SafeArea(
-            child: ListView(shrinkWrap: true, children: [
-              ListTile(title: Text(t('Snooze'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800))),
-              for (final m in [5, 15, 30, 45, 60])
-                ListTile(leading: const Icon(Icons.timer_outlined), title: Text(t('{n} min', {'n': m})), onTap: () => set(m)),
-              if (sonos.output?.sleepS != null) ListTile(leading: const Icon(Icons.close), title: Text(t('Off')), onTap: () => set(0)),
-            ]),
-          );
-        },
-      );
 
   // ---------------------------------------------------------------- apps and web players
 
@@ -423,14 +405,14 @@ class _VolumeLine extends StatelessWidget {
         );
     return Row(children: [
       SizedBox(width: 100, child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700))),
-      btn(Icons.remove, t('Quieter'), -3),
+      btn(Icons.remove, t('Quieter'), -1), // Sonos in steps of 1 (user 2026-11-11)
       Expanded(
         child: Semantics(
           label: label,
           child: Slider(value: value.clamp(0, 100).toDouble(), max: 100, label: '$value', onChanged: (v) => onChanged(v.round())),
         ),
       ),
-      btn(Icons.add, t('Louder'), 3),
+      btn(Icons.add, t('Louder'), 1),
       SizedBox(width: 40, child: Text('$value', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w800))),
     ]);
   }
@@ -474,4 +456,31 @@ class _GroupBoxState extends State<_GroupBox> {
             ),
     );
   }
+}
+
+/// Snooze of the Sonos output (the speaker's or group's own sleep timer): the choices of the app's sleep
+/// timer; the end of a chapter or item is not offered (the speaker only knows a time). From the output
+/// overlay and, while Sonos plays, from the player's "Sleep timer" button (0.3.1, user 2026-11-11 „202 a“).
+void snoozeSheet(BuildContext context) {
+  final messenger = ScaffoldMessenger.of(context);
+  showModalBottomSheet(
+    context: context,
+    builder: (context) {
+      void set(int minutes) {
+        Navigator.pop(context);
+        unawaited(sonos.sleep(minutes).catchError((Object e) {
+          messenger.showSnackBar(SnackBar(content: Text('${t('Error')}: $e')));
+        }));
+      }
+
+      return SafeArea(
+        child: ListView(shrinkWrap: true, children: [
+          ListTile(title: Text(t('Snooze'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800))),
+          for (final m in [5, 15, 30, 45, 60])
+            ListTile(leading: const Icon(Icons.timer_outlined), title: Text(t('{n} min', {'n': m})), onTap: () => set(m)),
+          if (sonos.output?.sleepS != null) ListTile(leading: const Icon(Icons.close), title: Text(t('Off')), onTap: () => set(0)),
+        ]),
+      );
+    },
+  );
 }

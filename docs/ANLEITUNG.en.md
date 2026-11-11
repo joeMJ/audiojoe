@@ -87,11 +87,13 @@ plays live; it cannot be saved offline.
 - **At the bottom:** **Sleep timer** (5 to 60 minutes, end of chapter, end of title), **Speed**
   (for episodes and audiobooks; for music the heart **Like** is there, music always plays at 1.0×),
   **Output** (this device or a Sonos room) and **Offline**.
-- **Volume:** the device's, with Sonos the room's or group's; rooms can be added to or taken out of
-  the group.
-- **Snooze** (Sonos, in the output overlay next to Here, Stop and Group): sets the speaker's sleep
-  timer to 5 to 60 minutes; the button shows the time left. The speaker stops by itself, also when
-  the app or the server are off. Since 0.1.9.
+- **Volume:** the device's, with Sonos the room's or group's, with − and + in steps of 1; rooms can be added
+  to or taken out of the group. When playback starts on a Sonos room, audiojoe sets it – with a group each
+  room – to the **Start volume** (Settings → Sonos, 8 by default). From 0.3.1.
+- **Snooze** (Sonos, in the output overlay next to Here, Stop and Group, and with Sonos output through
+  **Sleep timer** at the bottom of the player): sets the sleep timer of the speaker or group to 5 to 60
+  minutes; the button shows the time left. The speaker stops by itself, even when the app or server is off;
+  it does not know the end of a title or chapter. From 0.1.9, through Sleep timer from 0.3.1.
 
 ## Continue on other devices
 
@@ -189,7 +191,8 @@ playback in the background. audiojoe then warns when playback starts and on **Se
 
 ## Settings
 
-Sources and libraries, music (album index, MusicBrainz), Sonos (speakers), maintenance (server and
+Sources and libraries, music (album index, MusicBrainz), Sonos (speakers, start volume, **Hide switched-off
+speakers** – on by default, hides unreachable speakers in the output overlay), maintenance (server and
 Debian updates, backups, this app's version; see [Installation](install-server.en.md#updates-and-maintenance)),
 podcasts (OPML), devices
 (signed-in devices, sign out each one), **Sign out this device** and **About audiojoe** with

@@ -1571,3 +1571,9 @@ msgstr "Für audiojoe ist die Akku-Optimierung an. Android kann die Wiedergabe i
 
 msgid "Change"
 msgstr "Ändern"
+
+msgid "Start volume"
+msgstr "Startlautstärke"
+
+msgid "Hide switched-off speakers"
+msgstr "Ausgeschaltete Lautsprecher ausblenden"

@@ -89,11 +89,14 @@ live; es lässt sich nicht offline speichern.
 - **Unten:** **Schlaf-Timer** (5 bis 60 Minuten, Ende des Kapitels, Ende des Titels), **Tempo**
   (bei Folgen und Hörbüchern; bei Musik steht dort das Herz **Gefällt mir**, Musik spielt immer mit
   1,0×), **Ausgabe** (dieses Gerät oder ein Sonos-Raum) und **Offline**.
-- **Lautstärke:** die des Geräts, bei Sonos die des Raums bzw. der Gruppe; Räume lassen sich zur
-  Gruppe hinzufügen oder herausnehmen.
-- **Schlummern** (Sonos, im Ausgabe-Fenster neben Hierher, Stoppen und Gruppe): stellt den
-  Schlaf-Timer des Lautsprechers auf 5 bis 60 Minuten; der Knopf zeigt die Restzeit. Der
-  Lautsprecher hört von selbst auf, auch wenn App oder Server aus sind. Ab 0.1.9.
+- **Lautstärke:** die des Geräts, bei Sonos die des Raums bzw. der Gruppe, mit − und + in Schritten von 1;
+  Räume lassen sich zur Gruppe hinzufügen oder herausnehmen. Beginnt die Wiedergabe auf einem Sonos-Raum,
+  stellt audiojoe ihn – bei einer Gruppe jeden Raum – auf die **Startlautstärke** (Einstellungen → Sonos,
+  ab Werk 8). Ab 0.3.1.
+- **Schlummern** (Sonos, im Ausgabe-Fenster neben Hierher, Stoppen und Gruppe, und bei Sonos-Ausgabe über
+  **Schlaf-Timer** unten im Player): stellt den Schlaf-Timer des Lautsprechers bzw. der Gruppe auf 5 bis 60
+  Minuten; der Knopf zeigt die Restzeit. Der Lautsprecher hört von selbst auf, auch wenn App oder Server aus
+  sind; ein Ende des Titels oder Kapitels kennt er nicht. Ab 0.1.9, über Schlaf-Timer ab 0.3.1.
 
 ## Auf anderen Geräten weiterhören
 
@@ -195,7 +198,9 @@ die Einstellung zurückgesetzt sein.
 
 ## Einstellungen
 
-Quellen und Bibliotheken, Musik (Albenverzeichnis, MusicBrainz), Sonos (Lautsprecher), Wartung
+Quellen und Bibliotheken, Musik (Albenverzeichnis, MusicBrainz), Sonos (Lautsprecher, Startlautstärke,
+**Ausgeschaltete Lautsprecher ausblenden** – ab Werk an, blendet nicht erreichbare Lautsprecher im
+Ausgabe-Fenster aus), Wartung
 (Server- und Debian-Updates, Sicherungen, Stand dieser App; siehe
 [Installation](install-server.md#updates-und-wartung)), Podcasts
 (OPML), Geräte (angemeldete Geräte, einzeln abmelden), **Dieses Gerät abmelden** und

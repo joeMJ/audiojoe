@@ -1185,6 +1185,62 @@ class _AppUpdateRowState extends State<_AppUpdateRow> {
 
 /// Sonos speakers of the server: add by address, search the configured range, remove.
 /// Speakers are shared by all users; the server needs a stream port for them (`[sonos] listen`).
+/// Start volume and hiding switched-off speakers (account settings, 0.3.1, user „204 ja“, „205 ja“).
+class SonosPrefsRows extends StatefulWidget {
+  const SonosPrefsRows({super.key});
+  @override
+  State<SonosPrefsRows> createState() => _SonosPrefsRowsState();
+}
+
+class _SonosPrefsRowsState extends State<SonosPrefsRows> {
+  @override
+  void initState() {
+    super.initState();
+    sonosPrefs.addListener(_changed);
+    unawaited(sonosPrefs.refresh());
+  }
+
+  @override
+  void dispose() {
+    sonosPrefs.removeListener(_changed);
+    super.dispose();
+  }
+
+  void _changed() => mounted ? setState(() {}) : null;
+
+  Future<void> _set({int? startVolume, bool? hideOff}) async {
+    try {
+      await sonosPrefs.set(startVolume: startVolume, hideOff: hideOff);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${t('Error')}: $e')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final v = sonosPrefs.startVolume;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      ListTile(
+        key: const ValueKey('sonos-start-volume'),
+        contentPadding: EdgeInsets.zero,
+        title: Text(t('Start volume')),
+        trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+          IconButton(tooltip: t('Quieter'), icon: const Icon(Icons.remove), onPressed: v > 0 ? () => _set(startVolume: v - 1) : null),
+          SizedBox(width: 36, child: Text('$v', textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800))),
+          IconButton(tooltip: t('Louder'), icon: const Icon(Icons.add), onPressed: v < 100 ? () => _set(startVolume: v + 1) : null),
+        ]),
+      ),
+      SwitchListTile(
+        key: const ValueKey('sonos-hide-off'),
+        contentPadding: EdgeInsets.zero,
+        title: Text(t('Hide switched-off speakers')),
+        value: sonosPrefs.hideOff,
+        onChanged: (h) => _set(hideOff: h),
+      ),
+    ]);
+  }
+}
+
 class SonosSettings extends StatefulWidget {
   const SonosSettings({super.key});
   @override
@@ -1231,6 +1287,8 @@ class _SonosSettingsState extends State<SonosSettings> {
                 style: TextStyle(color: context.tok.muted));
           }
           return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const SonosPrefsRows(),
+            const SizedBox(height: 8),
             for (final sp in speakers)
               ItemRow(
                 leading: Icon(sp['reachable'] == true ? Icons.speaker : Icons.speaker_outlined, size: 32),

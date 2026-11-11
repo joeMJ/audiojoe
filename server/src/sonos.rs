@@ -570,8 +570,27 @@ pub async fn play(
 ) -> ApiResult<Json<Value>> {
     let sp = speaker(&state, id).await?;
     let coord = coordinator(&state, &sp).await?;
-    if sessions(&state).await.iter().any(|s| (s.room_id == id || s.coordinator == coord) && s.user != user.id) {
+    let open = sessions(&state).await;
+    if open.iter().any(|s| (s.room_id == id || s.coordinator == coord) && s.user != user.id) {
         return Err(ApiError::Conflict("speaker is busy".into()));
+    }
+    // Playback that starts on the speaker (no session of ours there yet) begins at the account's start volume,
+    // each room of a group alike (0.3.1, user 2026-11-11 „204 ja“). A new title in a running session keeps
+    // the volume the user has set.
+    if !open.iter().any(|s| s.room_id == id || s.coordinator == coord) {
+        let uid = user.id;
+        let v = with_db(&state.db, move |c| Ok(crate::prefs::read_sonos(c, uid)?)).await
+            .ok().and_then(|s| s["start_volume"].as_i64()).unwrap_or(crate::prefs::SONOS_START_VOLUME);
+        let ips: Vec<String> = match room(&state, &sp).await {
+            Ok((_, g)) => g.rooms().iter().map(|m| m.ip.clone()).collect(),
+            Err(_) => vec![sp.ip.clone()],
+        };
+        for ip in ips {
+            if let Err(e) = soap(&state.http, &ip, RC, "SetVolume",
+                                 &format!("<InstanceID>0</InstanceID><Channel>Master</Channel><DesiredVolume>{v}</DesiredVolume>")).await {
+                tracing::warn!("sonos {ip}: start volume not set: {e:?}");
+            }
+        }
     }
     start(&state, &user, &sp, &coord, &req.key, req.position_ms).await?;
     let (uid, dev, key) = (user.id, user.device.clone(), req.key.clone());

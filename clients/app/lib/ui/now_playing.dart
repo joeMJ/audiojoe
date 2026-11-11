@@ -372,7 +372,9 @@ class _VolumeRow extends StatelessWidget {
   final String label;
   final ValueChanged<int> onChanged;
   final bool big;
-  const _VolumeRow({required this.value, required this.label, required this.onChanged, this.step = 3, this.big = false});
+  /// Step of − and +: 1 for Sonos (user 2026-11-11: „Das möge bitte auf 1er Schritte gesetzt werden“); the phone's own
+  /// volume passes its own step.
+  const _VolumeRow({required this.value, required this.label, required this.onChanged, this.step = 1, this.big = false});
 
   @override
   Widget build(BuildContext context) {
@@ -527,15 +529,20 @@ class _Toolbar extends StatelessWidget {
           ),
         );
     final left = player.sleepAt?.difference(DateTime.now());
-    final sleepLabel = !player.sleeping
-        ? t('Sleep timer')
-        : left != null
-            ? t('{n} min', {'n': (left.inSeconds / 60).ceil()})
-            : player.sleepAtEnd == 'chapter' ? t('End of chapter') : t('End of item');
+    // Sonos output (a speaker or group): the button opens the speaker's own snooze (0.3.1, user „202 a“).
+    final snoozing = out?.sleepS != null;
+    final sleepOn = out != null ? snoozing : player.sleeping;
+    final sleepLabel = out != null
+        ? snoozing ? t('Snooze · {n} min', {'n': (out.sleepS! / 60).ceil()}) : t('Sleep timer')
+        : !player.sleeping
+            ? t('Sleep timer')
+            : left != null
+                ? t('{n} min', {'n': (left.inSeconds / 60).ceil()})
+                : player.sleepAtEnd == 'chapter' ? t('End of chapter') : t('End of item');
     final accent = Theme.of(context).colorScheme.primary;
     final tools = [
-        tool(Icon(player.sleeping ? Icons.bedtime : Icons.bedtime_outlined, size: 28, color: player.sleeping ? accent : null), sleepLabel,
-            local && !player.live ? () => _sleepSheet(context) : null, tip: t('Sleep timer')),
+        tool(Icon(sleepOn ? Icons.bedtime : Icons.bedtime_outlined, size: 28, color: sleepOn ? accent : null), sleepLabel,
+            out != null ? () => snoozeSheet(context) : local && !player.live ? () => _sleepSheet(context) : null, tip: t('Sleep timer')),
         // Music: the heart in place of the speed (user 2026-11-09, "143 ja"); podcasts and books keep the speed.
         if (Likes.likeable(it))
           Expanded(

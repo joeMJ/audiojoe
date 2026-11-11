@@ -229,6 +229,18 @@ check("device B receives the settings live (SSE)",
       any(e[1].get("type") == "settings" and e[1]["playback"] == b for e in events))
 call("PUT", "/api/v1/settings/playback", before, token=A)
 
+# Sonos settings of the account (0.3.1, user 2026-11-11 "204 ja", "205 ja"): start volume 8, hide switched-off speakers.
+s, before, _ = call("GET", "/api/v1/settings/sonos", token=A)
+check("sonos settings: start volume and hiding readable", s == 200 and set(before) == {"start_volume", "hide_off"}, json.dumps(before))
+s, b, _ = call("PUT", "/api/v1/settings/sonos", {"start_volume": 13}, token=A)
+check("sonos settings: start volume changes, hiding stays", s == 200 and b["start_volume"] == 13 and b["hide_off"] == before["hide_off"], json.dumps(b))
+s, _, _ = call("PUT", "/api/v1/settings/sonos", {"start_volume": 101}, token=A)
+check("sonos settings: start volume above 100 refused", s == 400, str(s))
+time.sleep(1.5)
+check("device B receives the sonos settings live (SSE)",
+      any(e[1].get("type") == "settings" and e[1].get("sonos") == b for e in events))
+call("PUT", "/api/v1/settings/sonos", before, token=A)
+
 # Likes (0.2.6, user 2026-11-09 "144 ja", "147 ja"): a music title marked with the heart; it stays when heard.
 LIKE = "jellyfin:9:e2elike"
 call("DELETE", f"/api/v1/lists/likes/{LIKE}", token=A)

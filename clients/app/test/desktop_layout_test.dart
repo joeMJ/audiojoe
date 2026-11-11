@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'package:audiojoe/api.dart';
 import 'package:audiojoe/models.dart';
 import 'package:audiojoe/player.dart';
+import 'package:audiojoe/prefs.dart';
 import 'package:audiojoe/remote.dart';
 import 'package:audiojoe/sonos.dart';
 import 'package:audiojoe/ui/common.dart';
@@ -166,6 +167,8 @@ void main() {
       sonos.all = members;
       sonos.output = members.first;
       remote.controlRoom(members.first);
+      // 0.3.1: switched-off speakers are hidden by default; shown here to check how they look.
+      sonosPrefs.hideOff = false;
       await show(tester, const NowPlayingView(), size: const Size(1100, 1600));
       await tester.tap(find.text('Living + 2'));
       for (var i = 0; i < 5; i++) {
@@ -193,6 +196,26 @@ void main() {
       await tester.pump();
       expect(find.text('Output'), findsNothing);
       expect(find.byTooltip('Pause'), findsOneWidget);
+      // 0.3.1 („205 ja“): with hiding on (default) the switched-off Garden is not listed.
+      sonosPrefs.hideOff = true;
+      await tester.tap(find.text('Living + 2'));
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(find.text('Output'), findsOneWidget, reason: 'overlay open again');
+      expect(find.text('busy'), findsOneWidget, reason: 'rooms listed (Office, busy)');
+      expect(find.text('Garden'), findsNothing);
+      expect(find.text('switched off'), findsNothing);
+      await tester.tap(find.byTooltip('Close'));
+      await tester.pump();
+      // 0.3.1 („202 a“): with Sonos output the Sleep timer button opens the speaker's snooze.
+      await tester.tap(find.byTooltip('Sleep timer'));
+      await tester.pumpAndSettle();
+      expect(find.text('Snooze'), findsOneWidget);
+      expect(find.text('End of item'), findsNothing);
+      expect(find.text('5 min'), findsOneWidget);
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
       remote.release();
     });
 
