@@ -296,7 +296,11 @@ export async function renderCache() {
 /** Tap on the pill: the rest of what plays next is saved offline. */
 async function cacheRest() {
   const items = await cacheScope();
-  if (items.length) await addOffline(items);
+  // In playing order from the title playing now; the titles before it last (user 2026-11-11
+  // „220 ja dringend in spielreihenfolge“: on 171 title 3 was saved only after 28 others).
+  const at = items.findIndex((x) => x.key === player.state.item?.key);
+  const ordered = at > 0 ? [...items.slice(at), ...items.slice(0, at)] : items;
+  if (ordered.length) await addOffline(ordered);
 }
 
 /** Moon button below the top bar, top right over the content: dark mode on (filled, accent)
