@@ -130,6 +130,8 @@ try {
   const rows = [];
   for (const v of ["Jetzt läuft", "Weiterhören", "Podcasts", "Hörbücher", "Musik", "Offline"]) {
     await clickText(v, "nav"); await sleep(1500);
+    // A view whose data is still loading has no first row yet (aborted once: null.matches, 2026-11-11).
+    await page.waitForFunction(() => document.querySelector("main")?.firstElementChild, { timeout: 15000, polling: 250 });
     rows.push(await page.evaluate((name) => {
       const m = document.querySelector(".shell > .theme").getBoundingClientRect();
       const f = document.querySelector("main").firstElementChild;
@@ -140,6 +142,7 @@ try {
   check("moon on one line with the first row in every view", rows.every((x) => Math.abs(+x.split(" ").pop()) < 1), rows.join(", "));
   // Scrolling a long list: the moon goes up with the first row, it does not float over the list.
   await clickText("Podcasts", "nav"); await sleep(2000);
+  await page.waitForFunction(() => document.querySelector("main")?.firstElementChild, { timeout: 15000, polling: 250 });
   const sc = await page.evaluate(async () => {
     const m = document.querySelector("main"), moon = document.querySelector(".shell > .theme");
     const row = () => (m.firstElementChild.matches(".chips") ? m.firstElementChild.firstElementChild : m.firstElementChild).getBoundingClientRect().top;

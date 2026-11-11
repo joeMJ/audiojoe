@@ -47,8 +47,12 @@ const URL_HOURS: i64 = 24;
 const POLL_EVERY: Duration = Duration::from_secs(5);
 /// … without one only this often.
 const IDLE_EVERY: Duration = Duration::from_secs(30);
-/// A session whose speaker stays stopped (or unreachable) this long has ended.
+/// A session whose speaker answers but stays stopped this long has ended.
 const STOPPED_GRACE: Duration = Duration::from_secs(20);
+/// A session whose speaker gives no full answer this long has ended (switched off, gone from the network).
+/// A speaker on a weak network misses single rounds while it plays on; that alone does not end its
+/// session (Badezimmer 2026-11-11: answered every few seconds, the session ended after 20 s).
+const UNREACHABLE_GRACE: Duration = Duration::from_secs(120);
 /// A title counts as heard when its last position lay this close to its end.
 const HEARD_TAIL_MS: i64 = 30_000;
 
@@ -926,8 +930,10 @@ struct Poller {
     playing: HashMap<String, (i64, String, String, i64)>,
     /// Title, subtitle and duration per item, so positions stored for the speaker carry them.
     titles: HashMap<String, (String, String, Option<i64>)>,
-    /// Since when a session's speaker has been stopped or unreachable.
+    /// Since when a session's speaker has answered as stopped …
     stopped_since: HashMap<i64, Instant>,
+    /// … or has given no full answer (not counted as stopped).
+    unreachable_since: HashMap<i64, Instant>,
     /// The reason last logged per address, so a switched-off speaker is logged once.
     warned: HashMap<String, String>,
 }
@@ -959,13 +965,30 @@ impl Poller {
         self.titles.get(&c.key).cloned().unwrap_or_default()
     }
 
-    /// A session's speaker did not play: ends the session after the grace time.
+    /// A session's speaker answered and did not play: ends the session after the grace time.
     async fn not_playing(&mut self, state: &AppState, s: &Session) {
+        self.unreachable_since.remove(&s.room_id);
         let since = *self.stopped_since.entry(s.room_id).or_insert_with(Instant::now);
         if since.elapsed() >= STOPPED_GRACE {
             self.stopped_since.remove(&s.room_id);
             end_session(state, s, "stopped").await;
         }
+    }
+
+    /// A session's speaker gave no full answer: ends the session only after the longer grace time.
+    async fn unreachable(&mut self, state: &AppState, s: &Session) {
+        let since = *self.unreachable_since.entry(s.room_id).or_insert_with(Instant::now);
+        if since.elapsed() >= UNREACHABLE_GRACE {
+            self.unreachable_since.remove(&s.room_id);
+            self.stopped_since.remove(&s.room_id);
+            end_session(state, s, "unreachable").await;
+        }
+    }
+
+    /// A session's speaker answered and plays (or ended it otherwise): both clocks start anew.
+    fn answered(&mut self, room: i64) {
+        self.stopped_since.remove(&room);
+        self.unreachable_since.remove(&room);
     }
 }
 
@@ -998,7 +1021,7 @@ async fn poll_once(state: &AppState, p: &mut Poller) {
             }
         }
     }
-    // Sessions follow their room's group; a room that does not answer counts as stopped.
+    // Sessions follow their room's group; a room that does not answer counts as unreachable, not as stopped.
     let mut open = Vec::new();
     for mut s in sessions(state).await {
         match coord_of.get(&s.room_id) {
@@ -1006,7 +1029,7 @@ async fn poll_once(state: &AppState, p: &mut Poller) {
                 s.coordinator = c.clone();
                 open.push(s);
             }
-            None => p.not_playing(state, &s).await,
+            None => p.unreachable(state, &s).await,
         }
     }
     let coords: std::collections::BTreeSet<String> = coord_of.values().cloned().collect();
@@ -1022,7 +1045,7 @@ async fn poll_once(state: &AppState, p: &mut Poller) {
             Err(e) => {
                 p.warn(&coord, &format!("{e:?}"));
                 for s in &here {
-                    p.not_playing(state, s).await;
+                    p.unreachable(state, s).await;
                 }
                 continue;
             }
@@ -1034,7 +1057,7 @@ async fn poll_once(state: &AppState, p: &mut Poller) {
         let global = claim.as_ref().and_then(|c| tag(&pos, "RelTime").and_then(|t| parse_time(&t)).map(|ms| c.offset_ms + c.start_ms + ms));
         for s in &here {
             if occupied(claim.as_ref().map(|c| c.user), &uri, s.user) {
-                p.stopped_since.remove(&s.room_id);
+                p.answered(s.room_id);
                 end_session(state, s, "foreign").await;
                 continue;
             }
@@ -1042,7 +1065,7 @@ async fn poll_once(state: &AppState, p: &mut Poller) {
                 p.not_playing(state, s).await;
                 continue;
             }
-            p.stopped_since.remove(&s.room_id);
+            p.answered(s.room_id);
             let mut n = s.clone();
             if let Some(c) = &claim {
                 if c.key != n.key {

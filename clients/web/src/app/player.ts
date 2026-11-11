@@ -373,10 +373,15 @@ export async function finishAndNext() {
 async function persist(finished = false) {
   const it = state.item;
   // Live radio has no position to continue from.
-  if (!it || it.kind === "radio" || !audio.src || (!finished && position() < 1000)) return;
+  if (!it || it.kind === "radio" || !audio.src) return;
+  // In its first second the stream may still be opening (the element reports 0, not the start
+  // position): the position asked for counts. A title just started is then still saved as the last
+  // one played – before, a title paused within its first second was not saved at all, and another
+  // device taking over got the title before it (queue.test, 2026-11-11).
+  const ms = finished || position() >= 1000 ? position() : lastMs;
   await savePosition({
     key: it.key,
-    position_ms: Math.round(position()),
+    position_ms: Math.round(ms),
     duration_ms: Math.round(duration()) || null,
     finished,
     updated_at: new Date().toISOString(),
