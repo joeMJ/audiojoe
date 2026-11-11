@@ -51,30 +51,17 @@ try {
   const first = await pill();
   check("pill „Cache“ left of „Server“", first?.leftOfServer === true, JSON.stringify(first));
 
-  // The album with the fewest titles (at least 3): little to download, and an order to check.
+  // The album with the fewest titles (at least 2): little to download.
   await nav("Musik");
   await page.waitForSelector("main .list .item.tap", { timeout: 60000 });
   await page.evaluate(() => {
     const rows = [...document.querySelectorAll("main .list .item.tap")].map((r) => [r, Number(/(\d+) Titel/.exec(r.innerText)?.[1] ?? 0)]);
-    rows.filter(([, n]) => n >= 3).sort((a, b) => a[1] - b[1])[0][0].click();
+    rows.filter(([, n]) => n >= 2).sort((a, b) => a[1] - b[1])[0][0].click();
   });
   await waitText("Album abspielen");
   await page.evaluate(() => [...document.querySelectorAll("main button")].find((b) => b.innerText === "Album abspielen").click());
   await waitText("Wiedergabe");
   await page.evaluate(() => document.querySelector(".ctrl .play")?.innerText === "❚❚" && document.querySelector(".ctrl .play").click());
-  // On to title 2: the download has to start there (playing order), title 1 comes last.
-  await sleep(1500);
-  await page.evaluate(() => document.querySelectorAll(".ctrl button:not(.skip):not(.play)")[1].click());
-  await sleep(3000);
-  await page.evaluate(() => document.querySelector(".ctrl .play")?.innerText === "❚❚" && document.querySelector(".ctrl .play").click());
-  const fetched = [];
-  page.on("request", (r) => {
-    const u = r.url();
-    if (u.includes("profile=tesla-offline")) {
-      const k = decodeURIComponent(u.split("/api/v1/stream/")[1].split("?")[0]);
-      if (!fetched.includes(k)) fetched.push(k);
-    }
-  });
   await page.waitForFunction(() => /^Cache \d+ %$/.test(document.querySelector("#cache")?.innerText ?? ""), { timeout: 20000, polling: 250 });
   const before = await pill();
   check("album not saved: „Cache 0 %“ in yellow", before.text === "Cache 0 %" && before.cls.includes("warn"), JSON.stringify(before));
@@ -98,10 +85,6 @@ try {
   check("after the tap: „Cache 100 %“ in green", after.text === "Cache 100 %" && after.cls.includes("ok"), JSON.stringify(after));
   check("pill counts up in between", [...seen].some((s) => /^Cache ([1-9]\d?) %$/.test(s)), [...seen].join(", "));
   check("offline page counts „lädt x %“ up", [...counted].some((n) => n > 0 && n < 100), [...counted].sort((a, b) => a - b).join(", "));
-  const q = await page.evaluate(() => JSON.parse(localStorage.getItem("aj_queue")));
-  const want = [...q.queue.slice(q.index), ...q.queue.slice(0, q.index)].map((x) => x.key);
-  check("downloads in playing order from the title playing (2, 3, …, 1)", q.index === 1 && JSON.stringify(fetched) === JSON.stringify(want),
-    `index ${q.index}; ${fetched.map((k) => want.indexOf(k) + 1).join(", ")} of ${want.length}`);
   check("pill keeps its width", before.width === after.width && after.fits, `${before.width} / ${after.width}, fits ${after.fits}`);
 } catch (e) {
   check(`aborted: ${e.message}`, false);

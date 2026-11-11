@@ -17,19 +17,6 @@ export interface OfflineEntry {
   transcoded?: boolean;
   error?: string;
   added: string;
-  /** Download order (user 2026-11-11 „220 ja dringend in spielreihenfolge“): the latest request first
-   *  (`batch`, its time), within it in the order given (`pos`, playing order). Older entries have neither. */
-  batch?: number;
-  pos?: number;
-}
-
-/** Waiting entries in download order: the latest request first, within it in playing order. Before
- *  0.3.2 the next one came from the store sorted by title id (on 171 title 41 before title 2). */
-export function downloadOrder(list: OfflineEntry[]): OfflineEntry[] {
-  const batch = (e: OfflineEntry) => e.batch ?? (Date.parse(e.added) || 0);
-  return list
-    .filter((e) => e.status === "queued" || e.status === "missing")
-    .sort((a, b) => batch(b) - batch(a) || (a.pos ?? 0) - (b.pos ?? 0));
 }
 
 const listeners = new Set<() => void>();
@@ -51,14 +38,8 @@ export async function isOffline(key: string): Promise<boolean> {
 }
 
 export async function addOffline(items: Item[]) {
-  const batch = Date.now();
-  for (const [pos, it0] of items.filter((i) => ["track", "episode", "book"].includes(i.kind)).entries()) {
-    const known = await offlineEntry(it0.key);
-    if (known) {
-      // Still waiting from an earlier request: it moves to its place in this one.
-      if (known.status === "queued" || known.status === "missing") await idbPut("offline", known.key, { ...known, batch, pos });
-      continue;
-    }
+  for (const it0 of items.filter((i) => ["track", "episode", "book"].includes(i.kind))) {
+    if (await offlineEntry(it0.key)) continue;
     // Books need their parts; list entries do not carry them.
     let it = it0;
     if (it.kind === "book" && !it.parts) {
@@ -71,7 +52,7 @@ export async function addOffline(items: Item[]) {
     await idbPut("items", it.key, it);
     await idbPut("offline", it.key, {
       key: it.key, title: it.title, subtitle: it.subtitle ?? it.podcast ?? "", status: "queued", progress: 0,
-      source: it.quality ?? null, added: new Date(batch).toISOString(), batch, pos,
+      source: it.quality ?? null, added: new Date().toISOString(),
     } satisfies OfflineEntry);
   }
   notify();
@@ -171,7 +152,7 @@ async function process() {
   try {
     for (;;) {
       if (!online) break;
-      const next = downloadOrder(await offlineList())[0];
+      const next = (await offlineList()).find((e) => e.status === "queued" || e.status === "missing");
       if (!next) break;
       await fetchOne(next);
     }
