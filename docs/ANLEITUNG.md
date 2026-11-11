@@ -15,7 +15,11 @@ Einstellungen.
   App spielt, was offline gespeichert ist, und merkt sich die Positionen. Reißt die Verbindung
   während der Wiedergabe ab, spielt die App an derselben Stelle aus der gespeicherten Kopie weiter;
   ohne Kopie wartet sie an der Stelle und spielt von selbst weiter, sobald der Server wieder
-  antwortet (Pause beendet das Warten). Ab 0.1.9.
+  antwortet (Pause beendet das Warten). Ab 0.1.9. Liefert der Server, aber das Gerät kann nicht
+  abspielen (zum Beispiel ohne Audiogerät), hört die App nach drei Versuchen in Folge (etwa 15
+  Sekunden) auf, bleibt an der Stelle stehen und meldet „Wiedergabe auf diesem Gerät nicht möglich“
+  mit dem Grund; der Eintrag steht auch im Fehlerprotokoll (Einstellungen → Wartung). ▶ versucht es
+  erneut. Ab 0.3.2.
 - **✓ Position** grün: alle Hörstände sind beim Server. Rot mit **✕** erst, wenn eine Position
   länger als 30 Sekunden nicht gespeichert werden konnte; sie wird nachgereicht, sobald der Server
   wieder erreichbar ist.

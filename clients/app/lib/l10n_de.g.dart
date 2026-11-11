@@ -248,6 +248,7 @@ const deStrings = <String, String>{
   "Play": "Abspielen",
   "Play album": "Album abspielen",
   "Playback": "Wiedergabe",
+  "Playback is not possible on this device: {reason}": "Wiedergabe auf diesem Gerät nicht möglich: {reason}",
   "Played on {device} · {ago}": "Spielte auf {device} · {ago}",
   "Playing on {device}": "Spielt auf {device}",
   "Please keep audiojoe open.": "Bitte audiojoe offen lassen.",

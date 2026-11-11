@@ -98,6 +98,13 @@ class _AudiojoeAppState extends State<AudiojoeApp> {
     api.onRejected = _rejected;
     // Below "Keep at least … free" (user: "wartet auf Platz").
     downloads.refused.stream.listen((_) => messenger.currentState?.showSnackBar(SnackBar(content: Text(t('Waiting for space')))));
+    // Playback gave up on this device (proposal A, user 2026-11-11 „215 ja“).
+    player.failure.addListener(() {
+      final m = player.failure.value;
+      if (m == null) return;
+      player.failure.value = null;
+      messenger.currentState?.showSnackBar(SnackBar(content: Text(m)));
+    });
   }
 
   /// The server rejected the token: back to the sign-in page, the server address stays filled in.
