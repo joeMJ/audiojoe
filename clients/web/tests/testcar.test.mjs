@@ -28,7 +28,8 @@ const CASES = [
   { name: "portrait", w: 1080, h: 1920, lang: "en-GB", shown: ["cluster"], presses: "all" },
   { name: "phone", w: 412, h: 860, dpr: 2.6, lang: "de-DE", shown: ["bar"], presses: "all" },
 ];
-const PRESS = { "bar-next": "nexttrack", "bar-prev": "previoustrack", "bar-pause": "pause", "wheel-next": "nexttrack", "wheel-pause": "pause" };
+const PRESS = { "bar-next": "nexttrack", "bar-prev": "previoustrack", "bar-pause": "pause", "bar-seek": "seekto",
+  "wheel-next": "nexttrack", "wheel-prev": "previoustrack", "wheel-pause": "pause" };
 
 const browser = await puppeteer.launch({ executablePath: "/usr/bin/chromium", headless: true,
   args: ["--no-sandbox", "--autoplay-policy=no-user-gesture-required"] });
@@ -40,6 +41,15 @@ try {
     await page.setViewport({ width: c.w, height: c.h, deviceScaleFactor: c.dpr ?? 1 });
     if (c.ua) await page.setUserAgent(c.ua);
     await page.evaluateOnNewDocument((l) => Object.defineProperty(navigator, "language", { get: () => l }), c.lang);
+    // The position the page reports cannot be read back: keep every call.
+    await page.evaluateOnNewDocument(() => {
+      window.__pos = [];
+      const ms = navigator.mediaSession;
+      if (ms?.setPositionState) {
+        const orig = ms.setPositionState.bind(ms);
+        ms.setPositionState = (s) => { window.__pos.push({ ...s, at: performance.now() }); return orig(s); };
+      }
+    });
     const de = c.lang.startsWith("de");
     const overflow = () => page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
     const stepIs = (s, timeout = 20000) => page.waitForFunction((s) => window.__testcar?.step() === s, { timeout, polling: 100 }, s);
@@ -81,7 +91,24 @@ try {
     await page.click("#next");
 
     const bar = c.shown.includes("bar");
-    const steps = [...(bar ? ["bar-next", "bar-prev", "bar-pause"] : []), "wheel-next", "wheel-pause"];
+    // 0.3.4: test titles with length and position for the mini player.
+    const media = () => page.evaluate(() => window.__testcar.media());
+    const m1 = await media();
+    check("Audio-Element hängt im Dokument", m1.inDocument, JSON.stringify(m1));
+    check("Titelangaben „Testtitel 1 von 2“ mit voller Bildadresse",
+      m1.title === (de ? "Testtitel 1 von 2" : "Test title 1 of 2") && /^https?:\/\/.+\/icon-512\.png$/.test(m1.artwork ?? ""), JSON.stringify(m1));
+    await sleep(2500);
+    const pos = await page.evaluate(() => window.__pos.slice(-3));
+    check("Position an den Browser gemeldet: Länge 60 s, Stand läuft",
+      pos.length >= 2 && pos.every((p) => Math.abs(p.duration - 60) < 1) && pos[pos.length - 1].position > pos[0].position,
+      JSON.stringify(pos.map((p) => [Math.round(p.duration), p.position.toFixed(1)])));
+    if (bar) {
+      await stepIs("position");
+      check("Frage nach der Position", (await page.$eval(".ask .big", (e) => e.innerText)) === (de ? "Läuft im Mini-Player die Position mit?" : "Does the position move along in the mini player?"));
+      await shoot("2b-position");
+      await page.click("#pos-yes");
+    }
+    const steps = [...(bar ? ["bar-next", "bar-prev", "bar-pause", "bar-seek"] : []), "wheel-next", "wheel-prev", "wheel-pause"];
     for (const s of steps) {
       if (c.presses === "nowheel" && s.startsWith("wheel")) {
         await stepIs(s);
@@ -91,7 +118,15 @@ try {
       await stepIs(s);
       if (s === "bar-prev") await shoot("3-knopf");
       if (c.presses === "timeout" && s === "wheel-pause") continue; // nothing arrives: 8 s countdown
-      await page.evaluate((a) => window.__testcar.fire(a), PRESS[s]);
+      const before = await media();
+      await page.evaluate((a, d) => window.__testcar.fire(a, d), PRESS[s], s === "bar-seek" ? { action: "seekto", seekTime: 42 } : undefined);
+      // The page moves on 700 ms after a press and starts the sound again for the next step: look before.
+      await sleep(s.endsWith("-pause") ? 200 : 800);
+      const after = await media();
+      if (s.endsWith("-next")) check(`${s}: Titel wechselt`, after.src !== before.src && after.title !== before.title, `${before.title} → ${after.title}`);
+      if (s.endsWith("-prev")) check(`${s}: Titel wechselt zurück`, after.src !== before.src, `${before.src} → ${after.src}`);
+      if (s.endsWith("-pause")) check(`${s}: Pause wirkt`, after.paused && after.state === "paused", JSON.stringify(after));
+      if (s === "bar-seek") check("Schieber springt auf 42 s", Math.abs(after.time - 42) < 2, String(after.time));
     }
     await stepIs("bg", 15000);
     check("keine waagrechte Scrollleiste (Hintergrund)", (await overflow()) <= 0);
@@ -105,12 +140,13 @@ try {
     const res = Object.fromEntries(r.steps);
     check("Tipp-Schritte nur mit Musikleiste", ("bar-next" in res) === bar, Object.keys(res).join(","));
     if (bar) check("Musikleiste: weiter, zurück, Pause angekommen",
-      res["bar-next"] === "nexttrack" && res["bar-prev"] === "previoustrack" && res["bar-pause"].startsWith("pause"), JSON.stringify(res));
-    if (c.presses === "all") check("Lenkrad angekommen", res["wheel-next"] === "nexttrack" && res["wheel-pause"].startsWith("pause"), JSON.stringify(res));
+      res["bar-next"] === "nexttrack" && res["bar-prev"] === "previoustrack" && res["bar-pause"].startsWith("pause") && res["bar-seek"] === "seekto", JSON.stringify(res));
+    if (c.presses === "all") check("Lenkrad angekommen", res["wheel-next"] === "nexttrack" && res["wheel-prev"] === "previoustrack" && res["wheel-pause"].startsWith("pause"), JSON.stringify(res));
     if (c.presses === "timeout") check("Lenkrad Pause ohne Druck: nicht angekommen", res["wheel-pause"] === "-", res["wheel-pause"]);
-    if (c.presses === "nowheel") check("keine Lenkradtasten", res["wheel-next"] === "none" && res["wheel-pause"] === "none", JSON.stringify(res));
+    if (c.presses === "nowheel") check("keine Lenkradtasten", res["wheel-next"] === "none" && res["wheel-prev"] === "none" && res["wheel-pause"] === "none", JSON.stringify(res));
     check("Hintergrund gemessen", /^away \d+s played \d+s (playing|paused) acts /.test(r.bg), r.bg);
     if (c.presses !== "nowheel") check("Lenkrad im Hintergrund angekommen", r.bg.includes("nexttrack"), r.bg);
+    check("Position beantwortet", r.position === (bar ? "yes" : ""), r.position);
     check("Anzeige gespeichert", JSON.stringify(r.shown) === JSON.stringify(["bar", "cluster", "hud", "none"].filter((x) => c.shown.includes(x))), r.shown.join(","));
 
     // QR code: fully on screen after scrolling to it, and it reads back as the same mail.
@@ -147,7 +183,8 @@ try {
     check("höchste Stufe höchstens mit der Ausgaberate, höhere als „umgerechnet“",
       rate > 0 && hz(maxK) <= rate && JSON.stringify(listed) === JSON.stringify(above) && (above.length ? shownDown === `${above.join(", ")} kHz` : !shownDown),
       `audio ${rate} Hz, pcm ${pcm}, shown ${shownDown || "–"}`);
-    check("Mail enthält Ergebnis der Knöpfe", body.includes("wheel-next: "));
+    check("Mail enthält Ergebnis der Knöpfe", body.includes("wheel-next: ") && body.includes("wheel-prev: "));
+    check("Mail enthält die Position nur mit Musikleiste", body.includes("\nposition: yes") === bar, body.match(/\nposition: [^\n]*/)?.[0] ?? "–");
     const shown = await page.$eval("#mailtext", (p) => p.textContent);
     check("„Mailtext anzeigen“ mit ungekürztem Protokoll", /\nlog: /.test(shown) && !shown.includes("(cut)") && shown.split("\nlog:")[1].length >= (body.split("\nlog:")[1] ?? "").length,
       shown.split("\n").pop().slice(0, 80));

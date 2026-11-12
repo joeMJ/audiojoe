@@ -1092,9 +1092,6 @@ msgstr "Die Seite erkennt das Verkleinern und Zurückkommen selbst."
 msgid "Vehicle"
 msgstr "Fahrzeug"
 
-msgid "Where do you see “audiojoe Test” now?"
-msgstr "Wo siehst du jetzt „audiojoe Test“?"
-
 msgid "Year"
 msgstr "Baujahr"
 
@@ -1130,9 +1127,6 @@ msgstr "keine Tasten"
 
 msgid "not arrived"
 msgstr "nicht angekommen"
-
-msgid "on the centre screen, where “audiojoe Test” is shown – not here in the browser"
-msgstr "auf dem Mittelbildschirm, wo „audiojoe Test“ steht – nicht hier im Browser"
 
 msgid "only here in the browser"
 msgstr "nur hier im Browser"
@@ -1610,3 +1604,52 @@ msgstr "Während Musik bit-perfect läuft, sind Systemtöne wie Tastentöne stum
 # 0.3.3: zweiter Satz unter „Bit-perfect über USB“ (Nutzer 2026-11-12 „259 ja“)
 msgid "Check whether you need it: bit-perfect only brings an advantage if your music has a higher resolution than 24 bit / 48 kHz."
 msgstr "Prüfe, ob du das brauchst: Einen Vorteil bringt Bit-perfect nur, wenn deine Musik höher aufgelöst ist als 24 Bit / 48 kHz."
+
+# 0.3.4: Autotest mit Testtiteln, Position und neuen Schritten (Nutzer 2026-11-12 „269 ja“)
+msgid "Test title 1 of 2"
+msgstr "Testtitel 1 von 2"
+
+msgid "Test title 2 of 2"
+msgstr "Testtitel 2 von 2"
+
+msgid "Where do you see “Test title 1 of 2” now?"
+msgstr "Wo siehst du jetzt „Testtitel 1 von 2“?"
+
+msgid "on the centre screen, where “Test title” is shown – not here in the browser"
+msgstr "auf dem Mittelbildschirm, wo „Testtitel“ steht – nicht hier im Browser"
+
+msgid "Does the position move along in the mini player?"
+msgstr "Läuft im Mini-Player die Position mit?"
+
+msgid "Yes"
+msgstr "Ja"
+
+msgid "No"
+msgstr "Nein"
+
+msgid "yes"
+msgstr "ja"
+
+msgid "no"
+msgstr "nein"
+
+msgid "Music bar: slider"
+msgstr "Musikleiste: Schieber"
+
+msgid "Move the slider in the mini player"
+msgstr "Im Mini-Player den Schieber verschieben"
+
+msgid "anywhere, the page notices the jump"
+msgstr "irgendwohin, die Seite merkt den Sprung"
+
+msgid "Steering wheel: back"
+msgstr "Lenkrad: zurück"
+
+msgid "Press “back” on the steering wheel"
+msgstr "Am Lenkrad „zurück“ drücken"
+
+msgid "the button for the previous track"
+msgstr "die Taste für den vorigen Titel"
+
+msgid "Position in the mini player"
+msgstr "Position im Mini-Player"

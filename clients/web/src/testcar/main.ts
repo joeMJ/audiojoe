@@ -57,6 +57,7 @@ const result = {
   formats: [] as string[],
   cache: "",
   shown: [] as string[],
+  position: "",
   steps: [] as [string, string][],
   bg: "",
   unsupported: [] as string[],
@@ -256,49 +257,98 @@ async function cacheTest(): Promise<string> {
 
 // ---------------------------------------------------------------- media session
 
-const loop = new Audio("/testcar/loop.mp3");
-loop.loop = true;
-loop.volume = 0.6;
+// 0.3.4 (user 2026-11-12 „267 ja“): two titles of 60 s with length and position, so the car's mini
+// player can show where it is; title, artwork (full address) and all handlers are set again with
+// every title; the element hangs in the document (as tesla-plex-player does); every press acts for
+// real (next/previous change the title, the slider jumps, pause stops).
+const PIECES = [t("Test title 1 of 2"), t("Test title 2 of 2")];
+let piece = 0;
+const music = h("audio", { src: "/testcar/piece1.mp3", preload: "auto" });
+music.volume = 0.6;
+document.body.append(music);
 const ACTIONS: MediaSessionAction[] = ["play", "pause", "stop", "previoustrack", "nexttrack", "seekbackward", "seekforward", "seekto"];
-const handlers: Record<string, () => void> = {};
+const handlers: Record<string, (d?: MediaSessionActionDetails) => void> = {};
 let hiddenPlayed = 0;
 let lastTime = 0;
-loop.addEventListener("timeupdate", () => {
-  const d = loop.currentTime - lastTime;
-  lastTime = loop.currentTime;
+music.addEventListener("timeupdate", () => {
+  const d = music.currentTime - lastTime;
+  lastTime = music.currentTime;
   if (document.hidden && d > 0 && d < 5) hiddenPlayed += d;
 });
-loop.addEventListener("pause", () => record("el:pause"));
-loop.addEventListener("play", () => record("el:play"));
+music.addEventListener("pause", () => record("el:pause"));
+music.addEventListener("play", () => record("el:play"));
+music.addEventListener("ended", () => { load(piece + 1); void music.play().catch(() => undefined); });
 document.addEventListener("visibilitychange", () => record(document.hidden ? "vis:hidden" : "vis:visible"));
 addEventListener("keydown", (e: KeyboardEvent) => { if (/^(Media|AudioVolume)/.test(e.key)) record(`key:${e.key}`); });
 
-function startLoop() {
-  if ("mediaSession" in navigator) {
-    navigator.mediaSession.metadata = new MediaMetadata({
-      title: "audiojoe Test", artist: "audiojoe", album: t("Car test"),
-      artwork: [{ src: "/icon-512.png", sizes: "512x512", type: "image/png" }],
-    });
-    for (const a of ACTIONS) {
-      const fn = () => {
-        record(a);
-        if (a === "pause" || a === "stop") loop.pause();
-        if (a === "play") void loop.play();
-        navigator.mediaSession.playbackState = loop.paused ? "paused" : "playing";
-      };
-      handlers[a] = fn;
-      try {
-        navigator.mediaSession.setActionHandler(a, fn);
-      } catch {
-        result.unsupported.push(a);
-      }
+/** Playing or paused, and length and position (about once a second). */
+let lastSecond = -1;
+function state() {
+  if (!("mediaSession" in navigator)) return;
+  const ms = navigator.mediaSession;
+  ms.playbackState = music.paused ? "paused" : "playing";
+  const d = music.duration;
+  if (!Number.isFinite(d) || d <= 0) return;
+  try {
+    ms.setPositionState({ duration: d, position: Math.min(Math.max(music.currentTime, 0), d), playbackRate: music.playbackRate || 1 });
+  } catch { /* not supported */ }
+}
+for (const ev of ["play", "pause", "durationchange", "seeked", "ratechange"]) music.addEventListener(ev, state);
+music.addEventListener("timeupdate", () => {
+  const s = Math.floor(music.currentTime);
+  if (s !== lastSecond) { lastSecond = s; state(); }
+});
+
+/** Title, artwork and every handler, again with each title (some Chromium builds show next and
+ *  previous only for handlers set together with current metadata). */
+function announce() {
+  if (!("mediaSession" in navigator)) return;
+  const ms = navigator.mediaSession;
+  ms.metadata = new MediaMetadata({
+    title: PIECES[piece], artist: "audiojoe", album: t("Car test"),
+    artwork: [{ src: new URL("/icon-512.png", location.href).href, sizes: "512x512", type: "image/png" }],
+  });
+  for (const a of ACTIONS) {
+    try {
+      ms.setActionHandler(a, handlers[a]);
+    } catch {
+      if (!result.unsupported.includes(a)) result.unsupported.push(a);
     }
   }
+  state();
+}
+
+function load(n: number) {
+  piece = (n + PIECES.length) % PIECES.length;
+  music.src = `/testcar/piece${piece + 1}.mp3`;
+  lastSecond = -1;
+  announce();
+}
+
+function seekTo(sec: number) {
+  const d = Number.isFinite(music.duration) ? music.duration : 60;
+  music.currentTime = Math.min(Math.max(sec, 0), Math.max(d - 0.5, 0));
+}
+
+const ACT: Record<string, (d?: MediaSessionActionDetails) => void> = {
+  play: () => void music.play().catch(() => undefined),
+  pause: () => music.pause(),
+  stop: () => music.pause(),
+  nexttrack: () => { load(piece + 1); void music.play().catch(() => undefined); },
+  previoustrack: () => { load(piece - 1); void music.play().catch(() => undefined); },
+  seekbackward: (d) => seekTo(music.currentTime - (d?.seekOffset ?? 10)),
+  seekforward: (d) => seekTo(music.currentTime + (d?.seekOffset ?? 10)),
+  seekto: (d) => seekTo(d?.seekTime ?? music.currentTime),
+};
+for (const a of ACTIONS) handlers[a] = (d) => { record(a); ACT[a](d); state(); };
+
+function startMusic() {
+  announce();
   return resume();
 }
 async function resume() {
-  if (loop.paused) await loop.play().catch(() => undefined);
-  if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "playing";
+  if (music.paused) await music.play().catch(() => undefined);
+  state();
 }
 
 // ---------------------------------------------------------------- screens
@@ -368,7 +418,7 @@ async function formatsScreen() {
   step = "cache";
   result.cache = await cacheTest();
   chips.append(h("span", { className: result.cache.startsWith("+") ? "chip ok" : "chip bad" }, `${t("Cache")} ${result.cache.startsWith("+") ? "✓" : "✗"}`));
-  await startLoop();
+  await startMusic();
   return chips;
 }
 
@@ -399,20 +449,35 @@ async function shownScreen(chips: HTMLElement) {
   };
   draw();
   app.replaceChildren(chips,
-    h("div", { className: "ask" }, h("div", {}, h("div", { className: "big" }, t("Where do you see “audiojoe Test” now?")),
+    h("div", { className: "ask" }, h("div", {}, h("div", { className: "big" }, t("Where do you see “Test title 1 of 2” now?")),
       h("div", {}, t("Tap everything that applies – outside this browser")))),
     opts,
     h("div", { className: "actions" }, next, tesla ? h("span", { className: "small" }, t("“Music bar” is preselected in a Tesla.")) : null));
   await new Promise<void>((r) => (next.onclick = () => r()));
   result.shown = SHOWN.map(([id]) => id).filter((id) => sel.has(id));
+  if (result.shown.includes("bar")) await positionScreen();
+}
+
+/** Only with the music bar (user 2026-11-12 „269 ja“): does the mini player show the position moving? */
+async function positionScreen() {
+  step = "position";
+  await resume();
+  const yes = h("button", { textContent: t("Yes"), id: "pos-yes" });
+  const no = h("button", { className: "sec", textContent: t("No"), id: "pos-no" });
+  app.replaceChildren(
+    h("div", { className: "ask" }, h("div", {}, h("div", { className: "big" }, t("Does the position move along in the mini player?")))),
+    h("div", { className: "actions" }, yes, no));
+  result.position = await new Promise<string>((r) => { yes.onclick = () => r("yes"); no.onclick = () => r("no"); });
 }
 
 type Prompt = { id: string; label: string; big: string; sub: string; wheel: boolean };
 const PROMPTS: Prompt[] = [
-  { id: "bar-next", label: t("Music bar {next}"), big: t("Tap {next} in the music bar"), sub: t("on the centre screen, where “audiojoe Test” is shown – not here in the browser"), wheel: false },
-  { id: "bar-prev", label: t("Music bar {prev}"), big: t("Tap {prev} in the music bar"), sub: t("on the centre screen, where “audiojoe Test” is shown – not here in the browser"), wheel: false },
-  { id: "bar-pause", label: t("Music bar {pause} / {stop}"), big: t("Tap {pause} or {stop} in the music bar"), sub: t("on the centre screen, where “audiojoe Test” is shown – not here in the browser"), wheel: false },
+  { id: "bar-next", label: t("Music bar {next}"), big: t("Tap {next} in the music bar"), sub: t("on the centre screen, where “Test title” is shown – not here in the browser"), wheel: false },
+  { id: "bar-prev", label: t("Music bar {prev}"), big: t("Tap {prev} in the music bar"), sub: t("on the centre screen, where “Test title” is shown – not here in the browser"), wheel: false },
+  { id: "bar-pause", label: t("Music bar {pause} / {stop}"), big: t("Tap {pause} or {stop} in the music bar"), sub: t("on the centre screen, where “Test title” is shown – not here in the browser"), wheel: false },
+  { id: "bar-seek", label: t("Music bar: slider"), big: t("Move the slider in the mini player"), sub: t("anywhere, the page notices the jump"), wheel: false },
   { id: "wheel-next", label: t("Steering wheel: next"), big: t("Press “next” on the steering wheel"), sub: t("the button for the next track"), wheel: true },
+  { id: "wheel-prev", label: t("Steering wheel: back"), big: t("Press “back” on the steering wheel"), sub: t("the button for the previous track"), wheel: true },
   { id: "wheel-pause", label: t("Steering wheel: pause"), big: t("Press pause on the steering wheel"), sub: t("or play/pause; in some cars pressing the volume roller"), wheel: true },
 ];
 const WAIT_S = 8;
@@ -489,19 +554,19 @@ async function backgroundScreen() {
   let hiddenAt = 0;
   const r = await new Promise<string>((resolve) => {
     const onVis = () => {
-      if (document.hidden) { hiddenAt = performance.now(); hiddenPlayed = 0; lastTime = loop.currentTime; return; }
+      if (document.hidden) { hiddenAt = performance.now(); hiddenPlayed = 0; lastTime = music.currentTime; return; }
       if (!hiddenAt) return;
       document.removeEventListener("visibilitychange", onVis);
       const away = Math.round((performance.now() - hiddenAt) / 1000);
       const acts = log.slice(from).filter((e) => !e.a.startsWith("vis:")).map((e) => e.a);
-      resolve(`away ${away}s played ${Math.round(hiddenPlayed)}s ${loop.paused ? "paused" : "playing"} acts ${acts.join(",") || "-"}`);
+      resolve(`away ${away}s played ${Math.round(hiddenPlayed)}s ${music.paused ? "paused" : "playing"} acts ${acts.join(",") || "-"}`);
     };
     document.addEventListener("visibilitychange", onVis);
     skip.onclick = later.onclick = () => { document.removeEventListener("visibilitychange", onVis); resolve("-skip"); };
   });
   clearTimeout(later20);
   result.bg = r;
-  loop.pause();
+  music.pause();
   if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "none";
 }
 
@@ -517,7 +582,7 @@ function mailText(): { subject: string; body: string; full: string } {
   const ev = log.filter((e) => !e.a.startsWith("el:") && !prompted.has(e.step))
     .map((e) => `${e.a.replace(/^vis:/, "v:")}@${(e.t / 1000).toFixed(1)}`);
   const lines = (ua: string) => [
-    `audiojoe testcar 1${result.server ? ` server ${result.server}` : ""}`,
+    `audiojoe testcar 2${result.server ? ` server ${result.server}` : ""}`,
     `car: ${v.make} / ${v.model} / ${v.year}`,
     `when: ${d.toISOString().slice(0, 16)}Z, ${Math.round(now() / 1000)}s`,
     `ua: ${ua}`,
@@ -530,6 +595,7 @@ function mailText(): { subject: string; body: string; full: string } {
     `pcm: ${mailStages()}`,
     `cache: ${result.cache}`,
     `shown: ${result.shown.join(",")}`,
+    result.position ? `position: ${result.position}` : "",
     ...result.steps.map(([id, r]) => `${id}: ${r}`),
     `bg: ${result.bg}`,
     result.unsupported.length ? `unsupported: ${result.unsupported.join(",")}` : "",
@@ -627,6 +693,8 @@ function endScreen() {
     ...(downKhz.length ? [h("span", {}, t("Resampled")), h("span", { className: "warn", id: "resampled" }, `${downKhz.join(", ")} kHz`)] : []),
     h("span", {}, t("Cache")), h("span", { className: result.cache.startsWith("+") ? "ok" : "bad" }, result.cache.startsWith("+") ? "✓" : "✗"),
     h("span", {}, t("Music shown")), h("span", {}, shownLabel),
+    ...(result.position ? [h("span", {}, t("Position in the mini player")),
+      h("span", { className: result.position === "yes" ? "ok" : "bad", id: "position" }, result.position === "yes" ? t("yes") : t("no"))] : []),
     ...(bar.length ? [h("span", {}, t("Music bar")), count(bar)] : []),
     h("span", {}, t("Steering wheel")), count(wheel),
     h("span", {}, t("Background")), h("span", { className: result.bg.startsWith("-") ? "" : result.bg.includes("playing") ? "ok" : "bad" },
@@ -662,12 +730,15 @@ if (AUTO) {
   Object.defineProperty(document, "hidden", { configurable: true, get: () => fakeHidden });
   (window as unknown as Record<string, unknown>).__testcar = {
     // Like a press in the car: through the registered handler, else as a raw event (keys).
-    fire: (a: string) => (handlers[a] ? handlers[a]() : record(a)),
+    fire: (a: string, d?: MediaSessionActionDetails) => (handlers[a] ? handlers[a](d) : record(a)),
     hide: () => { fakeHidden = true; document.dispatchEvent(new Event("visibilitychange")); },
     show: () => { fakeHidden = false; document.dispatchEvent(new Event("visibilitychange")); },
     step: () => step,
     result,
     log,
     done,
+    media: () => ({ src: music.getAttribute("src"), inDocument: music.isConnected, paused: music.paused, time: music.currentTime,
+      title: navigator.mediaSession?.metadata?.title, artwork: navigator.mediaSession?.metadata?.artwork?.[0]?.src,
+      state: navigator.mediaSession?.playbackState }),
   };
 }
