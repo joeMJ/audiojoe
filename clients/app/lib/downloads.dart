@@ -221,6 +221,10 @@ class Downloads extends ChangeNotifier {
     }
     final root = storage.dir.path;
     final albums = <String, ({String? title, String? subtitle, int? count})>{};
+    // Downloads start oldest first; one millisecond apart keeps the order of `items` (with the same
+    // time it was left to chance, 0.3.3).
+    final base = DateTime.now().millisecondsSinceEpoch;
+    var n = 0;
     for (var it in items.where((i) => const ['track', 'episode', 'book'].contains(i.kind))) {
       if (entry(it.key) != null) continue;
       if (it.kind == 'book' && it.parts.isEmpty) {
@@ -234,7 +238,7 @@ class Downloads extends ChangeNotifier {
           ? albums[it.album!] ??= await _albumInfo(it.album!, album, items.where((x) => x.album == it.album).length)
           : null;
       Stores.items.put(it.key, it.toJson());
-      _save(OfflineEntry(it.key, it.title, it.subtitle, DateTime.now().toUtc().toIso8601String(),
+      _save(OfflineEntry(it.key, it.title, it.subtitle, DateTime.fromMillisecondsSinceEpoch(base + n++, isUtc: true).toIso8601String(),
           quality: it.quality,
           kind: it.kind,
           dir: '$root${Platform.pathSeparator}${subDirs[it.kind]}',

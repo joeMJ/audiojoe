@@ -38,6 +38,10 @@ export async function isOffline(key: string): Promise<boolean> {
 }
 
 export async function addOffline(items: Item[]) {
+  // Downloads go oldest first; one millisecond apart keeps the order of `items` (0.3.3: before, the
+  // store's key order decided, i.e. the title ids).
+  const base = Date.now();
+  let n = 0;
   for (const it0 of items.filter((i) => ["track", "episode", "book"].includes(i.kind))) {
     if (await offlineEntry(it0.key)) continue;
     // Books need their parts; list entries do not carry them.
@@ -52,7 +56,7 @@ export async function addOffline(items: Item[]) {
     await idbPut("items", it.key, it);
     await idbPut("offline", it.key, {
       key: it.key, title: it.title, subtitle: it.subtitle ?? it.podcast ?? "", status: "queued", progress: 0,
-      source: it.quality ?? null, added: new Date().toISOString(),
+      source: it.quality ?? null, added: new Date(base + n++).toISOString(),
     } satisfies OfflineEntry);
   }
   notify();
@@ -152,7 +156,9 @@ async function process() {
   try {
     for (;;) {
       if (!online) break;
-      const next = (await offlineList()).find((e) => e.status === "queued" || e.status === "missing");
+      const next = (await offlineList())
+        .filter((e) => e.status === "queued" || e.status === "missing")
+        .sort((a, b) => (a.added < b.added ? -1 : a.added > b.added ? 1 : 0))[0];
       if (!next) break;
       await fetchOne(next);
     }

@@ -62,6 +62,7 @@ const deStrings = <String, String>{
   "Chapter {c}": "Kapitel {c}",
   "Chapters": "Kapitel",
   "Check for updates": "Nach Updates suchen",
+  "Check whether you need it: bit-perfect only brings an advantage if your music has a higher resolution than 24 bit / 48 kHz.": "Prüfe, ob du das brauchst: Einen Vorteil bringt Bit-perfect nur, wenn deine Musik höher aufgelöst ist als 24 Bit / 48 kHz.",
   "Checking …": "Sucht …",
   "Checks whether audiojoe plays in this car and can be controlled from the car's music display and the steering wheel. At the end the page shows a QR code – take a photo of it and a mail with the results opens.": "Prüft, ob audiojoe in diesem Auto spielt und sich über die Musikanzeige des Autos und das Lenkrad steuern lässt. Am Ende zeigt die Seite einen QR-Code – abfotografieren, die Mail öffnet sich mit den Ergebnissen.",
   "Checksum wrong (expected {expected}, got {actual})": "Prüfsumme falsch (erwartet {expected}, erhalten {actual})",

@@ -7,6 +7,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:audiojoe/api.dart';
+import 'package:audiojoe/cache.dart';
 import 'package:audiojoe/downloads.dart';
 import 'package:audiojoe/models.dart';
 import 'package:audiojoe/storage.dart';
@@ -133,6 +134,33 @@ void main() {
     await settle(() => server.open.contains('jellyfin:1:t3'));
     expect(server.open, {'jellyfin:1:t2', 'jellyfin:1:t3'});
     expect(server.most, 2);
+  });
+
+  test('0.3.3: downloads go in the order asked for (cache pill: title playing first)', () async {
+    // Playing 3 of 5: the pill asks for 3, 4, 5, 1, 2 (cacheOrder); the downloads start in that order.
+    final album = [for (var n = 1; n <= 5; n++) track(n, album: 'jellyfin:1:a')];
+    final asked = cacheOrder(album, album[2]);
+    expect(asked.map((x) => x.title), ['T3', 'T4', 'T5', 'T1', 'T2']);
+    await downloads.add(asked);
+    final started = <String>[];
+    void note() => [for (final k in server.open) if (!started.contains(k)) k].forEach(started.add);
+    await settle(() => server.open.length == 2);
+    note();
+    for (final k in ['jellyfin:1:t3', 'jellyfin:1:t4', 'jellyfin:1:t5', 'jellyfin:1:t1']) {
+      server.gate(k).complete();
+      await settle(() => !server.open.contains(k) && (server.open.length == 2 || started.length + server.open.length >= 5));
+      note();
+    }
+    expect(started, ['jellyfin:1:t3', 'jellyfin:1:t4', 'jellyfin:1:t5', 'jellyfin:1:t1', 'jellyfin:1:t2']);
+  });
+
+  test('cacheOrder: playing 6 of 42 → 6 … 42, 1 … 5; first title or unknown title: unchanged', () {
+    final album = [for (var n = 1; n <= 42; n++) track(n)];
+    expect(cacheOrder(album, album[5]).map((x) => x.title).toList(),
+        [for (var n = 6; n <= 42; n++) 'T$n', for (var n = 1; n <= 5; n++) 'T$n']);
+    expect(cacheOrder(album, album[0]), album);
+    expect(cacheOrder(album, track(99)), album);
+    expect(cacheOrder(album, null), album);
   });
 
   test('a body that breaks off never gets the final name; the retry completes it', () async {

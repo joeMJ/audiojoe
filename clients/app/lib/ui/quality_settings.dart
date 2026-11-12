@@ -187,7 +187,11 @@ class _QualitySettingsState extends State<QualitySettings> {
       key: const ValueKey('bit-perfect'),
       contentPadding: EdgeInsets.zero,
       title: Text(t('Bit-perfect over USB')),
-      subtitle: Text(ok ? t('Music goes unchanged to the USB DAC. Podcasts and audiobooks keep the normal path.') : hint),
+      // Second sentence: user 2026-11-12 „259 ja“ (0.3.3).
+      subtitle: Text(ok
+          ? '${t('Music goes unchanged to the USB DAC. Podcasts and audiobooks keep the normal path.')} '
+              '${t('Check whether you need it: bit-perfect only brings an advantage if your music has a higher resolution than 24 bit / 48 kHz.')}'
+          : hint),
       value: qualityPrefs.bitPerfect,
       onChanged: !ok
           ? null

@@ -1606,3 +1606,7 @@ msgstr "Medienlautstärke auf 20 % gestellt. Bei einem USB-DAC ohne vom Telefon 
 # 0.3.2: Hinweis zu Systemtönen unten auf der roten Seite (Android, Nutzer 2026-11-12 „256 ja“; Wortlaut wie bisher, „172 ja“)
 msgid "While music plays bit-perfect, system sounds such as touch tones are muted, and a notification sound mutes the music while it plays. Ringtone and alarm still sound."
 msgstr "Während Musik bit-perfect läuft, sind Systemtöne wie Tastentöne stumm, und ein Benachrichtigungston schaltet die Musik stumm, solange er klingt. Klingelton und Wecker sind weiter zu hören."
+
+# 0.3.3: zweiter Satz unter „Bit-perfect über USB“ (Nutzer 2026-11-12 „259 ja“)
+msgid "Check whether you need it: bit-perfect only brings an advantage if your music has a higher resolution than 24 bit / 48 kHz."
+msgstr "Prüfe, ob du das brauchst: Einen Vorteil bringt Bit-perfect nur, wenn deine Musik höher aufgelöst ist als 24 Bit / 48 kHz."

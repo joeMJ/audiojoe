@@ -44,6 +44,14 @@ Future<List<Item>> cacheScope(Item? item, List<Item> queue,
   }
 }
 
+/// Order of a tap on the pill (user 2026-11-12 „260 … wäre dies optimal, ja“): the title playing
+/// first, then the following ones to the end of the album or book, the ones before it last
+/// (playing 6 of 42 → 6, 7 … 42, 1 … 5). Unchanged when the title is not in `items`.
+List<Item> cacheOrder(List<Item> items, Item? playing) {
+  final i = playing == null ? -1 : items.indexWhere((x) => x.key == playing.key);
+  return i <= 0 ? items : [...items.sublist(i), ...items.sublist(0, i)];
+}
+
 /// Saved share in per cent by playing time; a title without a known length counts as an average
 /// one. 100 only when everything is there (as in the car).
 int savedPercent(List<Item> items, OfflineEntry? Function(String key) entryOf) {

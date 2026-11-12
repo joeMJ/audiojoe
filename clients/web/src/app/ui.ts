@@ -293,10 +293,12 @@ export async function renderCache() {
   cachePill.textContent = look.text;
 }
 
-/** Tap on the pill: the rest of what plays next is saved offline. */
+/** Tap on the pill: the rest of what plays next is saved offline, the title playing first, then the
+ *  following ones to the end, the ones before it last (user 2026-11-12 „260“: 6 of 42 → 6, 7 … 42, 1 … 5). */
 async function cacheRest() {
   const items = await cacheScope();
-  if (items.length) await addOffline(items);
+  const i = items.findIndex((x) => x.key === player.state.item?.key);
+  if (items.length) await addOffline(i <= 0 ? items : [...items.slice(i), ...items.slice(0, i)]);
 }
 
 /** Moon button below the top bar, top right over the content: dark mode on (filled, accent)

@@ -108,7 +108,7 @@ class _CachePillState extends State<CachePill> {
                   bg: full ? k.okBg : k.warnBg,
                   minWidth: 104,
                   tip: full ? null : t('Save offline'),
-                  onTap: full ? null : () => unawaited(downloads.add(items)));
+                  onTap: full ? null : () => unawaited(downloads.add(cacheOrder(items, it))));
             },
           );
         },

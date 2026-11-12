@@ -124,7 +124,9 @@ void main() {
     expect(find.text('Scarlett Solo 4th Gen'), findsOneWidget);
     expect(find.text('24 bit · 44.1–192 kHz'), findsOneWidget);
     expect(find.text('Offered'), findsOneWidget);
-    expect(find.text('Music goes unchanged to the USB DAC. Podcasts and audiobooks keep the normal path.'), findsOneWidget);
+    expect(find.textContaining('Music goes unchanged to the USB DAC. Podcasts and audiobooks keep the normal path. '),
+        findsOneWidget);
+    expect(find.textContaining('higher resolution than 24 bit / 48 kHz'), findsOneWidget);
     expect(find.text('Lower volume before bit-perfect playback'), findsNothing);
     await tester.tap(find.byKey(const ValueKey('bit-perfect')));
     await tester.pumpAndSettle();
