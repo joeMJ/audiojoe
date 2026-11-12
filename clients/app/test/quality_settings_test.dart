@@ -128,9 +128,12 @@ void main() {
     expect(find.text('Lower volume before bit-perfect playback'), findsNothing);
     await tester.tap(find.byKey(const ValueKey('bit-perfect')));
     await tester.pumpAndSettle();
-    expect(find.textContaining('USB DACs usually have no volume limit'), findsOneWidget);
-    expect(find.text('While music plays bit-perfect, other programs cannot use this device.'), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
+    // 0.3.2: the full-screen red warning (bit_perfect_warning_test.dart has the details).
+    expect(find.text('Danger to hearing and headphones'), findsOneWidget);
+    expect(find.text('Full volume can start immediately or with the next music title.'), findsOneWidget);
+    expect(find.text('While audiojoe plays this way, other programs cannot use the DAC.'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const ValueKey('bit-perfect-cancel')));
+    await tester.tap(find.byKey(const ValueKey('bit-perfect-cancel')));
     await tester.pumpAndSettle();
     expect(qualityPrefs.bitPerfect, isFalse);
   });

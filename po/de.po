@@ -1524,9 +1524,6 @@ msgstr "Musik geht unverändert an den USB-DAC. Podcasts und Hörbücher bleiben
 msgid "Needs Android 14 and a USB DAC for which the device offers bit-perfect."
 msgstr "Braucht Android 14 und einen USB-DAC, für den das Gerät bit-perfect anbietet."
 
-msgid "Android no longer lowers the signal. Loudness depends on the USB DAC alone. Start low."
-msgstr "Android senkt das Signal nicht mehr ab. Die Lautstärke hängt allein am USB-DAC. Leise beginnen."
-
 msgid "Switch on"
 msgstr "Einschalten"
 
@@ -1535,9 +1532,6 @@ msgstr "Vor Bit-perfect-Wiedergabe leiser stellen"
 
 msgid "Sets the media volume to 20 % before the first title after connecting."
 msgstr "Stellt die Medienlautstärke vor dem ersten Titel nach dem Anstecken auf 20 %."
-
-msgid "Volume lowered to 20 % for bit-perfect playback."
-msgstr "Lautstärke für Bit-perfect-Wiedergabe auf 20 % gesenkt."
 
 msgid "Risk of hearing damage"
 msgstr "Gefahr für das Gehör"
@@ -1551,20 +1545,11 @@ msgstr "Absenkung behalten"
 msgid "Turn off anyway"
 msgstr "Trotzdem ausschalten"
 
-msgid "While music plays bit-perfect, system sounds such as touch tones are muted, and a notification sound mutes the music while it plays. Ringtone and alarm still sound."
-msgstr "Während Musik bit-perfect läuft, sind Systemtöne wie Tastentöne stumm, und ein Benachrichtigungston schaltet die Musik stumm, solange er klingt. Klingelton und Wecker sind weiter zu hören."
-
-msgid "USB DACs usually have no volume limit like the one prescribed in the EU for music players and phones. With bit-perfect playback their full level reaches your headphones. Use with care."
-msgstr "USB-DACs haben in der Regel keine Lautstärkebegrenzung, wie sie in der EU für Musikplayer und Telefone vorgeschrieben ist. Bei Bit-perfect-Wiedergabe kommt ihr voller Pegel am Kopfhörer an. Mit Vorsicht verwenden."
-
 msgid "System mixer"
 msgstr "System-Mixer"
 
 msgid "Needs a USB DAC."
 msgstr "Braucht einen USB-DAC."
-
-msgid "While music plays bit-perfect, other programs cannot use this device."
-msgstr "Solange Musik bit-perfect läuft, können andere Programme dieses Gerät nicht nutzen."
 
 msgid "Battery optimization is on for audiojoe. Android may stop playback in the background. Set battery usage to Unrestricted."
 msgstr "Für audiojoe ist die Akku-Optimierung an. Android kann die Wiedergabe im Hintergrund beenden. Akkunutzung auf „Uneingeschränkt“ stellen."
@@ -1577,3 +1562,47 @@ msgstr "Startlautstärke"
 
 msgid "Hide switched-off speakers"
 msgstr "Ausgeschaltete Lautsprecher ausblenden"
+
+# 0.3.2: rote Warnung vor Bit-perfect (Nutzer 2026-11-12 „246 ja“, „251 ja“) und Meldung zur Absenkung („247 ja“)
+msgid "Danger to hearing and headphones"
+msgstr "Gefahr für Gehör und Kopfhörer"
+
+msgid "With bit-perfect, music goes to the USB DAC without the volume control of the phone."
+msgstr "Mit Bit-perfect geht die Musik ohne Lautstärkeregelung des Telefons an den USB-DAC."
+
+msgid "If the DAC has no volume control that the phone can operate, music always plays at the full volume of the DAC. The volume buttons of the phone and the lowering to 20 % then have no effect."
+msgstr "Hat der DAC keine Lautstärkeregelung, die das Telefon bedienen kann, spielt die Musik immer mit seiner vollen Lautstärke. Die Lautstärketasten des Telefons und die Absenkung auf 20 % wirken dann nicht."
+
+msgid "The change takes effect from the next music title. The current title can be quiet, and the next one starts at full volume."
+msgstr "Die Umstellung wirkt erst ab dem nächsten Musiktitel. Der laufende Titel kann leise sein, und der nächste beginnt mit voller Lautstärke."
+
+msgid "Full volume can destroy in-ear headphones and permanently damage hearing."
+msgstr "Volle Lautstärke kann In-Ear-Hörer zerstören und das Gehör dauerhaft schädigen."
+
+msgid "Take the headphones out of your ears before switching on. Check the volume at the next title with the headphones in your hand."
+msgstr "Nimm die Hörer aus den Ohren, bevor du einschaltest. Prüfe die Lautstärke beim nächsten Titel mit den Hörern in der Hand."
+
+msgid "With bit-perfect, music bypasses the volume control of the system and goes directly to the USB DAC."
+msgstr "Mit Bit-perfect geht die Musik an der Lautstärkeregelung des Systems vorbei direkt an den USB-DAC."
+
+msgid "If the DAC has no volume control that the system can operate, music always plays at the full volume of the DAC. The volume control of the system then has no effect."
+msgstr "Hat der DAC keine Lautstärkeregelung, die das System bedienen kann, spielt die Musik immer mit seiner vollen Lautstärke. Der Lautstärkeregler des Systems wirkt dann nicht."
+
+msgid "Full volume can start immediately or with the next music title."
+msgstr "Die volle Lautstärke kann sofort oder mit dem nächsten Musiktitel einsetzen."
+
+msgid "While audiojoe plays this way, other programs cannot use the DAC."
+msgstr "Während audiojoe so spielt, können andere Programme den DAC nicht nutzen."
+
+msgid "Take the headphones out of your ears before switching on. Check the volume with the headphones in your hand."
+msgstr "Nimm die Hörer aus den Ohren, bevor du einschaltest. Prüfe die Lautstärke mit den Hörern in der Hand."
+
+msgid "I have read the warning"
+msgstr "Ich habe die Warnung gelesen"
+
+msgid "Media volume set to 20 %. With a USB DAC whose volume the phone cannot control, this has no effect."
+msgstr "Medienlautstärke auf 20 % gestellt. Bei einem USB-DAC ohne vom Telefon regelbare Lautstärke wirkt das nicht."
+
+# 0.3.2: Hinweis zu Systemtönen unten auf der roten Seite (Android, Nutzer 2026-11-12 „256 ja“; Wortlaut wie bisher, „172 ja“)
+msgid "While music plays bit-perfect, system sounds such as touch tones are muted, and a notification sound mutes the music while it plays. Ringtone and alarm still sound."
+msgstr "Während Musik bit-perfect läuft, sind Systemtöne wie Tastentöne stumm, und ein Benachrichtigungston schaltet die Musik stumm, solange er klingt. Klingelton und Wecker sind weiter zu hören."

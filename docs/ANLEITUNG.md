@@ -178,18 +178,25 @@ auch die Formate, die er anbietet.
 
 **Bit-perfect über USB:** Mit diesem Schalter geht Musik unverändert an einen USB-DAC – ohne Umrechnung von
 Rate oder Bittiefe und ohne Lautstärke in Software. Podcasts, Hörbücher und Radio bleiben auf dem normalen
-Weg. Der Schalter wirkt ab dem nächsten Titel.
+Weg. Beim Einschalten erscheint eine rote Warnung über die ganze Anzeige; eingeschaltet wird erst nach dem
+Haken **Ich habe die Warnung gelesen**.
 
 - **Android:** ab Android 14, wenn das Gerät für den DAC bit-perfect anbietet. Währenddessen sind
   Systemtöne stumm; ein Benachrichtigungston schaltet die Musik kurz stumm. Vor dem ersten Titel nach dem
-  Anstecken stellt audiojoe die Medienlautstärke auf 20 % (abschaltbar). Nach Start oder Sprung wird der
-  Anfang 20 ms lang eingeblendet, danach ist die Wiedergabe bit-genau.
+  Anstecken stellt audiojoe die Medienlautstärke auf 20 % (abschaltbar); das wirkt nur, wenn das Telefon die
+  Lautstärke des DAC regeln kann. Die Umstellung wirkt ab dem nächsten Musiktitel. Nach Start oder Sprung wird
+  der Anfang 20 ms lang eingeblendet, danach ist die Wiedergabe bit-genau.
 - **Linux:** audiojoe spielt direkt auf den DAC, an PipeWire vorbei, und nur bei Raten, die der DAC kann.
   Andere Programme können den DAC so lange nicht nutzen.
 - **Windows:** WASAPI im Exklusivmodus. Andere Programme können den DAC so lange nicht nutzen.
 
-**Lautstärke:** USB-DACs haben in der Regel keine Lautstärkebegrenzung, wie sie in der EU vorgeschrieben
-ist. Leise beginnen, besonders mit empfindlichen In-Ear-Hörern.
+**Lautstärke – Gefahr für Gehör und Kopfhörer:** Bei Bit-perfect rechnen weder Telefon noch System die
+Lautstärke in Software. Hat der DAC keine Lautstärkeregelung, die Telefon oder System bedienen können, spielt
+die Musik immer mit seiner vollen Lautstärke; Lautstärketasten, der Lautstärkeregler des Systems und die
+Absenkung auf 20 % wirken dann nicht. Unter Android beginnt die volle Lautstärke mit dem nächsten Musiktitel,
+auf dem Desktop kann sie sofort einsetzen. Volle Lautstärke kann In-Ear-Hörer zerstören und das Gehör
+dauerhaft schädigen. Vor dem Einschalten die Hörer aus den Ohren nehmen und die Lautstärke mit den Hörern in
+der Hand prüfen.
 
 **Akkunutzung (Android):** Steht die Akkunutzung von audiojoe nicht auf „Uneingeschränkt“, kann Android die
 Wiedergabe im Hintergrund beenden. audiojoe warnt dann beim Start der Wiedergabe und unter

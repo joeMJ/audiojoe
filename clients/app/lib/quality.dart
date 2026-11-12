@@ -302,7 +302,10 @@ void startQualityEvents() {
       return null;
     }
     if (call.method == 'lowered') {
-      messenger.currentState?.showSnackBar(SnackBar(content: Text(t('Volume lowered to 20 % for bit-perfect playback.'))));
+      // Only the media volume of Android; a DAC whose volume the phone cannot control stays at full level
+      // (user 2026-11-12 „247 ja“).
+      messenger.currentState?.showSnackBar(SnackBar(
+          content: Text(t('Media volume set to 20 %. With a USB DAC whose volume the phone cannot control, this has no effect.'))));
     }
     return null;
   });

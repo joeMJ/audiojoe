@@ -1,6 +1,7 @@
 // Settings → Quality (0.3.0): "Now playing" on all apps, "This device" and the switches on Android.
 // Texts: user 2026-11-10 „169 es passt, ja“; switch grey with the reason where not offered („160“);
-// lowering on by default, turning it off only after the risk question („167“).
+// lowering on by default, turning it off only after the risk question („167“). Switching bit-perfect on shows
+// the full-screen red warning (0.3.2, bit_perfect_warning.dart).
 
 import 'dart:async';
 import 'dart:io';
@@ -10,6 +11,7 @@ import 'package:flutter/material.dart';
 import '../l10n.dart';
 import '../player.dart';
 import '../quality.dart';
+import 'bit_perfect_warning.dart';
 import 'common.dart';
 import 'settings.dart' show SettingsGroup;
 
@@ -212,56 +214,11 @@ class _QualitySettingsState extends State<QualitySettings> {
         },
       );
 
-  Future<bool> _confirmOn() async =>
-      await showDialog<bool>(
-        context: context,
-        builder: (c) => AlertDialog(
-          key: const ValueKey('bit-perfect-confirm'),
-          icon: const Icon(Icons.warning_amber_rounded),
-          title: Text(t('Bit-perfect over USB')),
-          // First paragraph: user 2026-11-10 „174/175“ (no detection, a clear note on the volume; text to be
-          // approved); second: „169“; third: AOSP AudioPolicyManager::updateClientsInternalMute („172 ja“).
-          content: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(t('USB DACs usually have no volume limit like the one prescribed in the EU for music players and phones. With bit-perfect playback their full level reaches your headphones. Use with care.'),
-                  style: const TextStyle(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 12),
-              Text(t('Android no longer lowers the signal. Loudness depends on the USB DAC alone. Start low.')),
-              const SizedBox(height: 12),
-              Text(t('While music plays bit-perfect, system sounds such as touch tones are muted, and a notification sound mutes the music while it plays. Ringtone and alarm still sound.')),
-            ]),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(c, false), child: Text(t('Cancel'))),
-            FilledButton(key: const ValueKey('bit-perfect-on'), onPressed: () => Navigator.pop(c, true), child: Text(t('Switch on'))),
-          ],
-        ),
-      ) ==
-      true;
+  /// Android: the full-screen red warning (0.3.2, user „246 ja“).
+  Future<bool> _confirmOn() => confirmBitPerfect(context, desktop: false);
 
-  /// Linux/Windows (user „187 ja“): the volume note, and that the DAC is taken for the time being.
-  Future<bool> _confirmOnDesktop() async =>
-      await showDialog<bool>(
-        context: context,
-        builder: (c) => AlertDialog(
-          key: const ValueKey('bit-perfect-confirm'),
-          icon: const Icon(Icons.warning_amber_rounded),
-          title: Text(t('Bit-perfect over USB')),
-          content: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(t('USB DACs usually have no volume limit like the one prescribed in the EU for music players and phones. With bit-perfect playback their full level reaches your headphones. Use with care.'),
-                  style: const TextStyle(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 12),
-              Text(t('While music plays bit-perfect, other programs cannot use this device.')),
-            ]),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(c, false), child: Text(t('Cancel'))),
-            FilledButton(key: const ValueKey('bit-perfect-on'), onPressed: () => Navigator.pop(c, true), child: Text(t('Switch on'))),
-          ],
-        ),
-      ) ==
-      true;
+  /// Linux/Windows: the full-screen red warning (0.3.2, user „251 ja“).
+  Future<bool> _confirmOnDesktop() => confirmBitPerfect(context, desktop: true);
 
   Future<bool> _confirmOff() async =>
       await showDialog<bool>(

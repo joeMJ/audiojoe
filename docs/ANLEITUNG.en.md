@@ -171,19 +171,24 @@ only, for nothing else; **Switch off** signs all apps connected this way out.
 **This device** names the system and the connected USB DAC, on Android and Linux also the formats it offers.
 
 **Bit-perfect over USB:** with this switch, music goes unchanged to a USB DAC – no conversion of rate or bit
-depth and no volume in software. Podcasts, audiobooks and radio keep the normal path. The switch takes effect
-from the next title.
+depth and no volume in software. Podcasts, audiobooks and radio keep the normal path. Switching on shows a red
+warning over the whole display; the switch goes on only after the tick **I have read the warning**.
 
 - **Android:** from Android 14, when the device offers bit-perfect for the DAC. Meanwhile system sounds are
   muted; a notification sound mutes the music briefly. Before the first title after connecting, audiojoe
-  sets the media volume to 20 % (can be turned off). After a start or seek the first 20 ms are faded in;
-  after that, playback is bit-exact.
+  sets the media volume to 20 % (can be turned off); this only works if the phone can control the volume of
+  the DAC. The change takes effect from the next music title. After a start or seek the first 20 ms are faded
+  in; after that, playback is bit-exact.
 - **Linux:** audiojoe plays directly on the DAC, past PipeWire, and only at rates the DAC takes. Other
   programs cannot use the DAC meanwhile.
 - **Windows:** WASAPI in exclusive mode. Other programs cannot use the DAC meanwhile.
 
-**Volume:** USB DACs usually have no volume limit like the one prescribed in the EU. Start low, especially
-with sensitive in-ear headphones.
+**Volume – danger to hearing and headphones:** with bit-perfect, neither the phone nor the system computes the
+volume in software. If the DAC has no volume control that the phone or system can operate, music always plays
+at the full volume of the DAC; volume buttons, the volume control of the system and the lowering to 20 % then
+have no effect. On Android the full volume starts with the next music title; on the desktop it can start
+immediately. Full volume can destroy in-ear headphones and permanently damage hearing. Take the headphones out
+of your ears before switching on and check the volume with the headphones in your hand.
 
 **Battery usage (Android):** if audiojoe's battery usage is not set to "Unrestricted", Android may stop
 playback in the background. audiojoe then warns when playback starts and on **Settings → Playback**;
