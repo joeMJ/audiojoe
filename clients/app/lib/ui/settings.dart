@@ -229,7 +229,10 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   Widget _phoneSub(BuildContext context, int page) {
-    return ListView(key: PageStorageKey('phone-settings$page'), padding: const EdgeInsets.fromLTRB(4, 4, 12, 12), children: [
+    // ValueKey, not PageStorageKey: the settings keep no scroll position (0.3.5, user „273 ja“) – an
+    // ExpansionTile without key wrote its bool under the same storage id, and the list then failed to read
+    // its offset („type 'bool' is not a subtype of type 'double?'“, Sources).
+    return ListView(key: ValueKey('phone-settings$page'), padding: const EdgeInsets.fromLTRB(4, 4, 12, 12), children: [
       Row(children: [
         IconButton(tooltip: t('Back'), icon: const Icon(Icons.arrow_back), onPressed: () => setState(() => _phonePage = null)),
         Expanded(child: _h(_pages[page].$3)),
@@ -329,7 +332,8 @@ class _SettingsViewState extends State<SettingsView> {
         ]),
       ),
       Expanded(
-        child: ListView(key: PageStorageKey('settings$_page'), padding: const EdgeInsets.fromLTRB(20, 16, 20, 16), children: [
+        // ValueKey, not PageStorageKey: see the phone page above (0.3.5).
+        child: ListView(key: ValueKey('settings$_page'), padding: const EdgeInsets.fromLTRB(20, 16, 20, 16), children: [
           Row(children: [_h(_pages[_page].$3), const Spacer(), if (_page == 0) _addSource()]),
           const SizedBox(height: 12),
           ..._pageContent(context),

@@ -334,6 +334,33 @@ void main() {
       expect(find.text('© 2026 John Lose · Apache-2.0'), findsOneWidget);
     });
 
+    testWidgets('0.3.5: Sources after opening the libraries and changing the page (bool/double)', (tester) async {
+      // Ubuntu 0.3.3 (user 2026-11-12): „type 'bool' is not a subtype of type 'double?' in type cast“ on Sources.
+      api.client = MockClient((req) async => http.Response(
+          jsonEncode(switch (req.url.path) {
+            '/api/v1/sources' => [{'id': 1, 'name': 'Jellyfin', 'kind': 'jellyfin', 'url': 'https://jf.example'}],
+            '/api/v1/sources/1/libraries' => [{'id': 'a', 'title': 'Music'}, {'id': 'b', 'title': 'Books'}],
+            _ => [],
+          }),
+          200,
+          headers: {'content-type': 'application/json'}));
+      await show(tester, SettingsView(onSignOut: () {}));
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      await tester.tap(find.textContaining('Libraries ('));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Podcasts'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sources').first);
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(tester.takeException(), isNull);
+      expect(find.text('Add source'), findsOneWidget);
+      expect(find.textContaining('Libraries ('), findsOneWidget);
+    });
+
     testWidgets('phone: list of the pages with their state, a tap opens one, back returns', (tester) async {
       desktop = false;
       api.client = MockClient((req) async => http.Response(
